@@ -373,6 +373,16 @@ func step() -> void:
 			or _patrolling(m)
 		):
 			_walk(m)
+	for m in _members:
+		if (
+			m.role != StaffMember.Role.RAMP
+			and m.state == StaffMember.State.IDLE
+			and not m.is_moving()
+			and not m.in_pool()
+			and sim.grid.is_belt_cell(m.at)
+		):
+			m.at = StaffMember.NO_CELL
+			m.clear_path()
 
 
 ## JSON-safe state for a save, exactly as the members stand: it only reads.
@@ -395,6 +405,18 @@ func from_snapshot(data: Dictionary) -> bool:
 	if loaded.has("error"):
 		push_error("StaffSim.from_snapshot: %s" % loaded["error"])
 		return false
+	for m: StaffMember in loaded["members"]:
+		if (
+			m.role != StaffMember.Role.RAMP
+			and m.state == StaffMember.State.IDLE
+			and not m.is_moving()
+			and not m.in_pool()
+			and sim != null
+			and sim.grid != null
+			and sim.grid.is_belt_cell(m.at)
+		):
+			push_error("StaffSim.from_snapshot: member %d is idle on a belt cell" % m.id)
+			return false
 	_next_id = loaded["next_id"]
 	_members.assign(loaded["members"])
 	closures.assign(loaded["closed"])
@@ -546,6 +568,8 @@ func _work_jobs() -> void:
 			m.search_failed = true
 		if m.is_moving():
 			continue
+		if not m.in_pool() and sim.grid.is_belt_cell(m.at):
+			m.patrol_wait = 0
 		if m.patrol_wait > 0:
 			m.patrol_wait -= 1
 			continue
@@ -635,7 +659,7 @@ func _reconcile() -> void:
 				_end_break(m)
 		if m.job != 0 and not CleanerJobs.exists(self, m):
 			_release(m)
-		if not m.in_pool() and not sim.grid.is_walkable(m.at) and not _backing_out(m):
+		if not m.in_pool() and not sim.grid.is_staff_walkable(m.at) and not _backing_out(m):
 			if m.state == StaffMember.State.WALKING_OUT:
 				_leave(m)
 				continue
@@ -644,6 +668,14 @@ func _reconcile() -> void:
 				continue
 			if m.station != 0 or m.job != 0:
 				_release(m)
+			m.at = StaffMember.NO_CELL
+			m.clear_path()
+		elif (
+			m.state == StaffMember.State.IDLE
+			and not m.is_moving()
+			and not m.in_pool()
+			and sim.grid.is_belt_cell(m.at)
+		):
 			m.at = StaffMember.NO_CELL
 			m.clear_path()
 		var cleaner := m.role == StaffMember.Role.CLEANER
@@ -683,7 +715,7 @@ func _off_spot(m: StaffMember) -> void:
 ## Whether the member is backing out of a cell that went (_replan() marked it):
 ## `at` is that cell until the member reaches the one it left, if that stands.
 func _backing_out(m: StaffMember) -> bool:
-	return m.backing_out and m.is_moving() and sim.grid.is_walkable(m.path[1])
+	return m.backing_out and m.is_moving() and sim.grid.is_staff_walkable(m.path[1])
 
 
 func _remove(m: StaffMember) -> void:
@@ -933,7 +965,7 @@ func _replan(m: StaffMember) -> void:
 		return
 	m.set_path(path)
 	m.seg_mm = keep
-	m.backing_out = not sim.grid.is_walkable(m.path[0])
+	m.backing_out = not sim.grid.is_staff_walkable(m.path[0])
 
 
 func _walking_to_exit(m: StaffMember) -> bool:
@@ -982,7 +1014,7 @@ func _recall_shift_if_due() -> void:
 
 func _recall_leaving(m: StaffMember) -> void:
 	if m.backing_out:
-		if m.path.size() >= 2 and sim.grid.is_walkable(m.path[1]):
+		if m.path.size() >= 2 and sim.grid.is_staff_walkable(m.path[1]):
 			m.at = m.path[1]
 		else:
 			m.at = StaffMember.NO_CELL

@@ -2,10 +2,12 @@ class_name TestStaffSpotReach
 extends GdUnitTestSuite
 ## An edit that cuts a staff spot staff can reach from an entrance off from
 ## every entrance is refused with the staff-spot reason, whether it comes as a
-## click, a rectangle drag or a belt line (decision
-## desk-belts-run-one-row-back-desk-then-the-agent-row-then-the, v3). An edit
-## that leaves the spot reachable passes, and with no entrance on the grid
-## nothing is checked.
+## click, a rectangle drag or a wall line. Under decision
+## staff-step-over-belts-high-cost-fallback-with-step-up-lift (76c5cc1a,
+## superseding 38ef3bac), staff step over belts, so a belt line across an
+## aisle no longer cuts off a spot while placing a belt directly on a spot
+## remains refused. An edit that leaves the spot reachable passes, and with no
+## entrance on the grid nothing is checked.
 ##
 ## The grid is 12x12 and floored, with the entrance at (0, 11) and a desk at
 ## (6, 3) whose spot is (6, 2). Row 5 runs between them.
@@ -91,14 +93,22 @@ func test_with_no_entrance_the_whole_row_is_removed() -> void:
 	assert_bool(StaffSpots.unreachable(_grid, _desk)).is_false()
 
 
-func test_a_belt_line_that_would_cut_the_spot_off_is_refused() -> void:
-	var plan := BeltShaper.plan_line(_grid, Vector2i(0, ROW), Vector2i(WIDTH - 1, ROW), 1)
-	_expect_spot_refusal(plan.result)
-	assert_int(_grid.object_at(Vector2i(0, ROW))).is_equal(0)
-	var shorter := BeltShaper.plan_line(_grid, Vector2i(0, ROW), Vector2i(WIDTH - 2, ROW), 1)
-	print("shorter line: %s, %d edits" % [shorter.result.reason_text(), shorter.edits.size()])
-	assert_bool(shorter.result.ok).is_true()
-	for result in _grid.apply_batch(shorter.edits):
+## Under 76c5cc1a (superseding 38ef3bac), a belt line across row 5 no longer
+## cuts the spot off because staff step over belts; placing a belt directly on
+## the spot itself is still refused with STAFF_SPOT.
+func test_a_belt_line_across_the_aisle_keeps_reach_and_a_belt_on_the_spot_is_refused() -> void:
+	var on_spot := BeltShaper.plan_line(_grid, DESK_SPOT, DESK_SPOT, 1)
+	_expect_spot_refusal(on_spot.result)
+	assert_int(_grid.object_at(DESK_SPOT)).is_equal(0)
+	var across := BeltShaper.plan_line(_grid, Vector2i(0, ROW), Vector2i(WIDTH - 1, ROW), 1)
+	print(
+		(
+			"belt line across row %d: %s, %d edits"
+			% [ROW, across.result.reason_text(), across.edits.size()]
+		)
+	)
+	assert_bool(across.result.ok).is_true()
+	for result in _grid.apply_batch(across.edits):
 		assert_bool(result.ok).is_true()
 	_expect_reachable()
 

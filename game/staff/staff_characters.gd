@@ -71,6 +71,7 @@ const SHUTTLE_OFFSET := Vector3(0.0, 0.0, -1.25)
 const PUSHBACK_TUG_OFFSET := Vector3(-2.15, 0.0, 2.6)
 const MARSHAL_SIDE_M := 1.8
 const MARSHAL_WALL_GAP_M := 1.2
+const BELT_LIFT_M := BaggageViews.BELT_TOP
 
 ## Cached tinted meshes/materials by StaffMember.Role without altering .glb rigs.
 static var _uniform_meshes: Dictionary = {}
@@ -87,6 +88,8 @@ var _pool: Array[Array] = [[], [], [], [], [], []]
 var _nodes: Dictionary = {}
 var _prev: Dictionary = {}
 var _cur: Dictionary = {}
+var _prev_lift: Dictionary = {}
+var _cur_lift: Dictionary = {}
 var _prev_yaw: Dictionary = {}
 var _cur_yaw: Dictionary = {}
 ## Member id -> its arch tuck record (StaffArchTuck).
@@ -190,6 +193,23 @@ func station_pose_sub_mode(id: int) -> StaffStationPose.SubMode:
 ## Currently visible hand prop kind on member `id`, or StaffHandProps.PropKind.NONE.
 func hand_prop_of(id: int) -> StaffHandProps.PropKind:
 	return StaffHandProps.active_prop(node_for(id))
+
+
+## Vertical step-up height above floor for `m` crossing a baggage belt cell.
+static func belt_lift_for(grid: BuildGrid, m: StaffMember) -> float:
+	if grid == null or m == null or m.in_pool():
+		return 0.0
+	if not m.is_moving() or m.seg_mm == 0:
+		return BELT_LIFT_M if grid.is_belt_cell(m.at) else 0.0
+	var next := m.path[m.path_index + 1]
+	var from_belt := grid.is_belt_cell(m.at)
+	var to_belt := grid.is_belt_cell(next)
+	if from_belt == to_belt:
+		return BELT_LIFT_M if from_belt else 0.0
+	var t := clampf(float(m.seg_mm) / float(Passenger.segment_mm(m.at, next)), 0.0, 1.0)
+	if to_belt:
+		return smoothstep(0.1, 0.65, t) * BELT_LIFT_M
+	return (1.0 - smoothstep(0.35, 0.9, t)) * BELT_LIFT_M
 
 
 ## Where the member on duty at `station` is drawn, in world space: the
@@ -315,11 +335,15 @@ func sync(snap: bool = false) -> void:
 			node = _take(m.role)
 			_nodes[id] = node
 		var now := staff.world_position(m)
+		var lift := belt_lift_for(_grid(), m)
 		if snap or fresh:
 			_prev[id] = now
+			_prev_lift[id] = lift
 		else:
 			_prev[id] = _cur[id]
+			_prev_lift[id] = _cur_lift.get(id, lift)
 		_cur[id] = now
+		_cur_lift[id] = lift
 		_pose(node, m, (_cur[id] as Vector3) - (_prev[id] as Vector3))
 		# A snapped sync (a load among them: member ids survive it) starts the
 		# tuck, station pose and hand props over, settled where the member stands.
@@ -384,7 +408,9 @@ func draw() -> void:
 				if _prev_yaw.has(id) and _cur_yaw.has(id):
 					node.rotation.y = lerp_angle(float(_prev_yaw[id]), float(_cur_yaw[id]), alpha)
 		else:
-			node.position = (_prev[id] as Vector3).lerp(_cur[id], alpha)
+			var pos := (_prev[id] as Vector3).lerp(_cur[id], alpha)
+			pos.y += lerpf(float(_prev_lift.get(id, 0.0)), float(_cur_lift.get(id, 0.0)), alpha)
+			node.position = pos
 			if _prev_yaw.has(id) and _cur_yaw.has(id):
 				node.rotation.y = lerp_angle(float(_prev_yaw[id]), float(_cur_yaw[id]), alpha)
 		var pose_rec: Dictionary = _poses.get(id, {})
@@ -597,6 +623,8 @@ func _release(id: int) -> void:
 	_nodes.erase(id)
 	_prev.erase(id)
 	_cur.erase(id)
+	_prev_lift.erase(id)
+	_cur_lift.erase(id)
 	_prev_yaw.erase(id)
 	_cur_yaw.erase(id)
 	_tucks.erase(id)

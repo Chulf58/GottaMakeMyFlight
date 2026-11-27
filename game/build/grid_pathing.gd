@@ -17,8 +17,10 @@ extends RefCounted
 ##
 ## A staff graph (`staff` set) links every BuildGrid.can_staff_route() step
 ## instead, through security objects along their axis (decision
-## staff-may-walk-through-security-scanners-and-lanes-so-shop-s), and keeps
-## every point on: staff access is physical.
+## staff-may-walk-through-security-scanners-and-lanes-so-shop-s) and across
+## baggage belt cells weighted by BELT_COST_SCALE (decision
+## staff-step-over-belts-high-cost-fallback-with-step-up-lift, 76c5cc1a),
+## keeping every point on: staff access is physical.
 ##
 ## A passenger graph disconnects WallKind.DOOR edges that separate landside
 ## (components holding an entrance or reachable from one over doors without
@@ -27,6 +29,9 @@ extends RefCounted
 ## passengers cannot cross divider doors into airside while same-side doors
 ## and open-plan terminals stay open (ruling 7c2e1a32).
 
+## Point weight scale applied to baggage belt cells on the staff graph so staff
+## strongly prefer open aisles and step over belts only as a fallback.
+const BELT_COST_SCALE := 8.0
 const NEIGHBOURS: Array[Vector2i] = [
 	Vector2i(1, 0),
 	Vector2i(-1, 0),
@@ -209,7 +214,9 @@ func find_path_costed(
 
 func _relink(grid: BuildGrid, cell: Vector2i) -> void:
 	var id := _id(cell)
-	if not staff:
+	if staff:
+		_astar.set_point_weight_scale(id, BELT_COST_SCALE if grid.is_belt_cell(cell) else 1.0)
+	else:
 		_astar.set_point_disabled(id, not grid.is_indoor(cell))
 	for offset in NEIGHBOURS:
 		var other := cell + offset
@@ -229,7 +236,7 @@ func _relink(grid: BuildGrid, cell: Vector2i) -> void:
 
 
 func _may_stand(grid: BuildGrid, cell: Vector2i) -> bool:
-	return grid.is_walkable(cell) if staff else grid.is_passenger_cell(cell)
+	return grid.is_staff_walkable(cell) if staff else grid.is_passenger_cell(cell)
 
 
 func _id(cell: Vector2i) -> int:
