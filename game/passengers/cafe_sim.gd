@@ -1274,8 +1274,15 @@ func _settle(p: Passenger, visit: CafeVisit) -> void:
 	if visit.outcome == CafeVisit.Outcome.COMPLETE:
 		p.mood = mini(p.mood + venue.mood_bonus, PassengerSim.MOOD_MAX)
 		PassengerThoughts.record(p, PassengerThoughts.Kind.MEAL, _sim.tick, p.at, facility)
-	# A settled visit is one real use of its seat (MessSim).
-	_sim.messes.cafe_used(visit)
+	# A settled visit is one real use of its seat (MessSim). If the guest can
+	# carry litter to a nearby bin with safe flight margin, skip floor litter here.
+	var litter := not MessSim.SPILL_VENUES.has(visit.venue)
+	var spot := _leave_cell(p, visit)
+	var delay := 0 if visit.walk_on() else _leave_delay(p, visit)
+	var detoured := (
+		litter and not BinDetour.plan_from(_sim, p, spot, visit.resume_stage, delay).is_empty()
+	)
+	_sim.messes.cafe_used(visit, detoured)
 	paid.emit(p.id, visit.room, amount)
 
 
@@ -1294,6 +1301,8 @@ func _resume(p: Passenger, visit: CafeVisit) -> void:
 	p.stuck = Passenger.Stuck.NONE
 	p.clear_path()
 	_set_stage.call(p, visit.resume_stage)
+	if visit.settled and not MessSim.SPILL_VENUES.has(visit.venue):
+		BinDetour.try_start(_sim, p)
 
 
 func _remove(visit: CafeVisit) -> void:

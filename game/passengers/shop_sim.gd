@@ -327,7 +327,7 @@ func step(p: Passenger) -> void:
 		return
 	if browsed and _sim.tick <= visit.deadline:
 		_settle(p, visit)
-		_end(p, visit)
+		_end(p, visit, true)
 		return
 	if _sim.tick >= visit.deadline:
 		_end(p, visit)
@@ -598,8 +598,13 @@ func _settle(p: Passenger, visit: ShopVisit) -> void:
 	p.mood = mini(p.mood + type.mood_bonus, PassengerSim.MOOD_MAX)
 	if visit.fallback:
 		p.mood = maxi(p.mood - FALLBACK_MOOD, 0)
-	# A finished browse is one real use of its slot or room (MessSim).
-	_sim.messes.shop_used(visit, type.id)
+	# A finished browse is one real use of its slot or room (MessSim). Kiosk
+	# visitors with a safe nearby bin detour to toss litter there instead.
+	var detoured := (
+		type.id == MessSim.KIOSK_TYPE
+		and not BinDetour.plan_from(_sim, p, p.at, visit.resume_stage, 0).is_empty()
+	)
+	_sim.messes.shop_used(visit, type.id, detoured)
 	if amount > 0:
 		paid.emit(p.id, visit.room, amount)
 
@@ -728,10 +733,13 @@ func _head_to_piece(p: Passenger, visit: ShopVisit) -> void:
 
 
 ## The visit is over, finished or not: the passenger goes on with its journey.
-func _end(p: Passenger, visit: ShopVisit) -> void:
+func _end(p: Passenger, visit: ShopVisit, settled := false) -> void:
+	var type := _visit_type(visit) if settled else null
 	_core.release(visit)
 	p.shop_cooldown = _sim.tick + BROWSE_COOLDOWN_TICKS
 	p.station = 0
 	p.stuck = Passenger.Stuck.NONE
 	p.clear_path()
 	_set_stage.call(p, visit.resume_stage)
+	if settled and type != null and type.id == MessSim.KIOSK_TYPE:
+		BinDetour.try_start(_sim, p)

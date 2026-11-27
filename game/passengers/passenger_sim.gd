@@ -38,7 +38,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 41
+const SAVE_VERSION := 42
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -671,9 +671,11 @@ func _step(p: Passenger) -> void:
 			toilets.step(p)
 		StageKinds.Facility.SHOP:
 			shops.step(p)
-	# A help visit holds the passenger: its stage's own logic would plan again.
+	# A help visit or bin detour holds the passenger: its stage's own logic would plan again.
 	if info_desks.holds(p):
 		info_desks.step(p)
+	elif p.bin_detour_bin > 0:
+		BinDetour.step(self, p)
 	elif not VisitHandBack.is_hand_back(from, p.stage):
 		_advance(p)
 	_move(p)
@@ -794,7 +796,7 @@ func _beat(p: Passenger) -> void:
 	cafes.beat(p)
 	boredom.beat(p)
 	shops.beat(p)
-	if not info_desks.holds(p):
+	if not info_desks.holds(p) and p.bin_detour_bin == 0:
 		NeedsPolicy.arbitrate(self, p)
 		if not on_road:
 			info_desks.beat(p)
@@ -888,6 +890,7 @@ func _reconcile() -> void:
 	security.bins.prune(grid)
 	PassengerGates.reconcile_seats(self)
 	cafes.reconcile()
+	BinDetour.reconcile(self)
 	toilets.reconcile()
 	shops.reconcile()
 	PassengerEdits.recover_stranded(self)

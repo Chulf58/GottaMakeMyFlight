@@ -168,8 +168,18 @@ func test_cleaning_removes_the_mess_and_the_mood_it_cost() -> void:
 	assert_dict(_messes().get_mess(mess)).is_empty()
 	assert_int(_messes().dirt_at(watch)).is_equal(0)
 	assert_int(guest.mood).is_equal(MessTestKit.START_MOOD)
-	assert_int(m.state).is_equal(StaffMember.State.IDLE)
+	# Finished cleaning transitions immediately to carrying the bagged mess to an exit (no bin placed).
 	assert_int(m.job).is_equal(0)
+	assert_int(m.bag_carry).is_equal(StaffMember.BagCarry.TO_EXIT)
+	(
+		assert_bool(
+			CleanerTestKit.step_until(
+				_world, func() -> bool: return m.state == StaffMember.State.IDLE
+			)
+		)
+		. is_true()
+	)
+	assert_int(m.bag_carry).is_equal(StaffMember.BagCarry.NONE)
 
 
 func test_emptying_a_full_bin_lets_it_take_litter_again() -> void:
