@@ -190,3 +190,217 @@ func start_cell() -> Vector2i:
 ## The last cell of the row.
 func end_cell() -> Vector2i:
 	return cells().back()
+
+
+## Wall-remove drag in Tool.REMOVE: started when a press hits a wall edge,
+## follows a straight H/V wall line or L-path along wall edges, previews all
+## matching walls for removal, and deletes them atomically in one undo step
+## without touching floor tiles.
+class RemoveDrag:
+	extends RefCounted
+	var active := false
+	var press_point := Vector3.ZERO
+	var end_point := Vector3.ZERO
+
+	var _axis := 0
+	var _start_line := 0
+	var _start_pos := 0
+	var _end_pos := 0
+	var _perp_line := -1
+	var _end_perp := 0
+	var _limit := Vector2i.ZERO
+
+	func begin(grid_size: Vector2i, cell: Vector2i, edge_side: int, point: Vector3) -> void:
+		active = true
+		press_point = point
+		end_point = point
+		_limit = grid_size
+		_perp_line = -1
+		if edge_side == BuildGrid.Side.NORTH or edge_side == BuildGrid.Side.SOUTH:
+			_axis = 0
+			_start_line = cell.y if edge_side == BuildGrid.Side.NORTH else cell.y + 1
+			_start_pos = cell.x
+			_end_pos = cell.x
+		else:
+			_axis = 1
+			_start_line = cell.x if edge_side == BuildGrid.Side.WEST else cell.x + 1
+			_start_pos = cell.y
+			_end_pos = cell.y
+
+	func cancel() -> void:
+		active = false
+
+	func move(grid: BuildGrid, point: Vector3, wall_edge: Vector3i) -> void:
+		end_point = point
+		var local := Vector2(point.x - grid.origin.x, point.z - grid.origin.z)
+		if wall_edge.z >= 0:
+			var w := _edge_coords(wall_edge)
+			if w[0] == _axis and w[1] == _start_line:
+				_end_pos = clampi(w[2], 0, _limit[_axis] - 1)
+				_perp_line = -1
+				return
+			if w[0] != _axis:
+				_perp_line = w[1]
+				if _perp_line > _start_pos:
+					_end_pos = clampi(_perp_line - 1, 0, _limit[_axis] - 1)
+				else:
+					_end_pos = clampi(_perp_line, 0, _limit[_axis] - 1)
+				_end_perp = clampi(w[2], 0, _limit[1 - _axis] - 1)
+				return
+		var pos := clampi(floori(local[_axis]), 0, _limit[_axis] - 1)
+		var perp := local[1 - _axis]
+		_end_pos = pos
+		if absf(perp - float(_start_line)) < 1.0:
+			_perp_line = -1
+			return
+		if pos > _start_pos:
+			_perp_line = pos + 1
+		elif pos < _start_pos:
+			_perp_line = pos
+		else:
+			_perp_line = (_start_pos + 1 if local[_axis] >= float(_start_pos) + 0.5 else _start_pos)
+		_perp_line = clampi(_perp_line, 0, _limit[_axis])
+		_end_perp = clampi(floori(perp), 0, _limit[1 - _axis] - 1)
+
+	func edges(grid: BuildGrid) -> Array[Vector3i]:
+		var out: Array[Vector3i] = []
+		var seen := {}
+		var step1 := 1 if _end_pos >= _start_pos else -1
+		for p in range(_start_pos, _end_pos + step1, step1):
+			_append_if_wall(grid, _axis, _start_line, p, seen, out)
+		if _perp_line >= 0:
+			var start2 := _start_line if _end_perp >= _start_line else _start_line - 1
+			var step2 := 1 if _end_perp >= _start_line else -1
+			for q in range(start2, _end_perp + step2, step2):
+				_append_if_wall(grid, 1 - _axis, _perp_line, q, seen, out)
+		return out
+
+	func edits(grid: BuildGrid) -> Array[BuildEdit]:
+		var doors: Array[BuildEdit] = []
+		var walls: Array[BuildEdit] = []
+		for edge in edges(grid):
+			var cell := Vector2i(edge.x, edge.y)
+			var edit := BuildEdit.remove_wall(cell, edge.z)
+			if grid.wall_kind(cell, edge.z) == BuildGrid.WallKind.DOOR:
+				doors.append(edit)
+			else:
+				walls.append(edit)
+		var out: Array[BuildEdit] = []
+		out.append_array(doors)
+		out.append_array(walls)
+		return out
+
+	func end_cell(grid: BuildGrid) -> Vector2i:
+		return grid.world_to_cell(end_point)
+
+	static func preview(
+		grid: BuildGrid, edge_list: Array[Vector3i], check: Callable, wallet: Wallet = null
+	) -> Preview:
+		var report := Preview.new()
+		if edge_list.is_empty():
+			return report
+		var scratch := BuildUndo.trial_copy_of(grid)
+		var results := {}
+		var door_edges: Array[Vector3i] = []
+		var other_edges: Array[Vector3i] = []
+		for edge in edge_list:
+			var c := Vector2i(edge.x, edge.y)
+			if grid.wall_kind(c, edge.z) == BuildGrid.WallKind.DOOR:
+				door_edges.append(edge)
+			else:
+				other_edges.append(edge)
+		for edge in door_edges:
+			results[edge] = _preview_edge(scratch, edge, check)
+		for edge in other_edges:
+			results[edge] = _preview_edge(scratch, edge, check)
+		for edge in edge_list:
+			var cell := Vector2i(edge.x, edge.y)
+			var edit := BuildEdit.remove_wall(cell, edge.z)
+			report.edits.append(edit)
+			var res: BuildResult = results[edge]
+			report.valid.append(res.ok)
+			if res.ok:
+				report.cost += PriceTable.refund_of(grid.wall_paid(cell, edge.z))
+			else:
+				report.blocked += 1
+				if report.first_reason == "":
+					report.first_reason = res.reason_text()
+		if (
+			wallet != null
+			and report.cost > 0
+			and not wallet.can_credit(report.cost, Wallet.Category.BUILD)
+		):
+			var full := BuildResult.refused(BuildResult.Reason.WALLET_FULL)
+			report.first_reason = full.reason_text()
+			report.blocked = report.edits.size()
+			report.cost = 0
+			for i in report.valid.size():
+				report.valid[i] = false
+		return report
+
+	static func _preview_edge(scratch: BuildGrid, edge: Vector3i, check: Callable) -> BuildResult:
+		var cell := Vector2i(edge.x, edge.y)
+		var edit := BuildEdit.remove_wall(cell, edge.z)
+		var res := scratch.apply(edit)
+		if res.ok and check.is_valid():
+			var extra: BuildResult = check.call(edit)
+			if not extra.ok and extra.reason != BuildResult.Reason.WALL_HOLDS_DOOR:
+				res = extra
+		return res
+
+	static func apply(
+		grid: BuildGrid,
+		ordered_edits: Array[BuildEdit],
+		_check: Callable,
+		wallet: Wallet,
+		dirty: Array[Vector2i]
+	) -> AreaDrag.Outcome:
+		var outcome := AreaDrag.Outcome.new()
+		outcome.removing = true
+		if ordered_edits.is_empty():
+			return outcome
+		var before := wallet.balance if wallet != null else 0
+		var result := BuildTransaction.commit_composite(grid, ordered_edits, wallet)
+		if result.ok:
+			outcome.placed = ordered_edits.size()
+			dirty.append_array(result.dirty_cells)
+			if wallet != null:
+				outcome.money = absi(wallet.balance - before)
+				outcome.charged = wallet.balance < before
+		else:
+			outcome.skipped = ordered_edits.size()
+			outcome.first_reason = result.reason_text()
+		return outcome
+
+	static func _edge_coords(edge: Vector3i) -> Array[int]:
+		match edge.z:
+			BuildGrid.Side.NORTH:
+				return [0, edge.y, edge.x]
+			BuildGrid.Side.SOUTH:
+				return [0, edge.y + 1, edge.x]
+			BuildGrid.Side.WEST:
+				return [1, edge.x, edge.y]
+		return [1, edge.x + 1, edge.y]
+
+	static func _append_if_wall(
+		grid: BuildGrid, axis: int, line: int, pos: int, seen: Dictionary, out: Array[Vector3i]
+	) -> void:
+		if pos < 0 or line < 0:
+			return
+		var cell: Vector2i
+		var edge_side: int
+		if axis == 0:
+			if pos >= grid.size.x or line > grid.size.y:
+				return
+			cell = Vector2i(pos, line) if line < grid.size.y else Vector2i(pos, line - 1)
+			edge_side = BuildGrid.Side.NORTH if line < grid.size.y else BuildGrid.Side.SOUTH
+		else:
+			if pos >= grid.size.y or line > grid.size.x:
+				return
+			cell = Vector2i(line, pos) if line < grid.size.x else Vector2i(line - 1, pos)
+			edge_side = BuildGrid.Side.WEST if line < grid.size.x else BuildGrid.Side.EAST
+		var key := Vector3i(cell.x, cell.y, edge_side)
+		if seen.has(key) or not grid.has_wall(cell, edge_side):
+			return
+		seen[key] = true
+		out.append(key)

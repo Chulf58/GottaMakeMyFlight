@@ -252,6 +252,9 @@ const INVALID_TINT := Color(0.95, 0.3, 0.25, 0.5)
 const WALL_BLOCK_TINT := Color(INVALID_TINT, 0.9)
 const MARKER_TINT := Color(1.0, 0.85, 0.3, 0.7)
 const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
+const WALL_REMOVE_TINT := Color(0.95, 0.22, 0.20, 0.75)
+const RESIZE_HOVER_TINT := Color(1.0, 0.85, 0.20, 0.85)
+const RESIZE_HANDLE_TINT := Color(0.98, 0.94, 0.78, 0.65)
 ## The cells a screen stand being placed would cover (ScreenCoverage; decision
 ## boredom-screens-are-floor-standing-screen-stands-placed-like).
 const COVERAGE_TINT := Color(0.35, 0.65, 1.0, 0.35)
@@ -330,6 +333,9 @@ var _valid_material := BuildGhost.material(VALID_TINT)
 var _invalid_material := BuildGhost.material(INVALID_TINT)
 var _marker_material := BuildGhost.material(MARKER_TINT)
 var _area_remove_material := BuildGhost.material(AREA_REMOVE_TINT)
+var _wall_remove_material := BuildGhost.material(WALL_REMOVE_TINT, true)
+var _resize_hover_material := BuildGhost.material(RESIZE_HOVER_TINT, true)
+var _resize_handle_material := BuildGhost.material(RESIZE_HANDLE_TINT, true)
 var _coverage_material := BuildGhost.material(COVERAGE_TINT)
 ## The red bar on the wall that refuses a Belt line, drawn through other pieces.
 var _wall_block_material := BuildGhost.material(WALL_BLOCK_TINT, true)
@@ -353,6 +359,8 @@ var _area_over_ui := false
 ## outside the room it stands in ("" for none).
 var _front_warning := ""
 var _area := AreaDrag.new()
+## The wall-remove line/L drag in Tool.REMOVE (WallRowDrag.RemoveDrag).
+var _wall_remove := WallRowDrag.RemoveDrag.new()
 ## The room edge being dragged to resize a room (RoomResize).
 var _resize := RoomResize.new()
 ## The Wall or Glass row being dragged, and the status line text it shows.
@@ -988,9 +996,9 @@ func emit_player_commit(
 	)
 
 
-## True while a rectangle, wall row, item row, or room resize is being dragged.
+## True while a rectangle, wall row, wall remove, item row, or room resize is being dragged.
 func is_dragging() -> bool:
-	return _area.active or _row.active or _resize.active or _item_row.active
+	return _area.active or _row.active or _resize.active or _item_row.active or _wall_remove.active
 
 
 ## The edit under the pointer, or null (BuildMenu prices it for the cost line).
@@ -1128,6 +1136,7 @@ func cancel_area() -> void:
 	if not is_dragging():
 		return
 	_area.cancel()
+	_wall_remove.cancel()
 	_row.cancel()
 	_item_row.cancel()
 	_resize.cancel()
@@ -1211,26 +1220,74 @@ func _facing_is_auto() -> bool:
 
 
 ## What Remove takes at a ground point: the object the pointer is on (seen
-## from the camera, or on the point's cell), then the wall the line of sight
-## to the point meets (WallPick), then a wall edge within WALL_PICK_DISTANCE of
-## the point, then the room, then the floor. A wall in the way hides the object by cell behind it.
-func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
+## from the camera, or on the point's cell when no wall edge is closer), then
+## the wall the line of sight to the point meets (WallPick), then the nearest
+## wall edge within WALL_PICK_DISTANCE of the point, then the room, then floor.
+func _removal_at(point: Vector3, cell: Vector2i, _side: int) -> BuildEdit:
 	var camera := get_viewport().get_camera_3d()
 	var object_id := SightPick.seen_object(grid, _view, camera, point)
 	var seen_wall := SightPick.seen_wall(grid, _view, camera, point)
-	if object_id == 0 and seen_wall.z < 0:
+	var near_wall := _nearest_wall_edge(point)
+	if object_id == 0 and seen_wall.z < 0 and (camera == null or near_wall.z < 0):
 		object_id = grid.object_at(cell)
 	if object_id != 0:
 		return BuildEdit.remove_object(object_id)
 	if seen_wall.z >= 0:
 		return BuildEdit.remove_wall(Vector2i(seen_wall.x, seen_wall.y), seen_wall.z)
-	var offset := point - grid.cell_to_world(cell)
-	var to_edge := 0.5 - maxf(absf(offset.x), absf(offset.z))
-	if grid.has_wall(cell, side) and to_edge <= WALL_PICK_DISTANCE:
-		return BuildEdit.remove_wall(cell, side)
+	if near_wall.z >= 0:
+		return BuildEdit.remove_wall(Vector2i(near_wall.x, near_wall.y), near_wall.z)
 	if grid.room_at(cell) != 0:
 		return BuildEdit.remove_room(grid.room_at(cell))
 	return BuildEdit.remove_floor(cell)
+
+
+func _wall_edge_at(point: Vector3) -> Vector3i:
+	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
+	var seen := SightPick.seen_wall(grid, _view, camera, point)
+	if seen.z >= 0:
+		return seen
+	return _nearest_wall_edge(point)
+
+
+func _nearest_wall_edge(point: Vector3) -> Vector3i:
+	var local := Vector2(point.x - grid.origin.x, point.z - grid.origin.z)
+	if (
+		local.x < -WALL_PICK_DISTANCE
+		or local.y < -WALL_PICK_DISTANCE
+		or local.x > grid.size.x + WALL_PICK_DISTANCE
+		or local.y > grid.size.y + WALL_PICK_DISTANCE
+	):
+		return WallPick.NO_EDGE
+	var best := WallPick.NO_EDGE
+	var best_dist := WALL_PICK_DISTANCE + 0.0001
+	var vx := roundi(local.x)
+	var vy := clampi(floori(local.y), 0, grid.size.y - 1)
+	if vx >= 0 and vx <= grid.size.x:
+		var v_cell := Vector2i(vx, vy) if vx < grid.size.x else Vector2i(vx - 1, vy)
+		var v_side := BuildGrid.Side.WEST if vx < grid.size.x else BuildGrid.Side.EAST
+		var v_dist := absf(local.x - float(vx))
+		if (
+			local.y >= float(vy) - 0.1
+			and local.y <= float(vy + 1) + 0.1
+			and grid.has_wall(v_cell, v_side)
+			and v_dist <= best_dist
+		):
+			best = Vector3i(v_cell.x, v_cell.y, v_side)
+			best_dist = v_dist
+	var hy := roundi(local.y)
+	var hx := clampi(floori(local.x), 0, grid.size.x - 1)
+	if hy >= 0 and hy <= grid.size.y:
+		var h_cell := Vector2i(hx, hy) if hy < grid.size.y else Vector2i(hx, hy - 1)
+		var h_side := BuildGrid.Side.NORTH if hy < grid.size.y else BuildGrid.Side.SOUTH
+		var h_dist := absf(local.y - float(hy))
+		if (
+			local.x >= float(hx) - 0.1
+			and local.x <= float(hx + 1) + 0.1
+			and grid.has_wall(h_cell, h_side)
+			and h_dist <= best_dist
+		):
+			best = Vector3i(h_cell.x, h_cell.y, h_side)
+	return best
 
 
 ## Whether the pointer is over a HUD control, which hides the world under it.
@@ -1276,7 +1333,7 @@ func _update_ghost(point: Variant) -> void:
 	if _landside_plan != null or BuildModeLandside.is_landside_tool(self) or tool == Tool.BUY_LAND:
 		BuildModeLandside.hover_off_grid_tool(self, point)
 		return
-	if _area.active or _resize.active:
+	if _area.active or _resize.active or _wall_remove.active:
 		_draw_area()
 		return
 	if _row.active or _item_row.active:
@@ -1299,13 +1356,27 @@ func _update_ghost(point: Variant) -> void:
 	_hover_edit = edit
 	var hint := "" if point == null else BuildStatus.lane_hint_at(self, grid.world_to_cell(point))
 	if edit == null:
-		_ghost.visible = false
+		_lane_hint = hint
 		_front_warning = ""
-		var idle_key := "" if hint == "" else "lane:" + hint
-		if _hover_key != idle_key:
-			_hover_key = idle_key
-			_lane_hint = hint
+		var resize_hover := (
+			{}
+			if (
+				templates.is_active()
+				or room_mover.active
+				or object_mover.active
+				or starter_kit.is_active()
+			)
+			else RoomResize.hover_edge(grid, tool, selected_room_id, point)
+		)
+		if not resize_hover.is_empty():
+			BuildGhost.draw_resize_hover(self, resize_hover)
 			_show_status(null)
+		else:
+			_ghost.visible = false
+			var idle_key := "" if hint == "" else "lane:" + hint
+			if _hover_key != idle_key:
+				_hover_key = idle_key
+				_show_status(null)
 		return
 	var warning := front_warning(grid, edit)
 	var key := BuildStatus.edit_key(edit) + "|" + hint + "|" + warning
@@ -1316,6 +1387,8 @@ func _update_ghost(point: Variant) -> void:
 	var result := check(edit)
 	_front_warning = warning if result.ok else ""
 	var valid := _area_remove_material if tool == Tool.REMOVE else _valid_material
+	if tool == Tool.REMOVE and edit.kind == BuildEdit.Kind.REMOVE_WALL:
+		valid = _wall_remove_material
 	BuildGhost.draw(self, edit, valid if result.ok else _invalid_material)
 	_show_status(result)
 

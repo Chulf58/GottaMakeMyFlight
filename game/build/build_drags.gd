@@ -26,6 +26,13 @@ static func begin_area(mode: BuildMode, point: Vector3) -> void:
 		and mode.room_mover.pick_up(point, BuildMode.TOOL_ROOMS[mode.tool])
 	):
 		return
+	if mode.tool == BuildMode.Tool.REMOVE:
+		var press_edit := mode.edit_at(point)
+		if press_edit != null and press_edit.kind == BuildEdit.Kind.REMOVE_WALL:
+			mode._status_note = ""
+			mode._hover_key = ""
+			mode._wall_remove.begin(mode.grid.size, press_edit.cell, press_edit.side, point)
+			return
 	var cell := mode.grid.world_to_cell(point)
 	if not mode.grid.in_bounds(cell):
 		if mode.tool == BuildMode.Tool.BELT:
@@ -167,16 +174,20 @@ static func row_edits(mode: BuildMode) -> Array[BuildEdit]:
 	return mode._row.edits(BuildMode.TOOL_WALL_KINDS[mode.tool])
 
 
-## Stretches the rectangle to the cell under a ground point, or moves the grabbed
-## room edge to the nearest grid line (RoomResize).
+## Stretches the rectangle to the cell under a ground point, moves the grabbed
+## room edge to the nearest grid line (RoomResize), or tracks a wall-remove drag.
 static func move_area(mode: BuildMode, point: Vector3) -> void:
-	if mode._resize.active:
+	if mode._wall_remove.active:
+		mode._wall_remove.move(mode.grid, point, mode._wall_edge_at(point))
+	elif mode._resize.active:
 		mode._resize.move(mode.grid, point)
 	elif mode._area.active:
 		mode._area.move(mode.grid.world_to_cell(point))
 
 
 static func finish_area(mode: BuildMode) -> AreaDrag.Outcome:
+	if mode._wall_remove.active:
+		return finish_wall_remove(mode)
 	if mode._resize.active:
 		finish_resize(mode)
 		return null
@@ -246,17 +257,54 @@ static func finish_resize(mode: BuildMode) -> void:
 	mode._status_note_is_refusal = false
 
 
-## Marks the released rectangle as a room of the current room tool's type.
+## Deletes all walls along the active wall-remove drag in one atomic undo step.
+static func finish_wall_remove(mode: BuildMode) -> AreaDrag.Outcome:
+	var ordered := mode._wall_remove.edits(mode.grid)
+	var end_cell := mode._wall_remove.end_cell(mode.grid)
+	mode._wall_remove.cancel()
+	mode._hover_key = ""
+	var dirty: Array[Vector2i] = []
+	mode.grid.hold_signals()
+	mode.grid.begin_batch()
+	var outcome := WallRowDrag.RemoveDrag.apply(
+		mode.grid, ordered, mode.check, mode.wallet(), dirty
+	)
+	if outcome.placed > 0:
+		reshape_belts(mode, dirty)
+	mode.grid.end_batch()
+	mode.grid.release_signals()
+	if outcome.placed > 0:
+		mode._redraw()
+		mode.grid_changed.emit()
+		var net := -outcome.money if not outcome.charged else outcome.money
+		mode.emit_player_commit(&"remove", dirty, [] as Array[int], net)
+	mode._status_note = outcome.message()
+	mode._status_note_is_refusal = outcome.placed == 0 and outcome.skipped > 0
+	mode._note_cell = end_cell
+	mode._show_status(null)
+	if mode._status_note_is_refusal:
+		mode.notify_refusal(outcome.first_reason)
+	mode._status_note_is_refusal = false
+	return outcome
+
+
+## Marks the released rectangle as a room of the current room tool's type, or
+## auto-extends a flush same-type room via RoomResize.
 static func finish_room(mode: BuildMode) -> void:
 	var type: StringName = BuildMode.TOOL_ROOMS[mode.tool]
+	var drag_rect := mode._area.rect()
+	var extend := RoomResize.auto_extend(mode.grid, drag_rect, type)
+	if not extend.is_empty():
+		_finish_auto_extend(mode, int(extend["room_id"]), extend["rect"], type)
+		return
 	var before_bal := mode.wallet().balance if mode.wallet() != null else 0
 	mode.grid.hold_signals()
 	mode.grid.begin_batch()
 	var result := RoomTool.mark(
-		mode.grid, mode._area.rect(), type, mode.wallet(), mode.unlocks, mode.require_unlocks
+		mode.grid, drag_rect, type, mode.wallet(), mode.unlocks, mode.require_unlocks
 	)
 	if result.ok:
-		reshape_belts(mode, rect_cells(mode._area.rect()))
+		reshape_belts(mode, rect_cells(drag_rect))
 		mode._redraw()
 	mode.grid.end_batch()
 	mode.grid.release_signals()
@@ -264,9 +312,35 @@ static func finish_room(mode: BuildMode) -> void:
 		mode.grid_changed.emit()
 		var after_bal := mode.wallet().balance if mode.wallet() != null else 0
 		mode.emit_player_commit(
-			&"room", rect_cells(mode._area.rect()), [] as Array[int], before_bal - after_bal
+			&"room", rect_cells(drag_rect), [] as Array[int], before_bal - after_bal
 		)
 	mode._status_note = RoomTool.message(mode.grid, result, type)
+	mode._status_note_is_refusal = not result.ok
+	mode._note_cell = mode._area.end_cell()
+	mode._show_status(null)
+	mode._status_note_is_refusal = false
+
+
+static func _finish_auto_extend(
+	mode: BuildMode, room_id: int, target_rect: Rect2i, type: StringName
+) -> void:
+	var before: Rect2i = mode.grid.get_room(room_id)["rect"]
+	var before_bal := mode.wallet().balance if mode.wallet() != null else 0
+	mode.grid.hold_signals()
+	mode.grid.begin_batch()
+	var result := RoomResize.commit_area(mode.grid, room_id, target_rect, mode.wallet())
+	if result.ok:
+		reshape_belts(mode, rect_cells(before.merge(target_rect)))
+		mode._redraw()
+	mode.grid.end_batch()
+	mode.grid.release_signals()
+	if result.ok:
+		mode.grid_changed.emit()
+		var after_bal := mode.wallet().balance if mode.wallet() != null else 0
+		mode.emit_player_commit(
+			&"resize", rect_cells(target_rect), [] as Array[int], before_bal - after_bal
+		)
+	mode._status_note = RoomResize.status_message(mode.grid, room_id, type, target_rect, result)
 	mode._status_note_is_refusal = not result.ok
 	mode._note_cell = mode._area.end_cell()
 	mode._show_status(null)

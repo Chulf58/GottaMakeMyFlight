@@ -22,21 +22,26 @@ static func edit_key(edit: BuildEdit) -> String:
 
 
 static func show_status(mode: BuildMode, result: BuildResult) -> void:
-	if mode._row.active or mode._item_row.active:
+	if mode._row.active or mode._item_row.active or mode._wall_remove.active:
 		mode._set_status(mode._row_label)
 		return
 	if mode._resize.active:
 		mode._set_status(mode._resize.label(mode.grid, mode.wallet()))
 		return
 	if mode._area.active and BuildMode.TOOL_ROOMS.has(mode.tool):
+		var area := mode._area.rect()
+		var room_type: StringName = BuildMode.TOOL_ROOMS[mode.tool]
+		var extend := RoomResize.auto_extend(mode.grid, area, room_type)
+		if not extend.is_empty():
+			mode._set_status(
+				RoomResize.extend_label(
+					mode.grid, int(extend["room_id"]), room_type, extend["rect"], mode.wallet()
+				)
+			)
+			return
 		mode._set_status(
 			RoomTool.drag_label(
-				mode.grid,
-				mode._area.rect(),
-				BuildMode.TOOL_ROOMS[mode.tool],
-				mode.wallet(),
-				mode.unlocks,
-				mode.require_unlocks
+				mode.grid, area, room_type, mode.wallet(), mode.unlocks, mode.require_unlocks
 			)
 		)
 		return
