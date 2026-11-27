@@ -244,6 +244,15 @@ static func graph_changed(sim: PassengerSim, cells: Array[Vector2i]) -> void:
 		touched[cell] = true
 	for p in sim._passengers:
 		if (
+			p.stage == Passenger.Stage.MISSED
+			and (
+				p.missed_phase == Passenger.MissedPhase.TO_ENTRANCE
+				or p.missed_phase == Passenger.MissedPhase.STUCK_WAIT
+			)
+		):
+			p.needs_replan = true
+			continue
+		if (
 			p.is_done()
 			or p.stage == Passenger.Stage.SECURITY
 			or p.stage == Passenger.Stage.APRON

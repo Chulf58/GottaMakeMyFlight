@@ -56,6 +56,10 @@ enum Stage {
 ## to reserve (GateCapacity); a miss while held so is recorded as CROWDED.
 enum Stuck { NONE, NO_CHECKIN, NO_SECURITY, QUEUE_FULL, NO_ROUTE, EXIT_BLOCKED, CROWDED, GATE_FULL }
 
+## Walk-out sub-phase once stage == Stage.MISSED (NONE for legacy/direct stage
+## overrides).
+enum MissedPhase { NONE, PAUSE, APRON_RETURN, TO_ENTRANCE, TO_ROAD, STUCK_WAIT, DONE }
+
 const STRAIGHT_MM := 1000
 const DIAGONAL_MM := 1414
 const NO_CELL := Vector2i(-1, -1)
@@ -118,6 +122,7 @@ var outcome_tick := -1
 ## Read only while stage is MISSED; the flight result panel groups on them.
 var missed_stage: Stage = Stage.SPAWNED
 var missed_stuck: Stuck = Stuck.NONE
+var missed_phase: MissedPhase = MissedPhase.NONE
 ## Everything walked so far, path and the walks outside.
 var odometer_mm := 0
 ## 0-100, rising once a simulated second; a cafe visit that serves food
@@ -206,6 +211,16 @@ func is_moving() -> bool:
 
 func is_done() -> bool:
 	return stage == Stage.MADE or stage == Stage.MISSED
+
+
+## Whether this missed passenger is actively walking an outside path (returning
+## from the apron or walking from the terminal entrance down to the road).
+func missed_walking_outside() -> bool:
+	return (
+		stage == Stage.MISSED
+		and (missed_phase == MissedPhase.APRON_RETURN or missed_phase == MissedPhase.TO_ROAD)
+		and not apron.is_empty()
+	)
 
 
 ## Commits a path that starts at `at`.

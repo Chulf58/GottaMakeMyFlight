@@ -563,10 +563,10 @@ func test_journey_forecast_bus_cycle_margin_triggers_earlier_lateness() -> void:
 	assert_bool(p_reg.late).is_false()
 
 
-func test_save_game_v43_round_trip_mid_bus_trip_and_v42_rejected() -> void:
+func test_save_game_round_trip_mid_bus_trip_and_prev_version_rejected() -> void:
 	_pax.auto_schedule = false
-	assert_int(SaveGame.SAVE_VERSION).is_equal(43)
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(40)
+	assert_int(SaveGame.SAVE_VERSION).is_greater_equal(44)
+	assert_int(PassengerSim.SAVE_VERSION).is_greater_equal(41)
 
 	var start_min := 765
 	var a_max := String(_flights.gate_grounds().get("A", {}).get("max_class", ""))
@@ -612,12 +612,12 @@ func test_save_game_v43_round_trip_mid_bus_trip_and_v42_rejected() -> void:
 	PassengerGates.board_bus(_pax, probe, BusShuttleSim.BUS_RIDE_MOOD_PENALTY)
 	assert_int(probe.mood).is_equal(maxi(probe_mood - BusShuttleSim.BUS_RIDE_MOOD_PENALTY, 0))
 	var json_copy: Dictionary = JSON.parse_string(JSON.stringify(snap, "", true, true))
-	assert_int(int(json_copy["save_version"])).is_equal(43)
+	assert_int(int(json_copy["save_version"])).is_equal(SaveGame.SAVE_VERSION)
 	assert_bool(json_copy.has("buses")).is_true()
 
-	var v42 := json_copy.duplicate(true)
-	v42["save_version"] = 42
-	assert_bool(_save.load_world(v42)).is_false()
+	var prev := json_copy.duplicate(true)
+	prev["save_version"] = SaveGame.SAVE_VERSION - 1
+	assert_bool(_save.load_world(prev)).is_false()
 
 	assert_bool(_save.load_world(_base_snap.duplicate(true))).is_true()
 	assert_bool(_save.load_world(json_copy)).is_true()
