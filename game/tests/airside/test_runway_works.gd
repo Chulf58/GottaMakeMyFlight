@@ -55,7 +55,7 @@ func test_locked_below_the_tier_with_the_requirement_text() -> void:
 	var problem := RunwayWorks.problem(_sim, _unlocks, _wallet)
 	print("tier 1, small runway: '%s'" % problem)
 	assert_str(problem).is_equal(BuildUnlocks.requirement_text(2))
-	assert_str(problem).contains("2 stars").contains("20 passengers")
+	assert_str(problem).contains("40% quality").contains("20 passengers")
 	assert_str(RunwayWorks.buy(_sim, _unlocks, _wallet)).is_equal(problem)
 	assert_int(_wallet.balance).is_equal(100000)
 	assert_bool(_sim.runway.works.scheduled()).is_false()

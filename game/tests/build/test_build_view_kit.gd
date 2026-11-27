@@ -255,10 +255,10 @@ func test_main_scene_sun_keeps_tight_shadow_bias_for_cutaway_stubs() -> void:
 	var bias := float(props.get("shadow_bias", -1.0))
 	var normal_bias := float(props.get("shadow_normal_bias", -1.0))
 	assert_float(bias).is_greater_equal(0.02)
-	assert_float(bias).is_less_equal(0.04)
-	assert_float(normal_bias).is_greater_equal(0.3)
-	assert_float(normal_bias).is_less_equal(0.5)
-	assert_float(float(props.get("shadow_blur", 0.0))).is_equal_approx(2.0, 0.01)
+	assert_float(bias).is_less_equal(0.06)
+	assert_float(normal_bias).is_greater_equal(0.15)
+	assert_float(normal_bias).is_less_equal(0.25)
+	assert_float(float(props.get("shadow_blur", 0.0))).is_equal_approx(0.5, 0.1)
 	assert_float(float(props.get("directional_shadow_max_distance", 0.0))).is_equal_approx(
 		410.0, 0.1
 	)

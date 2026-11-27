@@ -451,7 +451,7 @@ func test_non_trainable_roles_refuse_train_and_hide_ui_button() -> void:
 		assert_object(fixed_lbl).is_not_null()
 		assert_str(fixed_lbl.text).is_equal(TranslationServer.translate("Fixed speed"))
 		assert_str(String(fixed_lbl.theme_type_variation)).is_equal("HudHint")
-		assert_float(fixed_lbl.custom_minimum_size.x).is_greater(0.0)
+		assert_int(fixed_lbl.size_flags_horizontal).is_equal(Control.SIZE_EXPAND_FILL)
 
 
 func test_leaving_and_leaving_shift_refused_while_off_shift_and_break_allowed() -> void:

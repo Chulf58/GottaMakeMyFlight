@@ -200,21 +200,16 @@ func test_move_counter_inside_starter_kiosk_uses_object_mover_and_keeps_room() -
 	assert_bool(BuiltSelection.clicks_taken(_mode)).is_true()
 	assert_bool(RotateHint.applies(_mode)).is_true()
 
-	# Move 1 cell down (overlapping old footprint? Actually 2x1 at (6, 7) -> (6, 8) or (7, 8)):
-	# Wait: Starter Kiosk at centre (8, 8) has rect (6, 7, 4, 3):
-	# counter at (6, 7) facing 0 (occupies (6, 7) & (7, 7), front (6, 8));
-	# display at (8, 7) facing 0 (occupies (8, 7) & (9, 7)).
-	# Moving counter 1 cell right to (7, 7)? No, display is at (8, 7).
-	# Rotate with R (facing 0 -> 1 -> 2 -> 3) or move inside room to (7, 8) facing 1?
-	# Wait: at anchor (6, 8) facing 0, footprint is (6, 8) & (7, 8), front is (6, 9) (door at (7, 9)).
-	# Wait: let's test overlapping old footprint: move counter from (6, 7) facing 0
-	# to (6, 7) rotated OR to (7, 7) if display wasn't there — even better:
-	# rotate facing 0 -> 1 (1x2 vertical at (6, 7) -> (6, 7) & (6, 8), overlapping (6, 7)!).
+	# Starter Kiosk at centre (8, 8) has rect (6, 7, 5, 4):
+	# counter at (6, 8) facing 0 (occupies (6, 8) & (7, 8), front (6, 9), rear (6, 7));
+	# display at (10, 8) facing 1 (occupies (10, 8) & (10, 9)).
+	# Rotate facing 0 -> 1 (1x2 vertical at (7, 7) -> (7, 7) & (7, 8), overlapping (7, 8))
+	# so both footprint and front/rear service cells remain inside the 5x4 kiosk room.
 	_mode.object_mover.rotate_turns()
 	assert_int(_mode.object_mover.turns).is_equal(1)
-	_mode.object_mover.hover_at(Vector2i(6, 7))
+	_mode.object_mover.hover_at(Vector2i(7, 7))
 	assert_bool(_mode.object_mover.refusal() == null).is_true()
-	var moved := _mode.object_mover.set_down(Vector2i(6, 7))
+	var moved := _mode.object_mover.set_down(Vector2i(7, 7))
 
 	assert_bool(moved != null and moved.ok).is_true()
 	assert_bool(_mode.object_mover.active).is_false()
@@ -223,7 +218,7 @@ func test_move_counter_inside_starter_kiosk_uses_object_mover_and_keeps_room() -
 	assert_that(_mode.grid.get_object(display_id)).is_equal(display_before)
 	var counter_after := _mode.grid.get_object(counter_id)
 	assert_bool(counter_after.is_empty()).is_false()
-	assert_that(counter_after["anchor"]).is_equal(Vector2i(6, 7))
+	assert_that(counter_after["anchor"]).is_equal(Vector2i(7, 7))
 	assert_int(counter_after["facing"]).is_equal(1)
 	assert_int(counter_after["paid"]).is_equal(counter_before["paid"])
 	assert_int(_mode.undo_history().size()).is_equal(1)
