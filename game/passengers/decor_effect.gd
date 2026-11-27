@@ -41,6 +41,8 @@ const TABLE := {
 ## A slow nudge: a fountain's 3 points in 10 beats is 0.3 mood a second, small
 ## beside a queue's loss of 1 a second and a gate seat's gain of 1 a second.
 const PERIOD_BEATS := 10
+## Mild passive calm inside a Departure Board's sight fan (non-stacking).
+const BOARD_CALM := 1
 ## The most calm one passenger can draw, however much decor is in range: 4
 ## points per period, 0.4 mood a second. Two fountains and a statue saturate it.
 const MAX_CALM := 4
@@ -180,15 +182,17 @@ func beat(p: Passenger) -> void:
 		return
 	var cell := BoredomSim.watch_cell(p)
 	var net := net_calm_at(cell)
+	var board := BOARD_CALM if _sim.departure_boards.covers(cell) else 0
 	@warning_ignore("integer_division")
 	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
 	# Nice decor is thought only where decor outweighs what spoils the view.
 	if net > 0:
 		PassengerThoughts.decor(p, _sim.tick, cell)
-	if net < 0:
-		p.mood = maxi(p.mood - due(capped(-net), beat_number), 0)
-	elif net > 0 and p.mood < CEILING:
-		p.mood = mini(p.mood + due(capped(net), beat_number), CEILING)
+	var total := net + board
+	if total < 0:
+		p.mood = maxi(p.mood - due(capped(-total), beat_number), 0)
+	elif total > 0 and p.mood < CEILING:
+		p.mood = mini(p.mood + due(capped(total), beat_number), CEILING)
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
