@@ -65,11 +65,25 @@ func test_a_build_in_the_scene_is_paid_and_survives_a_save_and_load() -> void:
 	assert_bool(_mode.apply_at(IN_LOT_0).ok).is_true()
 	assert_bool(_mode.apply_at(IN_MULTI).ok).is_true()
 	assert_bool(_mode.apply_at(IN_BAY_1).ok).is_true()
-	assert_array(_sim.lots_built).is_equal([false, false])
+	var n := _sim.definition.lots.size()
+	var empty := []
+	empty.resize(n)
+	empty.fill(false)
+	assert_array(_sim.lots_built).is_equal(empty)
 	assert_bool(_save.load_world(saved)).is_true()
-	assert_array(_sim.lots_built).is_equal([true, true])
-	assert_array(_sim.lots_closed).is_equal([true, false])
-	assert_array(_sim.lots_paid).is_equal([1200, 5000])
+	var built := empty.duplicate()
+	built[0] = true
+	built[1] = true
+	var closed := empty.duplicate()
+	closed[0] = true
+	var paid := []
+	paid.resize(n)
+	paid.fill(0)
+	paid[0] = 1200
+	paid[1] = 5000
+	assert_array(_sim.lots_built).is_equal(built)
+	assert_array(_sim.lots_closed).is_equal(closed)
+	assert_array(_sim.lots_paid).is_equal(paid)
 	assert_array(_sim.curbs_built).is_equal([false, true])
 	assert_array(_sim.curbs_paid).is_equal([0, 300])
 	assert_int(_wallet().balance).is_equal(expected_balance)

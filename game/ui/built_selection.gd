@@ -125,7 +125,7 @@ func plan_of(placement: LandsidePlacement) -> LandsidePlacement.Plan:
 		return null
 	var centre: Vector3 = placement.sim.definition.curb_spots[spot].centre
 	if lot_kind != LandsidePlacement.Kind.CURB:
-		centre = placement.sim.definition.lots[spot].centre
+		centre = placement.sim.lot_spot(spot).centre
 	var plan := placement.plan_remove(centre)
 	if plan == null or plan.kind != lot_kind or plan.spot != spot:
 		return null
@@ -193,8 +193,9 @@ func _spot_rect(placement: LandsidePlacement) -> Rect2:
 	var centre := definition.curb_spots[spot].centre
 	var footprint := definition.curb_spots[spot].footprint
 	if lot_kind != LandsidePlacement.Kind.CURB:
-		centre = definition.lots[spot].centre
-		footprint = definition.lots[spot].footprint
+		var lot := placement.sim.lot_spot(spot)
+		centre = lot.centre
+		footprint = lot.footprint
 	return Rect2(Vector2(centre.x, centre.z) - footprint / 2.0, footprint)
 
 

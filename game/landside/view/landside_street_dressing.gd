@@ -168,8 +168,8 @@ static func _append_highway_lamps_and_signs(out: Array[Dictionary]) -> void:
 			Vector3(x, SIDEWALK_Y, -51.42),
 			PI * 0.5
 		)
-	# South sidewalk highway lights staggered: -PI/2 overhangs arm -Z onto asphalt.
-	for x in [-120.0, -100.0, -80.0, -60.0, 60.0, 80.0, 100.0, 120.0]:
+	# South sidewalk highway lights staggered in inter-pad gaps: -PI/2 overhangs arm -Z onto asphalt.
+	for x in [-130.0, -101.0, -74.0, -44.0, 46.0, 74.0, 102.0, 130.0]:
 		var tag := "E" if x > 0.0 else "W"
 		_add_prop(
 			out,
@@ -194,39 +194,30 @@ static func _append_greenery(out: Array[Dictionary]) -> void:
 	# Corner stone-planter pines marking site-to-boulevard transitions & portal approaches.
 	_add_prop(out, "PlanterPine_NW", "tree_planter", Vector3(-45.8, GROUND_Y, -54.8), 0.2)
 	_add_prop(out, "PlanterPine_NE", "tree_planter", Vector3(45.8, GROUND_Y, -54.8), -0.4)
-	_add_prop(out, "PlanterPine_SW", "tree_planter", Vector3(-45.8, GROUND_Y, -37.2), 0.7)
+	_add_prop(out, "PlanterPine_SW", "tree_planter", Vector3(-70.0, GROUND_Y, -36.5), 0.0)
 	_add_prop(out, "PlanterPine_SE", "tree_planter", Vector3(45.8, GROUND_Y, -37.2), -0.9)
 
-	# Outer boulevard verge trees & bushes (y = GROUND_Y, strictly z > -59.5).
+	# Outer boulevard verge trees & bushes (y = GROUND_Y, strictly z > -59.5, clear of south pads).
 	var verge_specs := [
 		[-130.5, -55.4, "pine", 0.3],
 		[-130.5, -36.0, "pine", 1.1],
 		[-118.0, -55.8, "tree_leaf", 0.8],
-		[-112.0, -35.8, "bush_hedge", 0.4],
 		[-102.0, -55.2, "pine", 1.9],
-		[-96.0, -36.0, "tree_leaf", 2.3],
+		[-98.0, -36.0, "bush_hedge", 0.4],
 		[-84.0, -55.8, "tree_leaf", 0.1],
-		[-78.0, -35.8, "pine", 1.4],
 		[-66.0, -55.2, "pine", 2.7],
-		[-60.0, -36.0, "tree_leaf", 0.9],
 		[-52.0, -55.0, "bush_hedge", 1.5],
-		[-52.0, -36.2, "bush_hedge", 2.1],
+		[-14.0, -36.0, "bush_hedge", 2.1],
+		[16.0, -36.0, "bush_hedge", 0.9],
 		[52.0, -55.0, "bush_hedge", 0.6],
-		[52.0, -36.2, "bush_hedge", 1.8],
-		[60.0, -36.0, "tree_leaf", 2.4],
 		[66.0, -55.2, "pine", 0.5],
-		[78.0, -35.8, "pine", 1.2],
+		[74.0, -36.0, "bush_hedge", 1.2],
 		[84.0, -55.8, "tree_leaf", 2.9],
-		[96.0, -36.0, "tree_leaf", 0.7],
 		[102.0, -55.2, "pine", 2.0],
-		[112.0, -35.8, "bush_hedge", 1.3],
+		[102.0, -36.0, "bush_hedge", 1.3],
 		[118.0, -55.8, "tree_leaf", 2.5],
 		[130.5, -55.4, "pine", 0.2],
 		[130.5, -36.0, "pine", 1.7],
-		# West car-park lawn framing (outside BirdPerches & lot_2).
-		[-36.0, -32.0, "tree_leaf", 0.4],
-		[-26.0, -31.5, "pine", 1.6],
-		[-18.5, -33.0, "bush_hedge", 0.9],
 	]
 	for i in verge_specs.size():
 		var item: Array = verge_specs[i]

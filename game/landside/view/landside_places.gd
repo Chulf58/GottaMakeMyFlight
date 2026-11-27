@@ -94,19 +94,24 @@ func refresh() -> void:
 	for spot in landside.curbs_built.size():
 		_match(_bays, spot, landside.curbs_built[spot], _new_bay.bind(definition, spot))
 	for spot in landside.lots_built.size():
-		_match(_lots, spot, landside.lots_built[spot], _new_lot.bind(definition, spot))
-		_match(_badges, spot, landside.lots_built[spot], _new_badge.bind(definition, spot))
+		if (
+			landside.lots_built[spot]
+			and _lots.has(spot)
+			and int((_lots[spot] as Node).get_meta(&"lot_kind", -1)) != int(landside.lot_kind(spot))
+		):
+			_drop_lot_nodes(spot)
+		_match(_lots, spot, landside.lots_built[spot], _new_lot.bind(spot))
+		_match(_badges, spot, landside.lots_built[spot], _new_badge.bind(spot))
 		if landside.lots_built[spot] and _badges.has(spot):
 			var badge: Label3D = _badges[spot]
-			var capacity := definition.lots[spot].slots.size()
+			var lot_spot := landside.lot_spot(spot)
+			var capacity := lot_spot.slots.size()
 			badge.text = "%d/%d" % [landside.lot_occupied(spot), capacity]
 			badge.position = Vector3(
-				definition.lots[spot].centre.x,
-				lot_top_y(spot) + BADGE_LIFT,
-				definition.lots[spot].centre.z
+				lot_spot.centre.x, lot_top_y(spot) + BADGE_LIFT, lot_spot.centre.z
 			)
 		var closed: bool = landside.lots_built[spot] and landside.lots_closed[spot]
-		_match(_signs, spot, closed, _new_sign.bind(definition, spot))
+		_match(_signs, spot, closed, _new_sign.bind(spot))
 	if not _signs.is_empty():
 		_size_signs()
 
@@ -220,7 +225,7 @@ func lot_top_y(spot: int) -> float:
 		and landside.definition != null
 		and spot >= 0
 		and spot < landside.definition.lots.size()
-		and landside.definition.lots[spot].kind == LandsideLotSpot.Kind.MULTI_STOREY
+		and landside.lot_kind(spot) == LandsideLotSpot.Kind.MULTI_STOREY
 	):
 		return MULTI_FALLBACK_TOP
 	return SURFACE_FALLBACK_TOP
@@ -290,17 +295,25 @@ func _new_bay(definition: LandsideDefinition, spot: int) -> Node3D:
 	return bay
 
 
-func _new_lot(definition: LandsideDefinition, spot: int) -> Node3D:
-	var lot_spot := definition.lots[spot]
+func _drop_lot_nodes(spot: int) -> void:
+	for drawn in [_lots, _badges, _signs]:
+		if drawn.has(spot):
+			(drawn[spot] as Node).queue_free()
+			drawn.erase(spot)
+
+
+func _new_lot(spot: int) -> Node3D:
+	var lot_spot := landside.lot_spot(spot)
 	var multi := lot_spot.kind == LandsideLotSpot.Kind.MULTI_STOREY
 	var lot: Node3D = (MULTI if multi else SURFACE).instantiate()
 	lot.name = "Lot%d" % spot
+	lot.set_meta(&"lot_kind", int(lot_spot.kind))
 	lot.transform = lot_transform(lot_spot)
 	return lot
 
 
-func _new_badge(definition: LandsideDefinition, spot: int) -> Label3D:
-	var lot_spot := definition.lots[spot]
+func _new_badge(spot: int) -> Label3D:
+	var lot_spot := landside.lot_spot(spot)
 	var badge := CaptionFont.apply(Label3D.new())
 	badge.name = "OccupancyBadge%d" % spot
 	badge.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -320,8 +333,8 @@ func _new_badge(definition: LandsideDefinition, spot: int) -> Label3D:
 
 ## The closed-station sign family (MissMarkers): the grey "!" billboard at one
 ## screen size, drawn over the world, with "Closed" above it.
-func _new_sign(definition: LandsideDefinition, spot: int) -> Node3D:
-	var lot_spot := definition.lots[spot]
+func _new_sign(spot: int) -> Node3D:
+	var lot_spot := landside.lot_spot(spot)
 	var gate := lot_spot.access[lot_spot.access.size() - 1]
 	var sign := Sprite3D.new()
 	sign.name = "ClosedSign%d" % spot

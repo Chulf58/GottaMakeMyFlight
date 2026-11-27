@@ -106,11 +106,10 @@ func test_landside_places_mounts_dressing_clear_of_protected_footprints() -> voi
 				if absf(pos.x - cx) < 1.2 + half_p.x * 0.5:
 					bad.append("%s blocks crosswalk x=%.1f" % [name_s, cx])
 
-		# 3. Lot 1 & Lot 2 footprints + vehicle aprons kept clear.
-		if _in_rect(pos, half_p, 19.7, 43.7, -40.0, -5.5):
-			bad.append("%s overlaps lot_1" % name_s)
-		if _in_rect(pos, half_p, -12.0, 12.0, -40.0, 18.0):
-			bad.append("%s overlaps lot_2" % name_s)
+		# 3. All parking pad footprints + vehicle aprons kept clear.
+		for lot: LandsideLotSpot in STARTER.lots:
+			if _in_rect(pos, half_p, lot.centre.x - 12.0, lot.centre.x + 12.0, -40.0, 18.0):
+				bad.append("%s overlaps lot at x=%.1f" % [name_s, lot.centre.x])
 		# Lot 2 south sidewalk access/exit corridor x in [-3.5, 8.5] stays open.
 		if pos.z >= -41.5 and pos.z <= -39.5 and pos.x + half_p.x > -3.5 and pos.x - half_p.x < 8.5:
 			bad.append("%s blocks lot_2 sidewalk apron" % name_s)

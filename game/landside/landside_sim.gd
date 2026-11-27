@@ -85,6 +85,8 @@ var paths: LandsidePaths
 var tick := 0
 ## Per lot spot: whether a car park stands there. A new game has none.
 var lots_built: Array[bool] = []
+## Per lot spot: which LandsideLotSpot.Kind is built there (pad default when unbuilt).
+var lots_kind: Array[int] = []
 ## Per lot spot: whether the car park takes no new arrivals, so it drains
 ## (decision landside-technical-design-arrival-bookings-landsidesim-vehic,
 ## point 7). Cars already on its lanes park and leave as usual.
@@ -159,6 +161,7 @@ func use_definition(with_definition: LandsideDefinition) -> bool:
 		_access_mm.append(LandsideDefinition.length_mm(spot.access))
 		_exit_mm.append(LandsideDefinition.length_mm(spot.exit))
 	lots_built.assign(_filled(definition.lots.size(), false))
+	lots_kind.assign(_default_lot_kinds(definition))
 	lots_closed.assign(_filled(definition.lots.size(), false))
 	lots_paid.assign(_filled(definition.lots.size(), 0))
 	curbs_built.assign(_filled(definition.curb_spots.size(), false))
@@ -174,14 +177,21 @@ func use_definition(with_definition: LandsideDefinition) -> bool:
 	return true
 
 
-## Puts a car park on lot spot `spot`, bought for `paid`. False (with an
-## error) for an unknown spot or one already built.
-func build_lot(spot: int, paid := 0) -> bool:
+## Puts a car park of `kind` (-1 for the pad's default) on lot spot `spot`,
+## bought for `paid`. False (with an error) for an unknown spot, invalid kind,
+## or one already built.
+func build_lot(spot: int, paid := 0, kind := -1) -> bool:
 	if spot < 0 or spot >= lots_built.size() or lots_built[spot]:
 		push_error("LandsideSim.build_lot: spot %d is unknown or built" % spot)
 		return false
+	var chosen := definition.lots[spot].kind if kind < 0 else kind
+	if chosen != LandsideLotSpot.Kind.SURFACE and chosen != LandsideLotSpot.Kind.MULTI_STOREY:
+		push_error("LandsideSim.build_lot: unknown kind %d" % chosen)
+		return false
 	lots_built[spot] = true
 	lots_paid[spot] = paid
+	lots_kind[spot] = chosen
+	_apply_lot_kind(spot, chosen as LandsideLotSpot.Kind)
 	return true
 
 
@@ -193,6 +203,9 @@ func remove_lot(spot: int) -> bool:
 	lots_built[spot] = false
 	lots_closed[spot] = false
 	lots_paid[spot] = 0
+	var fallback := definition.lots[spot].kind
+	lots_kind[spot] = fallback
+	_apply_lot_kind(spot, fallback)
 	lot_earned_today[spot] = 0
 	lot_parked_today[spot] = 0
 	lot_diverted_today[spot] = 0
@@ -220,6 +233,20 @@ func lot_cars(spot: int) -> int:
 ## Whether lot spot `spot` takes new arrivals: built and not closed.
 func lot_open(spot: int) -> bool:
 	return lots_built[spot] and not lots_closed[spot]
+
+
+## The LandsideLotSpot.Kind currently active on pad `spot` (its default when unbuilt).
+func lot_kind(spot: int) -> LandsideLotSpot.Kind:
+	if spot >= 0 and spot < lots_kind.size():
+		return lots_kind[spot] as LandsideLotSpot.Kind
+	return LandsideLotSpot.Kind.SURFACE
+
+
+## The active LandsideLotSpot geometry for pad `spot`.
+func lot_spot(spot: int) -> LandsideLotSpot:
+	if paths != null and spot >= 0 and spot < paths.lots.size():
+		return paths.lots[spot]
+	return definition.lots[spot]
 
 
 ## Puts a curb bay on curb spot `spot`, bought for `paid`; its berths join the
@@ -262,7 +289,7 @@ func free_slots(spot: int) -> int:
 func lot_occupied(spot: int) -> int:
 	if spot < 0 or spot >= lots_built.size() or not lots_built[spot]:
 		return 0
-	return definition.lots[spot].slots.size() - free_slots(spot)
+	return lot_spot(spot).slots.size() - free_slots(spot)
 
 
 ## What a car of `intent` will do: PARK only while some car park is open.
@@ -286,7 +313,7 @@ func lead_ticks(intent: LandsideVehicle.Intent) -> int:
 	if resolve_intent(intent) == LandsideVehicle.Intent.PARK:
 		var slot := maxi((_slots[spot] as Array).find(0), 0)
 		return (
-			_ticks(definition.lots[spot].branch_mm)
+			_ticks(lot_spot(spot).branch_mm)
 			+ _ticks(_access_mm[spot])
 			+ _ticks(paths.slot_stand[spot][slot] - _access_mm[spot])
 		)
@@ -422,6 +449,7 @@ func from_snapshot(data: Dictionary, bookings: ArrivalBookings) -> bool:
 		return false
 	tick = loaded["tick"]
 	lots_built = loaded["lots_built"]
+	lots_kind = loaded["lots_kind"]
 	lots_closed = loaded["lots_closed"]
 	lots_paid = loaded["lots_paid"]
 	curbs_built = loaded["curbs_built"]
@@ -431,6 +459,16 @@ func from_snapshot(data: Dictionary, bookings: ArrivalBookings) -> bool:
 	_by_id.clear()
 	for v in _vehicles:
 		_by_id[v.id] = v
+	for spot in definition.lots.size():
+		var active_kind := (
+			lots_kind[spot] as LandsideLotSpot.Kind
+			if lots_built[spot]
+			else definition.lots[spot].kind
+		)
+		var active := definition.lot_for_kind(spot, active_kind)
+		paths.set_lot(spot, active)
+		_access_mm[spot] = LandsideDefinition.length_mm(active.access)
+		_exit_mm[spot] = LandsideDefinition.length_mm(active.exit)
 	lot_earned_today.assign(_filled(definition.lots.size(), 0))
 	lot_parked_today.assign(_filled(definition.lots.size(), 0))
 	lot_diverted_today.assign(_filled(definition.lots.size(), 0))
@@ -624,7 +662,7 @@ func _drive_road_in(v: LandsideVehicle, leader: int, waiting: int, leader_held: 
 	var spot := _lot_ahead(v)
 	var stop := curb_stop_mm()
 	if spot >= 0:
-		stop = definition.lots[spot].branch_mm
+		stop = lot_spot(spot).branch_mm
 	var held := _drive(v, leader, stop)
 	if held and leader_held:
 		line_held[v.id] = true
@@ -773,7 +811,7 @@ func parking_fee(spot: int) -> int:
 		definition != null
 		and spot >= 0
 		and spot < definition.lots.size()
-		and definition.lots[spot].kind == LandsideLotSpot.Kind.MULTI_STOREY
+		and lot_kind(spot) == LandsideLotSpot.Kind.MULTI_STOREY
 	):
 		return MULTI_STOREY_FEE
 	return SURFACE_LOT_FEE
@@ -876,7 +914,7 @@ func _lot_ahead(v: LandsideVehicle) -> int:
 func _lot_for(pos_mm: int) -> int:
 	var fallback := -1
 	for spot in _lots_by_walk():
-		if definition.lots[spot].branch_mm < pos_mm:
+		if lot_spot(spot).branch_mm < pos_mm:
 			continue
 		if free_slots(spot) > 0:
 			return spot
@@ -897,7 +935,7 @@ func _lots_by_walk() -> Array[int]:
 		spots.append(spot)
 		var kind := (
 			LandsidePlacement.Kind.MULTI_STOREY
-			if definition.lots[spot].kind == LandsideLotSpot.Kind.MULTI_STOREY
+			if lot_kind(spot) == LandsideLotSpot.Kind.MULTI_STOREY
 			else LandsidePlacement.Kind.SURFACE_LOT
 		)
 		walks[spot] = LandsidePlacement.walk_to_door_m(definition, kind, spot, doors)
@@ -906,7 +944,7 @@ func _lots_by_walk() -> Array[int]:
 			var diff := float(walks[a]) - float(walks[b])
 			if absf(diff) > 0.001:
 				return diff < 0.0
-			var by_turn := definition.lots[a].branch_mm - definition.lots[b].branch_mm
+			var by_turn := lot_spot(a).branch_mm - lot_spot(b).branch_mm
 			return a < b if by_turn == 0 else by_turn < 0
 	)
 	return spots
@@ -1018,6 +1056,24 @@ func _lane_clear(lane: LandsideVehicle.Lane, spot: int) -> bool:
 	return true
 
 
+func _apply_lot_kind(spot: int, kind: LandsideLotSpot.Kind) -> void:
+	var active := definition.lot_for_kind(spot, kind)
+	paths.set_lot(spot, active)
+	_access_mm[spot] = LandsideDefinition.length_mm(active.access)
+	_exit_mm[spot] = LandsideDefinition.length_mm(active.exit)
+	var holders: Array[int] = []
+	holders.resize(active.slots.size())
+	holders.fill(0)
+	_slots[spot] = holders
+
+
+static func _default_lot_kinds(with_definition: LandsideDefinition) -> Array[int]:
+	var out: Array[int] = []
+	for spot in with_definition.lots:
+		out.append(int(spot.kind))
+	return out
+
+
 ## Berth and slot holders from the vehicle records, after a load or a reset:
 ## a berth is held until its car is back on the road line, a slot until its car
 ## starts to pull out.
@@ -1028,9 +1084,9 @@ func _rederive() -> void:
 	for i in _berths.size():
 		_berth_mm.append(definition.berth_mm(i))
 	_slots.clear()
-	for spot in definition.lots:
+	for i in definition.lots.size():
 		var holders: Array[int] = []
-		holders.resize(spot.slots.size())
+		holders.resize(lot_spot(i).slots.size())
 		holders.fill(0)
 		_slots.append(holders)
 	for v in _vehicles:

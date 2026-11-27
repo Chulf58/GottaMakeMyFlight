@@ -102,7 +102,12 @@ static func walk_to_door_m(
 		for point in bay.get_out:
 			total += _nearest_flat(point, doors)
 		return total / bay.get_out.size()
-	var lot := definition.lots[spot]
+	var lot_kind := (
+		LandsideLotSpot.Kind.MULTI_STOREY
+		if kind == Kind.MULTI_STOREY
+		else LandsideLotSpot.Kind.SURFACE
+	)
+	var lot := definition.lot_for_kind(spot, lot_kind)
 	var gate := lot.access[lot.access.size() - 1]
 	var on_foot := (
 		_length(lot.crossing) + _nearest_flat(lot.crossing[lot.crossing.size() - 1], doors)
@@ -345,18 +350,26 @@ func _plan_built(point: Vector3, lots_only: bool) -> Plan:
 		return null
 	var best: Plan = null
 	var best_m := SNAP_MARGIN_M
-	for kind in [Kind.CURB, Kind.SURFACE_LOT, Kind.MULTI_STOREY]:
-		if lots_only and kind == Kind.CURB:
-			continue
-		for spot in _spot_count(kind):
-			if not _matches(kind, spot) or not _built(kind, spot):
+	if not lots_only:
+		for spot in sim.definition.curb_spots.size():
+			if not sim.curbs_built[spot]:
 				continue
-			var m := _outside_m(point, _centre(kind, spot), _footprint(kind, spot))
+			var m := _outside_m(point, _centre(Kind.CURB, spot), _footprint(Kind.CURB, spot))
 			if m < best_m or (best == null and m <= best_m):
 				best = Plan.new()
-				best.kind = kind
+				best.kind = Kind.CURB
 				best.spot = spot
 				best_m = m
+	for spot in sim.definition.lots.size():
+		if not sim.lots_built[spot]:
+			continue
+		var kind := _placement_kind(sim.lot_kind(spot))
+		var m := _outside_m(point, _centre(kind, spot), _footprint(kind, spot))
+		if m < best_m or (best == null and m <= best_m):
+			best = Plan.new()
+			best.kind = kind
+			best.spot = spot
+			best_m = m
 	if best != null:
 		best.cars = sim.curb_cars(best.spot) if best.kind == Kind.CURB else sim.lot_cars(best.spot)
 	return best
@@ -372,7 +385,7 @@ func _describe(plan: Plan) -> void:
 	if plan.kind == Kind.CURB:
 		plan.capacity = definition.curb_spots[plan.spot].berths.size()
 	else:
-		plan.capacity = definition.lots[plan.spot].slots.size()
+		plan.capacity = _lot_spot_for(plan.kind, plan.spot).slots.size()
 	plan.walk_m = walk_to_door_m(definition, plan.kind, plan.spot, landside_doors(grid))
 	var text := _line(plan, false)
 	match plan.action:
@@ -482,14 +495,25 @@ func _spot_count(kind: Kind) -> int:
 	return sim.definition.lots.size()
 
 
-## Whether lot spot `spot` is of `kind` (always true for a curb spot).
-func _matches(kind: Kind, spot: int) -> bool:
-	if kind == Kind.CURB:
-		return true
-	var wanted := LandsideLotSpot.Kind.SURFACE
+## Every parking pad accepts both Surface Lot and Multi-Storey.
+func _matches(_kind: Kind, _spot: int) -> bool:
+	return true
+
+
+static func _lot_kind(kind: Kind) -> LandsideLotSpot.Kind:
 	if kind == Kind.MULTI_STOREY:
-		wanted = LandsideLotSpot.Kind.MULTI_STOREY
-	return sim.definition.lots[spot].kind == wanted
+		return LandsideLotSpot.Kind.MULTI_STOREY
+	return LandsideLotSpot.Kind.SURFACE
+
+
+static func _placement_kind(kind: LandsideLotSpot.Kind) -> Kind:
+	if kind == LandsideLotSpot.Kind.MULTI_STOREY:
+		return Kind.MULTI_STOREY
+	return Kind.SURFACE_LOT
+
+
+func _lot_spot_for(kind: Kind, spot: int) -> LandsideLotSpot:
+	return sim.definition.lot_for_kind(spot, _lot_kind(kind))
 
 
 func _built(kind: Kind, spot: int) -> bool:
@@ -507,13 +531,13 @@ func _refund(kind: Kind, spot: int) -> int:
 func _centre(kind: Kind, spot: int) -> Vector3:
 	if kind == Kind.CURB:
 		return sim.definition.curb_spots[spot].centre
-	return sim.definition.lots[spot].centre
+	return _lot_spot_for(kind, spot).centre
 
 
 func _footprint(kind: Kind, spot: int) -> Vector2:
 	if kind == Kind.CURB:
 		return sim.definition.curb_spots[spot].footprint
-	return sim.definition.lots[spot].footprint
+	return _lot_spot_for(kind, spot).footprint
 
 
 ## Pays `price` and builds, or refuses with nothing changed.
@@ -522,7 +546,11 @@ func _build(kind: Kind, spot: int, price: int) -> BuildResult:
 		return BuildResult.refused(BuildResult.Reason.LANDSIDE_SPOT_TAKEN)
 	if wallet != null and not wallet.spend(price, Wallet.Category.BUILD):
 		return BuildResult.refused(BuildResult.Reason.CANT_AFFORD)
-	var built := sim.build_curb(spot, price) if kind == Kind.CURB else sim.build_lot(spot, price)
+	var built := (
+		sim.build_curb(spot, price)
+		if kind == Kind.CURB
+		else sim.build_lot(spot, price, _lot_kind(kind))
+	)
 	if not built:
 		return BuildResult.refused(BuildResult.Reason.LANDSIDE_SPOT_TAKEN)
 	return BuildResult.accepted()
@@ -554,7 +582,7 @@ func _rebuild(kind: Kind, spot: int, done: Dictionary) -> BuildResult:
 	var built := (
 		sim.build_curb(spot, done["paid"])
 		if kind == Kind.CURB
-		else sim.build_lot(spot, done["paid"])
+		else sim.build_lot(spot, done["paid"], _lot_kind(kind))
 	)
 	if built and kind != Kind.CURB:
 		sim.set_lot_closed(spot, done["closed"])

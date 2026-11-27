@@ -159,7 +159,7 @@ func test_car_inside_radius_scatters_and_group_lands_elsewhere() -> void:
 	print("scatter from=", from, " target=", target)
 	assert_int(target).is_not_equal(-1)
 	assert_int(target).is_not_equal(from)
-	assert_bool(BirdPerches.can_fly(from, target)).is_true()
+	assert_bool(BirdPerches.can_fly(from, target, _flock.lot_obstacles())).is_true()
 	assert_bool(_flock.busy_spots(g).has(target)).is_false()
 	var top := 0.0
 	var clips := {}
@@ -298,7 +298,9 @@ func test_building_a_lot_rebuilds_through_the_views() -> void:
 	assert_bool(sim.build_lot(0)).is_true()
 	_tick_and_process(f)
 	assert_bool(first.is_queued_for_deletion()).is_true()
-	assert_array(f._lots_seen).is_equal([true, false])
+	assert_int(f._lots_seen.size()).is_equal(STARTER.lots.size())
+	assert_bool(f._lots_seen[0]).is_true()
+	assert_int(f._lots_seen.count(true)).is_equal(1)
 	var lot_closed := 0
 	var closed := f.closed_spots({})
 	for i in BirdPerches.SPOTS.size():
@@ -499,3 +501,51 @@ func test_perched_birds_keep_clear_spacing_and_avoid_adjacent_clumps() -> void:
 			var pa: Vector3 = (west_group["birds"][i]["node"] as Node3D).position
 			var pb: Vector3 = (west_group["birds"][j]["node"] as Node3D).position
 			assert_float(Vector2(pa.x - pb.x, pa.z - pb.z).length()).is_greater_equal(min_apart)
+
+
+func test_multi_storey_on_pad_zero_disables_surface_aisle_perches_and_rebuilds() -> void:
+	var sim := _landside
+	var f := _flock
+	assert_bool(sim.build_lot(0, 0, LandsideLotSpot.Kind.SURFACE)).is_true()
+	_tick_and_process(f)
+	var avail_surface := BirdPerches.available(sim.lots_built, sim.lots_kind)
+	assert_bool(avail_surface.has(7) and avail_surface.has(8)).is_true()
+
+	# Switching pad 0 directly to Multi-Storey must disable SPOTS[7]/[8] and rebuild.
+	var first_bird: Node3D = f.groups[0]["birds"][0]["node"]
+	assert_bool(sim.remove_lot(0)).is_true()
+	assert_bool(sim.build_lot(0, 0, LandsideLotSpot.Kind.MULTI_STOREY)).is_true()
+	_tick_and_process(f)
+	assert_bool(first_bird.is_queued_for_deletion()).is_true()
+	var avail_multi := BirdPerches.available(sim.lots_built, sim.lots_kind)
+	assert_bool(avail_multi.has(7) or avail_multi.has(8)).is_false()
+	var closed := f.closed_spots({})
+	assert_bool(closed.has(7) and closed.has(8)).is_true()
+	for g in f.groups:
+		assert_int(BirdPerches.spot_lot(g["spot"])).is_equal(-1)
+
+
+func test_flight_clearance_blocks_built_multi_storey_on_any_pad() -> void:
+	var sim := _landside
+	# With no lots built, flights across pad 0 (0 -> 5) and pad 6 (2 -> 3) are clear.
+	var obs_none := BirdPerches.lot_obstacles_for(STARTER, sim.lots_built, sim.lots_kind)
+	assert_bool(BirdPerches.can_fly(0, 5, obs_none)).is_true()
+	assert_bool(BirdPerches.can_fly(2, 3, obs_none)).is_true()
+
+	# A Surface Lot on pad 0 stays below the flight arch.
+	assert_bool(sim.build_lot(0, 0, LandsideLotSpot.Kind.SURFACE)).is_true()
+	var obs_surface0 := BirdPerches.lot_obstacles_for(STARTER, sim.lots_built, sim.lots_kind)
+	assert_bool(BirdPerches.can_fly(0, 5, obs_surface0)).is_true()
+
+	# A Multi-Storey on pad 0 blocks 0 -> 5, while pad 6 (still unbuilt) stays clear.
+	assert_bool(sim.remove_lot(0)).is_true()
+	assert_bool(sim.build_lot(0, 0, LandsideLotSpot.Kind.MULTI_STOREY)).is_true()
+	var obs_multi0 := BirdPerches.lot_obstacles_for(STARTER, sim.lots_built, sim.lots_kind)
+	assert_bool(BirdPerches.can_fly(0, 5, obs_multi0)).is_false()
+	assert_bool(BirdPerches.can_fly(2, 3, obs_multi0)).is_true()
+
+	# A Multi-Storey on pad 6 (x = -56.0) blocks 2 -> 3 across pad 6.
+	assert_bool(sim.build_lot(6, 0, LandsideLotSpot.Kind.MULTI_STOREY)).is_true()
+	var obs_multi6 := BirdPerches.lot_obstacles_for(STARTER, sim.lots_built, sim.lots_kind)
+	assert_bool(BirdPerches.can_fly(2, 3, obs_multi6)).is_false()
+	assert_array(_flock.lot_obstacles()).is_not_empty()
