@@ -74,6 +74,8 @@ const INT_FIELDS := [
 	"direction",
 	"arrival_stops",
 	"arrival_stop_cap",
+	"pickup_vehicle",
+	"pickup_berth",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front", "stand_from"]
 const BOOL_FIELDS := [
@@ -89,6 +91,7 @@ const BOOL_FIELDS := [
 	"seat_exiting",
 	"bus_nudged",
 	"arrival_done",
+	"wants_parked_car",
 ]
 
 
@@ -426,6 +429,29 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		and p.missed_phase < Passenger.MissedPhase.size()
 		and (p.stage == Passenger.Stage.MISSED or p.missed_phase == Passenger.MissedPhase.NONE)
 	)
+	var pickup_links_ok := (
+		(p.pickup_vehicle == 0 and p.pickup_berth == -1)
+		if p.arrival_done
+		else (
+			(p.pickup_vehicle > 0) == (p.stage == Passenger.Stage.TO_PARKED_CAR)
+			and (
+				(p.pickup_berth >= 0)
+				== (
+					p.stage == Passenger.Stage.TO_CURB_PICKUP
+					or p.stage == Passenger.Stage.WAIT_CURB_PICKUP
+				)
+			)
+		)
+	)
+	var pickup_ok := (
+		p.pickup_vehicle >= 0
+		and p.pickup_berth >= -1
+		and pickup_links_ok
+		and (
+			p.direction == Passenger.Direction.ARRIVING
+			or (not p.wants_parked_car and p.pickup_vehicle == 0 and p.pickup_berth == -1)
+		)
+	)
 	var stuck_ok := (
 		p.stuck >= 0
 		and p.stuck < Passenger.Stuck.size()
@@ -434,7 +460,7 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 	)
 	var index_ok := p.path_index >= 0 and p.path_index < maxi(p.path.size(), 1)
 	if (
-		not (variant_ok and range_ok and stage_ok and stuck_ok and index_ok)
+		not (variant_ok and range_ok and stage_ok and pickup_ok and stuck_ok and index_ok)
 		or not _stand_from_ok(p)
 		or not GateRelocation.valid(p)
 		or p.id < 1

@@ -76,6 +76,9 @@ const KINDS := {
 	Passenger.Stage.DEPLANING: [Facility.NONE, Location.APRON, Pose.UPRIGHT],
 	Passenger.Stage.TO_AIRSIDE_EXIT: [Facility.NONE, Location.FLOOR, Pose.UPRIGHT],
 	Passenger.Stage.TO_ROAD_EXIT: [Facility.NONE, Location.FLOOR, Pose.UPRIGHT],
+	Passenger.Stage.TO_PARKED_CAR: [Facility.NONE, Location.FLOOR, Pose.UPRIGHT],
+	Passenger.Stage.TO_CURB_PICKUP: [Facility.NONE, Location.FLOOR, Pose.UPRIGHT],
+	Passenger.Stage.WAIT_CURB_PICKUP: [Facility.NONE, Location.FLOOR, Pose.UPRIGHT],
 }
 ## Stage -> Leg.
 const LEGS := {
@@ -114,6 +117,9 @@ const LEGS := {
 	Passenger.Stage.DEPLANING: Leg.ARRIVAL,
 	Passenger.Stage.TO_AIRSIDE_EXIT: Leg.ARRIVAL,
 	Passenger.Stage.TO_ROAD_EXIT: Leg.ARRIVAL,
+	Passenger.Stage.TO_PARKED_CAR: Leg.ARRIVAL,
+	Passenger.Stage.TO_CURB_PICKUP: Leg.ARRIVAL,
+	Passenger.Stage.WAIT_CURB_PICKUP: Leg.ARRIVAL,
 }
 
 

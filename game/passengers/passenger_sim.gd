@@ -42,7 +42,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 43
+const SAVE_VERSION := 44
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -748,6 +748,8 @@ func _advance(p: Passenger) -> void:
 			if not _chose_exit.has(p.id):
 				PassengerGates.to_exit(self, p)
 		Passenger.Stage.DEPLANING, Passenger.Stage.TO_AIRSIDE_EXIT, Passenger.Stage.TO_ROAD_EXIT:
+			PassengerArrivals.advance(self, p)
+		Passenger.Stage.TO_PARKED_CAR, Passenger.Stage.TO_CURB_PICKUP, Passenger.Stage.WAIT_CURB_PICKUP:
 			PassengerArrivals.advance(self, p)
 
 

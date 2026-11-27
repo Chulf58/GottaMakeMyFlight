@@ -51,6 +51,10 @@ enum Stage {
 	DEPLANING,
 	TO_AIRSIDE_EXIT,
 	TO_ROAD_EXIT,
+	# Arrivals A2 landside pickup stages.
+	TO_PARKED_CAR,
+	TO_CURB_PICKUP,
+	WAIT_CURB_PICKUP,
 }
 
 enum Direction { DEPARTING, ARRIVING }
@@ -78,6 +82,11 @@ var flight_id := ""
 var arrival_stops := 0
 var arrival_stop_cap := 0
 var arrival_done := false
+## Arrivals A2: whether this passenger seeks a parked car before curb pickup,
+## the claimed parked vehicle id (when TO_PARKED_CAR), and target curb berth.
+var wants_parked_car := false
+var pickup_vehicle := 0
+var pickup_berth := -1
 ## 0 or 1: which Toon character draws this passenger.
 var variant := 0
 ## When it set out for the airport (ArrivalTypes): scheduled passengers draw
@@ -241,9 +250,21 @@ func is_done() -> bool:
 	)
 
 
-## Whether this arriving passenger is walking outside (deplaning apron/bridge or sidewalk to road).
+## Whether this arriving passenger is outside the terminal (deplaning, sidewalk, or pickup).
 func walking_outside() -> bool:
-	return (stage == Stage.DEPLANING or stage == Stage.TO_ROAD_EXIT) and not apron.is_empty()
+	return (
+		(
+			stage
+			in [
+				Stage.DEPLANING,
+				Stage.TO_ROAD_EXIT,
+				Stage.TO_PARKED_CAR,
+				Stage.TO_CURB_PICKUP,
+				Stage.WAIT_CURB_PICKUP,
+			]
+		)
+		and not apron.is_empty()
+	)
 
 
 ## Whether this missed passenger is actively walking an outside path (returning

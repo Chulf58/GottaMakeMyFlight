@@ -165,7 +165,11 @@ signal loaded(ok: bool)
 ## 46: FlightSim v15 (DEBOARDING, arriving_passengers), PassengerSim v43
 ## (Direction, arrival_schedule, arrival stages), AirportRating v3 (arrived mood);
 ## version 45 saves are refused (no migration).
-const SAVE_VERSION := 46
+## 47: Arrivals A2 landside pickup: LandsideSnapshot v13 (Intent.PICKUP,
+## claimants, pickup_ready, pickup_boarded), PassengerSim v44 (TO_PARKED_CAR,
+## TO_CURB_PICKUP, WAIT_CURB_PICKUP, wants_parked_car, pickup_vehicle,
+## pickup_berth); version 46 saves are refused (no migration).
+const SAVE_VERSION := 47
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

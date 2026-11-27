@@ -67,7 +67,7 @@ func test_every_stage_is_presented_in_the_follow_panel_and_the_flight_result() -
 		)
 		reasons += 1
 	print("fallback '%s', reasons %d" % [fallback, reasons])
-	assert_int(reasons).is_equal(Passenger.Stage.size() - 5)
+	assert_int(reasons).is_equal(Passenger.Stage.size() - 8)
 
 
 func test_cafe_toilet_and_kiosk_stages_belong_to_their_facility_and_no_other_does() -> void:
@@ -228,6 +228,9 @@ func test_every_stage_has_its_journey_leg_from_the_table_not_the_enum_order() ->
 		Passenger.Stage.DEPLANING: StageKinds.Leg.ARRIVAL,
 		Passenger.Stage.TO_AIRSIDE_EXIT: StageKinds.Leg.ARRIVAL,
 		Passenger.Stage.TO_ROAD_EXIT: StageKinds.Leg.ARRIVAL,
+		Passenger.Stage.TO_PARKED_CAR: StageKinds.Leg.ARRIVAL,
+		Passenger.Stage.TO_CURB_PICKUP: StageKinds.Leg.ARRIVAL,
+		Passenger.Stage.WAIT_CURB_PICKUP: StageKinds.Leg.ARRIVAL,
 	}
 	assert_int(expected.size()).is_equal(Passenger.Stage.size())
 	assert_int(StageKinds.LEGS.size()).is_equal(Passenger.Stage.size())

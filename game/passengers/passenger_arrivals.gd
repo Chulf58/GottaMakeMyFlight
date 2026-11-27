@@ -10,6 +10,10 @@ extends RefCounted
 const DEBOARD_FINISH_MARGIN_TICKS := 10
 const ARRIVAL_NO_ROUTE_TIMEOUT_TICKS := 1200
 const ARRIVAL_MAX_LIFETIME_TICKS := 6000
+const PARK_PICKUP_SHARE := 30
+const CURB_PICKUP_PATIENCE_TICKS := 500
+const CURB_TIMEOUT_MOOD_LOSS := 4
+const SIDEWALK_Z := -59.95
 
 
 static func schedule_deboarding(sim: PassengerSim, flight_id: String, count: int) -> void:
@@ -71,6 +75,9 @@ static func spawn(sim: PassengerSim, flight_id: String, variant: int) -> Passeng
 	p.arrival_stop_cap = rng.randi_range(1, 2)
 	p.arrival_stops = 0
 	p.arrival_done = false
+	p.wants_parked_car = rng.randi_range(0, 99) < PARK_PICKUP_SHARE
+	p.pickup_vehicle = 0
+	p.pickup_berth = -1
 	if not walk.is_empty():
 		p.stage = Passenger.Stage.DEPLANING
 		p.apron = walk
@@ -88,6 +95,46 @@ static func spawn(sim: PassengerSim, flight_id: String, variant: int) -> Passeng
 	return p
 
 
+## Active arriving passenger ids currently waiting at the curb for a PICKUP taxi,
+## ordered oldest wait first (tie-break id).
+static func curb_pickup_waiters(sim: PassengerSim) -> Array[int]:
+	var waiters: Array[Passenger] = []
+	for id in sim.passenger_ids():
+		var p := sim.get_passenger(id)
+		if (
+			p != null
+			and p.is_arriving()
+			and not p.arrival_done
+			and p.stage == Passenger.Stage.WAIT_CURB_PICKUP
+		):
+			waiters.append(p)
+	waiters.sort_custom(
+		func(a: Passenger, b: Passenger) -> bool:
+			if a.stage_tick != b.stage_tick:
+				return a.stage_tick < b.stage_tick
+			return a.id < b.id
+	)
+	var out: Array[int] = []
+	for p in waiters:
+		out.append(p.id)
+	return out
+
+
+## Releases any pickup claim on `p` and switches it onto an outdoor `TO_ROAD_EXIT` walk.
+static func release_pickup_and_exit_to_road(
+	sim: PassengerSim, p: Passenger, walk: Array[Vector3]
+) -> void:
+	if p.pickup_vehicle > 0 and sim.landside != null:
+		sim.landside.release_claim(p.pickup_vehicle, p.id)
+	p.pickup_vehicle = 0
+	p.pickup_berth = -1
+	p.clear_path()
+	p.stuck = Passenger.Stuck.NONE
+	p.apron = walk
+	p.apron_mm = 0
+	sim._set_stage(p, Passenger.Stage.TO_ROAD_EXIT)
+
+
 static func advance(sim: PassengerSim, p: Passenger) -> void:
 	if sim.tick - p.spawn_tick >= ARRIVAL_MAX_LIFETIME_TICKS:
 		finish(sim, p)
@@ -97,9 +144,17 @@ static func advance(sim: PassengerSim, p: Passenger) -> void:
 			_advance_airside_exit(sim, p)
 		Passenger.Stage.TO_ROAD_EXIT:
 			_advance_road_exit(sim, p)
+		Passenger.Stage.TO_PARKED_CAR:
+			_advance_parked_car(sim, p)
+		Passenger.Stage.TO_CURB_PICKUP:
+			_advance_curb_pickup(sim, p)
+		Passenger.Stage.WAIT_CURB_PICKUP:
+			_advance_wait_curb_pickup(sim, p)
 
 
 static func step_outside(sim: PassengerSim, p: Passenger, speed: int) -> void:
+	if p.stage == Passenger.Stage.WAIT_CURB_PICKUP:
+		return
 	var total := p.apron_total_mm()
 	p.odometer_mm += mini(speed, total - p.apron_mm)
 	p.apron_mm = mini(p.apron_mm + speed, total)
@@ -117,11 +172,19 @@ static func step_outside(sim: PassengerSim, p: Passenger, speed: int) -> void:
 		_plan_airside_exit(sim, p)
 	elif p.stage == Passenger.Stage.TO_ROAD_EXIT:
 		finish(sim, p)
+	elif p.stage == Passenger.Stage.TO_PARKED_CAR:
+		_finish_parked_car_walk(sim, p)
+	elif p.stage == Passenger.Stage.TO_CURB_PICKUP:
+		_arrive_at_curb_pickup(sim, p)
 
 
 static func finish(sim: PassengerSim, p: Passenger) -> void:
 	if p.arrival_done:
 		return
+	if p.pickup_vehicle > 0 and sim.landside != null:
+		sim.landside.release_claim(p.pickup_vehicle, p.id)
+	p.pickup_vehicle = 0
+	p.pickup_berth = -1
 	sim._leave_station(p)
 	sim._release_seat(p)
 	sim.cafes.cleanup(p)
@@ -154,10 +217,9 @@ static func _advance_airside_exit(sim: PassengerSim, p: Passenger) -> void:
 static func _advance_road_exit(sim: PassengerSim, p: Passenger) -> void:
 	if p.walking_outside() or p.is_moving():
 		return
-	# Seam (A2 landside pickup): attach car/curb pickup routing before entrance road exit.
 	var door := _entrance_at(sim, p.at)
 	if door != 0:
-		_start_road_from_door(sim, p, door)
+		_start_outside_exit(sim, p, door)
 		return
 	var path := _find_entrance_path(sim, p.at)
 	if path.size() >= 2:
@@ -168,6 +230,74 @@ static func _advance_road_exit(sim: PassengerSim, p: Passenger) -> void:
 		finish(sim, p)
 		return
 	p.stuck = Passenger.Stuck.NO_ROUTE
+
+
+static func _advance_parked_car(sim: PassengerSim, p: Passenger) -> void:
+	if not _parked_car_valid(sim, p):
+		_fallback_from_invalid_car(sim, p)
+		return
+	if p.walking_outside() or p.is_moving():
+		return
+	var door := _entrance_at(sim, p.at)
+	if door != 0:
+		var v := sim.landside.get_vehicle(p.pickup_vehicle)
+		var walk := _walk_to_parked_car(sim, door, v.lot, v.stop)
+		if walk.size() >= 2:
+			p.clear_path()
+			p.stuck = Passenger.Stuck.NONE
+			p.apron = walk
+			p.apron_mm = 0
+			return
+		_fallback_from_invalid_car(sim, p)
+		return
+	var path := _find_entrance_path(sim, p.at)
+	if path.size() >= 2:
+		p.stuck = Passenger.Stuck.NONE
+		p.set_path(path)
+		return
+	if _entrance_doors(sim).is_empty() or sim.tick - p.stage_tick >= ARRIVAL_NO_ROUTE_TIMEOUT_TICKS:
+		_fallback_from_invalid_car(sim, p)
+		return
+	p.stuck = Passenger.Stuck.NO_ROUTE
+
+
+static func _advance_curb_pickup(sim: PassengerSim, p: Passenger) -> void:
+	if sim.landside == null or sim.site == null or not sim.landside.is_berth_built(p.pickup_berth):
+		_reroute_curb_pickup_or_exit(sim, p)
+		return
+	if p.walking_outside() or p.is_moving():
+		return
+	var door := _entrance_at(sim, p.at)
+	if door != 0:
+		var walk := _walk_to_curb_pickup(sim, door, p.pickup_berth)
+		if walk.size() >= 2:
+			p.clear_path()
+			p.stuck = Passenger.Stuck.NONE
+			p.apron = walk
+			p.apron_mm = 0
+			return
+		_reroute_curb_pickup_or_exit(sim, p)
+		return
+	var path := _find_entrance_path(sim, p.at)
+	if path.size() >= 2:
+		p.stuck = Passenger.Stuck.NONE
+		p.set_path(path)
+		return
+	if _entrance_doors(sim).is_empty() or sim.tick - p.stage_tick >= ARRIVAL_NO_ROUTE_TIMEOUT_TICKS:
+		finish(sim, p)
+		return
+	p.stuck = Passenger.Stuck.NO_ROUTE
+
+
+static func _advance_wait_curb_pickup(sim: PassengerSim, p: Passenger) -> void:
+	if sim.landside == null or sim.site == null or not sim.landside.is_berth_built(p.pickup_berth):
+		_fallback_to_sidewalk(sim, p)
+		return
+	if sim.tick - p.stage_tick >= CURB_PICKUP_PATIENCE_TICKS:
+		if p.at != Passenger.NO_CELL and sim.grid != null and sim.grid.in_bounds(p.at):
+			PassengerThoughts.record(p, PassengerThoughts.Kind.CURB_TIMEOUT, sim.tick, p.at)
+		p.mood = maxi(p.mood - CURB_TIMEOUT_MOOD_LOSS, 0)
+		_fallback_to_sidewalk(sim, p)
 
 
 static func _plan_airside_exit(sim: PassengerSim, p: Passenger) -> void:
@@ -196,6 +326,274 @@ static func _enter_landside(sim: PassengerSim, p: Passenger, crossed_door: bool)
 	# Seam (A3 baggage claim): route to baggage claim room/carousel before TO_ROAD_EXIT when built.
 	sim._set_stage(p, Passenger.Stage.TO_ROAD_EXIT)
 	_advance_road_exit(sim, p)
+
+
+static func _start_outside_exit(sim: PassengerSim, p: Passenger, door: int) -> void:
+	if sim.site == null:
+		finish(sim, p)
+		return
+	if sim.landside != null:
+		if p.wants_parked_car and _try_start_parked_car(sim, p, door):
+			return
+		if _try_start_curb_pickup(sim, p, door):
+			return
+	_start_road_from_door(sim, p, door)
+
+
+static func _try_start_parked_car(sim: PassengerSim, p: Passenger, door: int) -> bool:
+	var candidate := sim.landside.eligible_parked_car()
+	if candidate == null:
+		return false
+	var walk := _walk_to_parked_car(sim, door, candidate.lot, candidate.stop)
+	if walk.size() < 2:
+		return false
+	var claimed := sim.landside.claim_parked_car(p.id)
+	if claimed == null:
+		return false
+	p.clear_path()
+	p.stuck = Passenger.Stuck.NONE
+	p.pickup_vehicle = claimed.id
+	p.pickup_berth = -1
+	p.apron = walk
+	p.apron_mm = 0
+	sim._set_stage(p, Passenger.Stage.TO_PARKED_CAR)
+	if p.at != Passenger.NO_CELL and sim.grid != null and sim.grid.in_bounds(p.at):
+		PassengerThoughts.record(p, PassengerThoughts.Kind.PARKED_CAR, sim.tick, p.at)
+	return true
+
+
+static func _try_start_curb_pickup(sim: PassengerSim, p: Passenger, door: int) -> bool:
+	if sim.landside.built_berth_count() <= 0 or sim.landside.definition == null:
+		return false
+	var from_pt := sim.grid.cell_to_world(sim.layout.door_cell(sim.grid, door))
+	var berth := _nearest_built_berth(sim, from_pt)
+	if berth < 0:
+		return false
+	var walk := _walk_to_curb_pickup(sim, door, berth)
+	if walk.size() < 2:
+		return false
+	p.clear_path()
+	p.stuck = Passenger.Stuck.NONE
+	p.pickup_vehicle = 0
+	p.pickup_berth = berth
+	p.apron = walk
+	p.apron_mm = 0
+	sim._set_stage(p, Passenger.Stage.TO_CURB_PICKUP)
+	return true
+
+
+static func _finish_parked_car_walk(sim: PassengerSim, p: Passenger) -> void:
+	if (
+		sim.landside != null
+		and p.pickup_vehicle > 0
+		and sim.landside.board_parked_car(p.pickup_vehicle, p.id)
+	):
+		p.pickup_vehicle = 0
+		finish(sim, p)
+		return
+	_fallback_from_invalid_car(sim, p)
+
+
+static func _arrive_at_curb_pickup(sim: PassengerSim, p: Passenger) -> void:
+	var pos := p.apron_position()
+	p.apron = [pos] as Array[Vector3]
+	p.apron_mm = 0
+	p.clear_path()
+	p.stuck = Passenger.Stuck.NONE
+	sim._set_stage(p, Passenger.Stage.WAIT_CURB_PICKUP)
+
+
+static func _parked_car_valid(sim: PassengerSim, p: Passenger) -> bool:
+	if sim.landside == null or p.pickup_vehicle <= 0:
+		return false
+	var v := sim.landside.get_vehicle(p.pickup_vehicle)
+	if v == null or v.stage != LandsideVehicle.Stage.PARKED or not v.claimants.has(p.id):
+		return false
+	return v.lot >= 0 and v.lot < sim.landside.lots_built.size() and sim.landside.lots_built[v.lot]
+
+
+static func _fallback_from_invalid_car(sim: PassengerSim, p: Passenger) -> void:
+	if sim.landside != null and p.pickup_vehicle > 0:
+		sim.landside.release_claim(p.pickup_vehicle, p.id)
+	p.pickup_vehicle = 0
+	if not p.walking_outside():
+		p.clear_path()
+		p.stuck = Passenger.Stuck.NONE
+		sim._set_stage(p, Passenger.Stage.TO_ROAD_EXIT)
+		_advance_road_exit(sim, p)
+		return
+	var here := p.apron_position()
+	var backtrack := _backtrack_to_sidewalk(sim, p, here)
+	var curb := _curb_walk_from_outdoor(sim, backtrack)
+	if not curb.is_empty():
+		p.clear_path()
+		p.stuck = Passenger.Stuck.NONE
+		p.pickup_berth = int(curb["berth"])
+		p.apron = curb["walk"]
+		p.apron_mm = 0
+		sim._set_stage(p, Passenger.Stage.TO_CURB_PICKUP)
+		return
+	var road_walk := _walk_backtrack_to_road(sim, backtrack)
+	if road_walk.size() <= 1:
+		finish(sim, p)
+		return
+	release_pickup_and_exit_to_road(sim, p, road_walk)
+
+
+static func _reroute_curb_pickup_or_exit(sim: PassengerSim, p: Passenger) -> void:
+	if p.walking_outside():
+		var curb := _curb_walk_from_outdoor(sim, [p.apron_position()])
+		if not curb.is_empty():
+			p.pickup_berth = int(curb["berth"])
+			p.apron = curb["walk"]
+			p.apron_mm = 0
+			return
+	_fallback_to_sidewalk(sim, p)
+
+
+static func _curb_walk_from_outdoor(sim: PassengerSim, prefix: Array[Vector3]) -> Dictionary:
+	if sim.landside == null or sim.site == null or sim.landside.built_berth_count() <= 0:
+		return {}
+	var walk: Array[Vector3] = prefix.duplicate()
+	var start_pt: Vector3 = walk[walk.size() - 1]
+	if sim.grid != null and start_pt.z <= _sidewalk_limit_z(sim):
+		var to_road := OutsideWalks.to_road_from(sim, start_pt)
+		if to_road.is_empty():
+			return {}
+		var last := to_road.size()
+		if last >= 2 and absf(to_road[last - 1].z - sim.site.road_z) < 0.05:
+			last -= 1
+		for i in last:
+			_append_point(walk, to_road[i])
+	var sidewalk_pt: Vector3 = walk[walk.size() - 1]
+	var berth := _nearest_built_berth(sim, sidewalk_pt)
+	if berth < 0:
+		return {}
+	var target := sim.landside.definition.berth_get_out(berth)
+	_append_point(walk, Vector3(sidewalk_pt.x, target.y, target.z))
+	_append_point(walk, target)
+	if walk.size() < 2:
+		return {}
+	return {"berth": berth, "walk": walk}
+
+
+static func _sidewalk_limit_z(sim: PassengerSim) -> float:
+	return sim.site.grid_origin.z + sim.grid.size.y + 0.7
+
+
+static func _fallback_to_sidewalk(sim: PassengerSim, p: Passenger) -> void:
+	p.pickup_berth = -1
+	if not p.walking_outside():
+		p.clear_path()
+		p.stuck = Passenger.Stuck.NONE
+		sim._set_stage(p, Passenger.Stage.TO_ROAD_EXIT)
+		_advance_road_exit(sim, p)
+		return
+	var walk := OutsideWalks.to_road_from(sim, p.apron_position())
+	if walk.size() <= 1:
+		finish(sim, p)
+		return
+	release_pickup_and_exit_to_road(sim, p, walk)
+
+
+static func _walk_to_parked_car(
+	sim: PassengerSim, door: int, spot: int, slot: int
+) -> Array[Vector3]:
+	if sim.site == null or sim.landside == null or sim.landside.paths == null:
+		return [] as Array[Vector3]
+	var lot_walk := sim.landside.paths.lot_walk(spot, slot)
+	if lot_walk.size() < 2:
+		return [] as Array[Vector3]
+	var door_walk := OutsideWalks.departure_to_road(sim, door)
+	if door_walk.size() < 2:
+		return [] as Array[Vector3]
+	var walk: Array[Vector3] = []
+	walk.assign(door_walk.slice(0, door_walk.size() - 1))
+	var edge_pt: Vector3 = walk[walk.size() - 1]
+	var lot_rev: Array[Vector3] = lot_walk.duplicate()
+	lot_rev.reverse()
+	var cross_pt: Vector3 = lot_rev[0]
+	if Vector2(edge_pt.x, edge_pt.z).distance_to(Vector2(cross_pt.x, cross_pt.z)) > 0.05:
+		_append_point(walk, Vector3(edge_pt.x, sim.site.ground_height, SIDEWALK_Z))
+		_append_point(walk, Vector3(cross_pt.x, sim.site.ground_height, SIDEWALK_Z))
+	for pt in lot_rev:
+		_append_point(walk, pt)
+	return walk
+
+
+static func _walk_to_curb_pickup(sim: PassengerSim, door: int, berth: int) -> Array[Vector3]:
+	if sim.site == null or sim.landside == null or sim.landside.definition == null:
+		return [] as Array[Vector3]
+	var door_walk := OutsideWalks.departure_to_road(sim, door)
+	if door_walk.size() < 2:
+		return [] as Array[Vector3]
+	var target := sim.landside.definition.berth_get_out(berth)
+	var walk: Array[Vector3] = []
+	walk.assign(door_walk.slice(0, door_walk.size() - 1))
+	var edge_pt: Vector3 = walk[walk.size() - 1]
+	_append_point(walk, Vector3(edge_pt.x, target.y, target.z))
+	_append_point(walk, target)
+	return walk
+
+
+static func _nearest_built_berth(sim: PassengerSim, from_pt: Vector3) -> int:
+	if sim.landside == null or sim.landside.definition == null:
+		return -1
+	var best := -1
+	var best_d := INF
+	for i in sim.landside.definition.berth_count():
+		if not sim.landside.is_berth_built(i):
+			continue
+		var pt := sim.landside.definition.berth_get_out(i)
+		var d := Vector2(from_pt.x - pt.x, from_pt.z - pt.z).length()
+		if d < best_d:
+			best_d = d
+			best = i
+	return best
+
+
+static func _backtrack_to_sidewalk(
+	sim: PassengerSim, p: Passenger, here: Vector3
+) -> Array[Vector3]:
+	if sim.site == null or sim.grid == null:
+		return [here] as Array[Vector3]
+	var sidewalk_limit_z := _sidewalk_limit_z(sim)
+	if here.z <= sidewalk_limit_z or p.apron.size() < 2:
+		return [here] as Array[Vector3]
+	var passed: Array[Vector3] = [p.apron[0]]
+	var left := p.apron_mm
+	for i in range(1, p.apron.size()):
+		var seg := p.apron_segment_mm(i)
+		if left <= seg:
+			break
+		passed.append(p.apron[i])
+		left -= seg
+	_append_point(passed, here)
+	passed.reverse()
+	var out: Array[Vector3] = []
+	for pt in passed:
+		_append_point(out, pt)
+		if pt.z <= sidewalk_limit_z:
+			break
+	if out.is_empty():
+		out.append(here)
+	return out
+
+
+static func _walk_backtrack_to_road(sim: PassengerSim, backtrack: Array[Vector3]) -> Array[Vector3]:
+	var end_pt: Vector3 = backtrack[backtrack.size() - 1]
+	var tail := OutsideWalks.to_road_from(sim, end_pt)
+	if tail.is_empty():
+		return backtrack
+	var out := backtrack.duplicate()
+	for pt in tail:
+		_append_point(out, pt)
+	return out
+
+
+static func _append_point(points: Array[Vector3], pt: Vector3) -> void:
+	if points.is_empty() or not points[points.size() - 1].is_equal_approx(pt):
+		points.append(pt)
 
 
 static func _start_road_from_door(sim: PassengerSim, p: Passenger, door: int) -> void:

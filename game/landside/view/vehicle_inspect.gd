@@ -45,11 +45,15 @@ static func text(
 ## What the vehicle is doing, from its lane, stage and intent; an empty one
 ## says so.
 static func doing_text(v: LandsideVehicle) -> String:
+	if v.intent == LandsideVehicle.Intent.PICKUP:
+		return _pickup_doing_text(v)
 	var empty := v.bookings.is_empty()
 	match v.stage:
 		LandsideVehicle.Stage.DWELL:
 			return _t("Empty, at the curb") if empty else _t("At the curb")
 		LandsideVehicle.Stage.PARKED:
+			if not v.claimants.is_empty():
+				return _t("Parked, driver returning")
 			return _t("Parked, driver away") if empty else _t("Parked")
 		LandsideVehicle.Stage.LEAVE:
 			return _t("Empty, leaving") if empty else _t("Leaving")
@@ -61,6 +65,17 @@ static func doing_text(v: LandsideVehicle) -> String:
 	if v.intent == LandsideVehicle.Intent.PARK:
 		return _t("Waiting to turn into the car park") if queued else _t("Driving to the car park")
 	return _t("Queuing for the curb") if queued else _t("Driving to the curb")
+
+
+static func _pickup_doing_text(v: LandsideVehicle) -> String:
+	match v.stage:
+		LandsideVehicle.Stage.DWELL:
+			return _t("Picking up passenger") if v.pickup_boarded > 0 else _t("At the curb")
+		LandsideVehicle.Stage.LEAVE:
+			return _t("Leaving with passenger") if v.pickup_boarded > 0 else _t("Empty, leaving")
+		LandsideVehicle.Stage.QUEUE:
+			return _t("Queuing for curb pickup")
+	return _t("Driving to curb pickup")
 
 
 ## The drop-off delay so far, from the ticks past the tick the party meant to

@@ -89,6 +89,11 @@ extends RefCounted
 ## 42: passenger checked_bag_color (Bag.SUITCASE_COLORS index) and passenger
 ## trash bin detour (bin_detour_bin, bin_detour_end); version 41 saves are
 ## refused (no migration).
+## 43: arriving passengers (Direction.ARRIVING, arrival_schedule, DEPLANING /
+## TO_AIRSIDE_EXIT / TO_ROAD_EXIT); version 42 saves are refused (no migration).
+## 44: arrivals landside pickup stages (TO_PARKED_CAR, TO_CURB_PICKUP,
+## WAIT_CURB_PICKUP), wants_parked_car, pickup_vehicle, pickup_berth, and
+## PARKED_CAR / CURB_TIMEOUT thoughts; version 43 saves are refused.
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it
