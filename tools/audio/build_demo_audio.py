@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """Deterministic procedural audio synthesizer for the D5 demo audio floor and PA cues.
 
-Generates compact, click-free 16-bit PCM WAV SFX cues and a seamless 44100 Hz
-stereo Ogg Vorbis cozy lounge soundtrack under game/assets/audio/:
-  - terminal_lounge.ogg   (80.0 s seamless 4-section cozy lounge loop, 44100 Hz stereo)
-  - terminal_ambience.wav (14.0 s seamless loop, 22050 Hz mono; kept for trailer mixer)
+Generates compact, click-free 16-bit PCM WAV SFX cues, a seamless 44100 Hz
+stereo terminal ambience bed, and a 5-track 44100 Hz stereo Ogg Vorbis cozy
+soundtrack playlist under game/assets/audio/:
+  - terminal_ambience_bed.ogg (24.0 s seamless terminal room-air + murmur bed, 44100 Hz stereo)
+  - terminal_lounge.ogg       (80.0 s, C major / A minor @ 96 BPM: Rhodes & vibraphone lounge)
+  - music_morning_bossa.ogg   (88.9 s, F major @ 108 BPM: nylon guitar, flute & brushed shaker)
+  - music_sunny_marimba.ogg   (88.4 s, G major @ 114 BPM: marimba, kalimba & woodblock)
+  - music_breezy_stroll.ogg   (90.0 s, D major @ 88 BPM 3/4 waltz: celesta & soft clarinet)
+  - music_sunset_acoustic.ogg (93.7 s, Eb/Bb major @ 82 BPM: evening Rhodes, acoustic & warm pad)
+  - terminal_ambience.wav     (14.0 s seamless loop, 22050 Hz mono; kept for trailer mixer)
   - ui_click.wav          (45 ms soft wooden/cream tap, 44100 Hz mono)
   - build_place.wav       (90 ms cozy tactile placement pop, 44100 Hz mono)
   - build_remove.wav      (80 ms soft muted brush/pop, 44100 Hz mono)
@@ -332,6 +338,403 @@ def _add_upright_bass_note(
         env_decay *= decay_env
 
 
+def _add_vibraphone_note(
+    left: list[float],
+    right: list[float],
+    sr: int,
+    start_s: float,
+    midi: float,
+    dur_s: float,
+    vel: float,
+    pan: float = 0.14,
+) -> None:
+    start_idx = int(round(start_s * sr))
+    n = int(round(dur_s * sr))
+    if n <= 0 or start_idx >= len(left):
+        return
+    freq = _midi_to_hz(midi)
+    dphase = TAU * freq / sr
+    dt = 1.0 / sr
+    lg, rg = _pan_gains(pan)
+    att_s = 0.005
+    rel_s = 0.055
+    inv_att = 1.0 / att_s
+    inv_rel = 1.0 / rel_s
+    decay_4 = math.exp(-dt / 0.055)
+    decay_env = math.exp(-dt / 1.15)
+    trem_step = TAU * 5.2 * dt
+    sin = math.sin
+    e4 = 0.12
+    env_decay = vel * 0.14
+    phase = 0.0
+    trem_ph = pan * 0.8
+    end_idx = min(len(left), start_idx + n)
+    for idx in range(start_idx, end_idx):
+        t = (idx - start_idx) * dt
+        att = sin(0.5 * math.pi * (t * inv_att)) if t < att_s else 1.0
+        rel = (
+            0.5 + 0.5 * math.cos(math.pi * (t - (dur_s - rel_s)) * inv_rel)
+            if t > dur_s - rel_s
+            else 1.0
+        )
+        trem = 0.86 + 0.14 * sin(trem_ph)
+        tone = sin(phase) + e4 * sin(3.98 * phase)
+        val = tone * env_decay * att * rel * trem
+        left[idx] += val * lg
+        right[idx] += val * rg
+        phase += dphase
+        trem_ph += trem_step
+        e4 *= decay_4
+        env_decay *= decay_env
+
+
+def _add_nylon_guitar_note(
+    left: list[float],
+    right: list[float],
+    sr: int,
+    start_s: float,
+    midi: float,
+    dur_s: float,
+    vel: float,
+    pan: float = -0.18,
+) -> None:
+    start_idx = int(round(start_s * sr))
+    n = int(round(dur_s * sr))
+    if n <= 0 or start_idx >= len(left):
+        return
+    freq = _midi_to_hz(midi)
+    dphase = TAU * freq / sr
+    dt = 1.0 / sr
+    lg, rg = _pan_gains(pan)
+    att_s = 0.004
+    rel_s = 0.045
+    inv_att = 1.0 / att_s
+    inv_rel = 1.0 / rel_s
+    decay_2 = math.exp(-dt / 0.34)
+    decay_3 = math.exp(-dt / 0.14)
+    decay_4 = math.exp(-dt / 0.055)
+    decay_env = math.exp(-dt / 0.85)
+    sin = math.sin
+    e2 = 0.42
+    e3 = 0.18
+    e4 = 0.09
+    env_decay = vel * 0.14
+    phase = 0.0
+    end_idx = min(len(left), start_idx + n)
+    for idx in range(start_idx, end_idx):
+        t = (idx - start_idx) * dt
+        att = sin(0.5 * math.pi * (t * inv_att)) if t < att_s else 1.0
+        rel = (
+            0.5 + 0.5 * math.cos(math.pi * (t - (dur_s - rel_s)) * inv_rel)
+            if t > dur_s - rel_s
+            else 1.0
+        )
+        tone = sin(phase) + e2 * sin(2.0 * phase) + e3 * sin(3.0 * phase) + e4 * sin(4.0 * phase)
+        val = tone * env_decay * att * rel
+        left[idx] += val * lg
+        right[idx] += val * rg
+        phase += dphase
+        e2 *= decay_2
+        e3 *= decay_3
+        e4 *= decay_4
+        env_decay *= decay_env
+
+
+def _add_soft_flute_note(
+    left: list[float],
+    right: list[float],
+    sr: int,
+    start_s: float,
+    midi: float,
+    dur_s: float,
+    vel: float,
+    pan: float = 0.16,
+) -> None:
+    start_idx = int(round(start_s * sr))
+    n = int(round(dur_s * sr))
+    if n <= 0 or start_idx >= len(left):
+        return
+    freq = _midi_to_hz(midi)
+    base_dphase = TAU * freq / sr
+    dt = 1.0 / sr
+    lg, rg = _pan_gains(pan)
+    att_s = min(0.065, dur_s * 0.25)
+    rel_s = min(0.090, dur_s * 0.30)
+    inv_att = 1.0 / max(att_s, 1e-4)
+    inv_rel = 1.0 / max(rel_s, 1e-4)
+    vib_step = TAU * 5.0 * dt
+    sin = math.sin
+    phase = 0.0
+    vib_ph = 0.0
+    rng = random.Random(int(round(start_s * 1000)) + int(midi))
+    breath_state = 0.0
+    end_idx = min(len(left), start_idx + n)
+    for idx in range(start_idx, end_idx):
+        t = (idx - start_idx) * dt
+        att = sin(0.5 * math.pi * (t * inv_att)) if t < att_s else 1.0
+        rel = (
+            0.5 + 0.5 * math.cos(math.pi * (t - (dur_s - rel_s)) * inv_rel)
+            if t > dur_s - rel_s
+            else 1.0
+        )
+        vib_depth = 0.0035 * min(1.0, max(0.0, (t - 0.09) / 0.18))
+        vib = 1.0 + vib_depth * sin(vib_ph)
+        breath_state = breath_state * 0.86 + rng.uniform(-1.0, 1.0) * 0.14
+        tone = sin(phase) + 0.18 * sin(2.0 * phase) + 0.03 * breath_state * math.exp(-t / 0.08)
+        val = tone * (vel * 0.12) * att * rel
+        left[idx] += val * lg
+        right[idx] += val * rg
+        phase += base_dphase * vib
+        vib_ph += vib_step
+
+
+def _add_kalimba_note(
+    left: list[float],
+    right: list[float],
+    sr: int,
+    start_s: float,
+    midi: float,
+    dur_s: float,
+    vel: float,
+    pan: float = -0.22,
+) -> None:
+    start_idx = int(round(start_s * sr))
+    n = int(round(dur_s * sr))
+    if n <= 0 or start_idx >= len(left):
+        return
+    freq = _midi_to_hz(midi)
+    dphase = TAU * freq / sr
+    dt = 1.0 / sr
+    lg, rg = _pan_gains(pan)
+    att_s = 0.0020
+    rel_s = 0.030
+    inv_att = 1.0 / att_s
+    inv_rel = 1.0 / rel_s
+    decay_tine = math.exp(-dt / 0.018)
+    decay_env = math.exp(-dt / 0.36)
+    sin = math.sin
+    e_tine = 0.32
+    env_decay = vel * 0.13
+    phase = 0.0
+    end_idx = min(len(left), start_idx + n)
+    for idx in range(start_idx, end_idx):
+        t = (idx - start_idx) * dt
+        att = sin(0.5 * math.pi * (t * inv_att)) if t < att_s else 1.0
+        rel = (
+            0.5 + 0.5 * math.cos(math.pi * (t - (dur_s - rel_s)) * inv_rel)
+            if t > dur_s - rel_s
+            else 1.0
+        )
+        tone = sin(phase) + 0.16 * sin(2.0 * phase) + e_tine * sin(5.4 * phase)
+        val = tone * env_decay * att * rel
+        left[idx] += val * lg
+        right[idx] += val * rg
+        phase += dphase
+        e_tine *= decay_tine
+        env_decay *= decay_env
+
+
+def _add_celesta_note(
+    left: list[float],
+    right: list[float],
+    sr: int,
+    start_s: float,
+    midi: float,
+    dur_s: float,
+    vel: float,
+    pan: float = -0.14,
+) -> None:
+    start_idx = int(round(start_s * sr))
+    n = int(round(dur_s * sr))
+    if n <= 0 or start_idx >= len(left):
+        return
+    freq = _midi_to_hz(midi)
+    dphase = TAU * freq / sr
+    dt = 1.0 / sr
+    lg, rg = _pan_gains(pan)
+    att_s = 0.004
+    rel_s = 0.045
+    inv_att = 1.0 / att_s
+    inv_rel = 1.0 / rel_s
+    decay_2 = math.exp(-dt / 0.22)
+    decay_3 = math.exp(-dt / 0.06)
+    decay_env = math.exp(-dt / 0.90)
+    sin = math.sin
+    e2 = 0.24
+    e3 = 0.08
+    env_decay = vel * 0.12
+    phase = 0.0
+    end_idx = min(len(left), start_idx + n)
+    for idx in range(start_idx, end_idx):
+        t = (idx - start_idx) * dt
+        att = sin(0.5 * math.pi * (t * inv_att)) if t < att_s else 1.0
+        rel = (
+            0.5 + 0.5 * math.cos(math.pi * (t - (dur_s - rel_s)) * inv_rel)
+            if t > dur_s - rel_s
+            else 1.0
+        )
+        tone = sin(phase) + e2 * sin(2.0 * phase) + e3 * sin(3.01 * phase)
+        val = tone * env_decay * att * rel
+        left[idx] += val * lg
+        right[idx] += val * rg
+        phase += dphase
+        e2 *= decay_2
+        e3 *= decay_3
+        env_decay *= decay_env
+
+
+def _add_clarinet_note(
+    left: list[float],
+    right: list[float],
+    sr: int,
+    start_s: float,
+    midi: float,
+    dur_s: float,
+    vel: float,
+    pan: float = 0.10,
+) -> None:
+    start_idx = int(round(start_s * sr))
+    n = int(round(dur_s * sr))
+    if n <= 0 or start_idx >= len(left):
+        return
+    freq = _midi_to_hz(midi)
+    base_dphase = TAU * freq / sr
+    dt = 1.0 / sr
+    lg, rg = _pan_gains(pan)
+    att_s = min(0.055, dur_s * 0.22)
+    rel_s = min(0.085, dur_s * 0.28)
+    inv_att = 1.0 / max(att_s, 1e-4)
+    inv_rel = 1.0 / max(rel_s, 1e-4)
+    vib_step = TAU * 4.6 * dt
+    sin = math.sin
+    phase = 0.0
+    vib_ph = 0.0
+    end_idx = min(len(left), start_idx + n)
+    for idx in range(start_idx, end_idx):
+        t = (idx - start_idx) * dt
+        att = sin(0.5 * math.pi * (t * inv_att)) if t < att_s else 1.0
+        rel = (
+            0.5 + 0.5 * math.cos(math.pi * (t - (dur_s - rel_s)) * inv_rel)
+            if t > dur_s - rel_s
+            else 1.0
+        )
+        vib_depth = 0.0028 * min(1.0, max(0.0, (t - 0.12) / 0.22))
+        vib = 1.0 + vib_depth * sin(vib_ph)
+        # Warm woody odd-harmonic clarinet blend (mellowed so it never sounds reedy/harsh)
+        tone = sin(phase) + 0.22 * sin(3.0 * phase) + 0.06 * sin(5.0 * phase)
+        val = tone * (vel * 0.11) * att * rel
+        left[idx] += val * lg
+        right[idx] += val * rg
+        phase += base_dphase * vib
+        vib_ph += vib_step
+
+
+def _add_warm_pad_note(
+    left: list[float],
+    right: list[float],
+    sr: int,
+    start_s: float,
+    midi: float,
+    dur_s: float,
+    vel: float,
+    pan: float = 0.0,
+) -> None:
+    start_idx = int(round(start_s * sr))
+    n = int(round(dur_s * sr))
+    if n <= 0 or start_idx >= len(left):
+        return
+    freq = _midi_to_hz(midi)
+    dp1 = TAU * (freq * 0.9985) / sr
+    dp2 = TAU * (freq * 1.0015) / sr
+    dt = 1.0 / sr
+    lg, rg = _pan_gains(pan)
+    att_s = min(0.55, dur_s * 0.30)
+    rel_s = min(0.65, dur_s * 0.32)
+    inv_att = 1.0 / max(att_s, 1e-4)
+    inv_rel = 1.0 / max(rel_s, 1e-4)
+    sin = math.sin
+    ph1 = 0.0
+    ph2 = 0.7
+    end_idx = min(len(left), start_idx + n)
+    for idx in range(start_idx, end_idx):
+        t = (idx - start_idx) * dt
+        att = sin(0.5 * math.pi * (t * inv_att)) if t < att_s else 1.0
+        rel = (
+            0.5 + 0.5 * math.cos(math.pi * (t - (dur_s - rel_s)) * inv_rel)
+            if t > dur_s - rel_s
+            else 1.0
+        )
+        tone = 0.55 * (sin(ph1) + sin(ph2)) + 0.12 * sin(2.0 * ph1)
+        val = tone * (vel * 0.065) * att * rel
+        left[idx] += val * lg
+        right[idx] += val * rg
+        ph1 += dp1
+        ph2 += dp2
+
+
+def _add_shaker_hit(
+    left: list[float],
+    right: list[float],
+    sr: int,
+    start_s: float,
+    vel: float,
+    seed_val: int,
+    pan: float = 0.28,
+) -> None:
+    start_idx = int(round(start_s * sr))
+    dur_s = 0.050
+    n = int(round(dur_s * sr))
+    if n <= 0 or start_idx >= len(left):
+        return
+    rng = random.Random(seed_val)
+    lg, rg = _pan_gains(pan)
+    dt = 1.0 / sr
+    lp = 0.0
+    hp = 0.0
+    prev_lp = 0.0
+    end_idx = min(len(left), start_idx + n)
+    for idx in range(start_idx, end_idx):
+        t = (idx - start_idx) * dt
+        lp = lp * 0.62 + rng.uniform(-1.0, 1.0) * 0.38
+        hp = 0.78 * (hp + lp - prev_lp)
+        prev_lp = lp
+        env = math.sin(math.pi * min(1.0, t / dur_s)) * math.exp(-t / 0.016)
+        val = hp * env * vel * 0.055
+        left[idx] += val * lg
+        right[idx] += val * rg
+
+
+def _add_woodblock_hit(
+    left: list[float],
+    right: list[float],
+    sr: int,
+    start_s: float,
+    freq: float,
+    vel: float,
+    pan: float = -0.26,
+) -> None:
+    start_idx = int(round(start_s * sr))
+    dur_s = 0.042
+    n = int(round(dur_s * sr))
+    if n <= 0 or start_idx >= len(left):
+        return
+    lg, rg = _pan_gains(pan)
+    dt = 1.0 / sr
+    dphase = TAU * freq * dt
+    phase = 0.0
+    sin = math.sin
+    end_idx = min(len(left), start_idx + n)
+    for idx in range(start_idx, end_idx):
+        t = (idx - start_idx) * dt
+        att = sin(0.5 * math.pi * min(1.0, t / 0.0015))
+        env = att * math.exp(-t / 0.009)
+        tone = sin(phase) + 0.25 * sin(2.4 * phase) * math.exp(-t / 0.004)
+        val = tone * env * vel * 0.065
+        left[idx] += val * lg
+        right[idx] += val * rg
+        phase += dphase
+
+
 def _apply_stereo_reverb(left: list[float], right: list[float], sr: int) -> None:
     taps = (
         (int(0.029 * sr), 0.16, 0.05),
@@ -341,15 +744,18 @@ def _apply_stereo_reverb(left: list[float], right: list[float], sr: int) -> None
         (int(0.137 * sr), 0.09, 0.06),
         (int(0.181 * sr), 0.05, 0.08),
     )
-    wet_l = [0.0] * len(left)
-    wet_r = [0.0] * len(right)
     n = len(left)
+    wet_l = [0.0] * n
+    wet_r = [0.0] * n
     for delay_n, gl, gr in taps:
+        gl_half = gl * 0.5
+        gr_half = gr * 0.5
         for i in range(n - delay_n):
             dry_l = left[i]
             dry_r = right[i]
-            wet_l[i + delay_n] += dry_l * gl + dry_r * gr * 0.5
-            wet_r[i + delay_n] += dry_r * gr + dry_l * gl * 0.5
+            j = i + delay_n
+            wet_l[j] += dry_l * gl + dry_r * gr_half
+            wet_r[j] += dry_r * gr + dry_l * gl_half
     wet_l = _one_pole_lowpass(wet_l, 1650.0, sr)
     wet_r = _one_pole_lowpass(wet_r, 1650.0, sr)
     for i in range(n):
@@ -357,65 +763,232 @@ def _apply_stereo_reverb(left: list[float], right: list[float], sr: int) -> None
         right[i] += 0.22 * wet_r[i]
 
 
+def _finalize_music_track(
+    left: list[float],
+    right: list[float],
+    sr: int,
+    track_n: int,
+    target_peak_db: float = -12.0,
+    fade_in_s: float = 0.18,
+    fade_out_s: float = 2.6,
+) -> tuple[int, list[float], list[float], dict]:
+    _apply_stereo_reverb(left, right, sr)
+    left = left[:track_n]
+    right = right[:track_n]
+
+    fade_in_n = min(track_n // 4, int(round(fade_in_s * sr)))
+    fade_out_n = min(track_n // 3, int(round(fade_out_s * sr)))
+    for i in range(fade_in_n):
+        w = 0.5 - 0.5 * math.cos(math.pi * i / max(1, fade_in_n))
+        left[i] *= w
+        right[i] *= w
+    fade_start = track_n - fade_out_n
+    for k in range(fade_out_n):
+        w = 0.5 + 0.5 * math.cos(math.pi * k / max(1, fade_out_n))
+        idx = fade_start + k
+        left[idx] *= w
+        right[idx] *= w
+    left[-1] = 0.0
+    right[-1] = 0.0
+
+    dc_l_raw = sum(left) / track_n
+    dc_r_raw = sum(right) / track_n
+    for i in range(track_n):
+        left[i] -= dc_l_raw
+        right[i] -= dc_r_raw
+
+    raw_peak = max(max(abs(x) for x in left), max(abs(x) for x in right), 1e-9)
+    target_peak = 10.0 ** (target_peak_db / 20.0)
+    gain = target_peak / raw_peak
+    for i in range(track_n):
+        left[i] *= gain
+        right[i] *= gain
+
+    has_nan = any(not math.isfinite(x) for x in left) or any(not math.isfinite(x) for x in right)
+    peak = max(max(abs(x) for x in left), max(abs(x) for x in right))
+    peak_db = 20.0 * math.log10(max(peak, 1e-12))
+    rms_sq = (sum(x * x for x in left) + sum(x * x for x in right)) / (2.0 * track_n)
+    rms_db = 10.0 * math.log10(max(rms_sq, 1e-12))
+    dc_l = sum(left) / track_n
+    dc_r = sum(right) / track_n
+    end_amp = max(abs(left[0]), abs(right[0]), abs(left[-1]), abs(right[-1]))
+
+    stats = {
+        "duration_s": track_n / sr,
+        "sample_rate": sr,
+        "channels": 2,
+        "samples": track_n,
+        "peak": peak,
+        "peak_db": peak_db,
+        "rms_db": rms_db,
+        "dc_l": dc_l,
+        "dc_r": dc_r,
+        "end_amp": end_amp,
+        "has_nan": has_nan,
+    }
+    return sr, left, right, stats
+
+
+def build_terminal_ambience_bed(sr: int = 44100) -> tuple[int, list[float], list[float], dict]:
+    """24.0 s seamless stereo terminal room-air & distant concourse murmur bed (no music)."""
+    loop_s = 24.0
+    xfade_s = 3.0
+    loop_n = int(round(loop_s * sr))
+    xfade_n = int(round(xfade_s * sr))
+    bed_n = loop_n + xfade_n
+
+    rng_l = random.Random(20270701)
+    rng_r = random.Random(20270702)
+    air_l = _one_pole_highpass(
+        _one_pole_lowpass(
+            _one_pole_lowpass([rng_l.uniform(-1.0, 1.0) for _ in range(bed_n)], 310.0, sr),
+            330.0,
+            sr,
+        ),
+        62.0,
+        sr,
+    )
+    air_r = _one_pole_highpass(
+        _one_pole_lowpass(
+            _one_pole_lowpass([rng_r.uniform(-1.0, 1.0) for _ in range(bed_n)], 310.0, sr),
+            330.0,
+            sr,
+        ),
+        62.0,
+        sr,
+    )
+    mur_l = _one_pole_highpass(
+        _one_pole_lowpass(
+            _one_pole_lowpass([rng_l.uniform(-1.0, 1.0) for _ in range(bed_n)], 580.0, sr),
+            520.0,
+            sr,
+        ),
+        210.0,
+        sr,
+    )
+    mur_r = _one_pole_highpass(
+        _one_pole_lowpass(
+            _one_pole_lowpass([rng_r.uniform(-1.0, 1.0) for _ in range(bed_n)], 580.0, sr),
+            520.0,
+            sr,
+        ),
+        210.0,
+        sr,
+    )
+
+    buf_l = [0.0] * bed_n
+    buf_r = [0.0] * bed_n
+    for i in range(bed_n):
+        t = i / sr
+        air_env = 0.88 + 0.12 * math.sin(TAU * (1.0 / loop_s) * t + 0.3)
+        mur_env = 0.62 + 0.24 * math.sin(TAU * (2.0 / loop_s) * t + 0.9) + 0.14 * math.sin(
+            TAU * (3.0 / loop_s) * t + 2.1
+        )
+        buf_l[i] = 0.14 * air_env * air_l[i] + 0.055 * mur_env * mur_l[i]
+        buf_r[i] = 0.14 * air_env * air_r[i] + 0.055 * mur_env * mur_r[i]
+
+    left = [0.0] * loop_n
+    right = [0.0] * loop_n
+    for i in range(xfade_n):
+        w = 0.5 - 0.5 * math.cos(math.pi * i / xfade_n)
+        left[i] = buf_l[i] * w + buf_l[loop_n + i] * (1.0 - w)
+        right[i] = buf_r[i] * w + buf_r[loop_n + i] * (1.0 - w)
+    for i in range(xfade_n, loop_n):
+        left[i] = buf_l[i]
+        right[i] = buf_r[i]
+
+    dc_l_raw = sum(left) / loop_n
+    dc_r_raw = sum(right) / loop_n
+    for i in range(loop_n):
+        left[i] -= dc_l_raw
+        right[i] -= dc_r_raw
+
+    raw_peak = max(max(abs(x) for x in left), max(abs(x) for x in right), 1e-9)
+    target_peak = 10.0 ** (-20.0 / 20.0)
+    gain = target_peak / raw_peak
+    for i in range(loop_n):
+        left[i] *= gain
+        right[i] *= gain
+
+    has_nan = any(not math.isfinite(x) for x in left) or any(not math.isfinite(x) for x in right)
+    peak = max(max(abs(x) for x in left), max(abs(x) for x in right))
+    peak_db = 20.0 * math.log10(max(peak, 1e-12))
+    rms_sq = (sum(x * x for x in left) + sum(x * x for x in right)) / (2.0 * loop_n)
+    rms_db = 10.0 * math.log10(max(rms_sq, 1e-12))
+    seam_diff = max(abs(left[0] - left[-1]), abs(right[0] - right[-1]))
+    stats = {
+        "duration_s": loop_s,
+        "sample_rate": sr,
+        "channels": 2,
+        "samples": loop_n,
+        "peak": peak,
+        "peak_db": peak_db,
+        "rms_db": rms_db,
+        "dc_l": sum(left) / loop_n,
+        "dc_r": sum(right) / loop_n,
+        "end_amp": seam_diff,
+        "has_nan": has_nan,
+    }
+    return sr, left, right, stats
+
+
 def build_terminal_lounge_music(sr: int = 44100) -> tuple[int, list[float], list[float], dict]:
-    """80.0 s (32 bars @ 96 BPM) seamless 4-section cozy airport lounge stereo soundtrack."""
+    """Track 1: 80.0 s (32 bars @ 96 BPM, C major / A minor) Warm Rhodes & Vibraphone Lounge."""
     bpm = 96.0
     beat_s = 60.0 / bpm
     bar_s = 4.0 * beat_s
     bars = 32
-    loop_s = bars * bar_s  # 80.000000 s exact
-    tail_s = 4.0
-    loop_n = int(round(loop_s * sr))
-    tail_n = int(round(tail_s * sr))
-    total_n = loop_n + tail_n
+    track_s = bars * bar_s  # 80.00 s
+    track_n = int(round(track_s * sr))
+    buf_n = track_n + int(round(3.0 * sr))
 
-    left = [0.0] * total_n
-    right = [0.0] * total_n
+    left = [0.0] * buf_n
+    right = [0.0] * buf_n
 
-    # 4 sections x 8 bars: A (Welcome), A' (Stroll), B (Sunlit Bridge), C (Evening Return -> A)
-    # Chords: (bar_idx, chord_midi_notes, bass_root_midi, bass_alt_midi)
+    # C major / A minor warm jazz-lounge progression: (bar, chord_midis, bass_root, bass_alt)
     progression = [
-        # Section A (bars 0..7): Warm Fmaj9 home
-        (0, (53, 57, 60, 64, 67), 41, 48),  # Fmaj9
-        (1, (50, 57, 60, 64, 65), 38, 45),  # Dm9
-        (2, (58, 62, 65, 69), 46, 41),  # Bbmaj7
-        (3, (48, 55, 58, 62, 65), 36, 43),  # C9sus4
-        (4, (53, 57, 60, 64, 67), 41, 48),  # Fmaj9
-        (5, (57, 60, 64, 67), 45, 40),  # Am7
-        (6, (55, 58, 62, 65, 69), 43, 50),  # Gm9
-        (7, (48, 55, 58, 64, 69), 36, 43),  # C13
-        # Section A' (bars 8..15): Concourse stroll
-        (8, (53, 57, 60, 64, 67), 41, 48),  # Fmaj9
-        (9, (50, 57, 60, 64, 65), 38, 45),  # Dm9
-        (10, (55, 58, 62, 65, 69), 43, 50),  # Gm9
-        (11, (48, 55, 58, 62, 65), 36, 43),  # C9sus4
-        (12, (57, 60, 64, 67), 45, 52),  # Am7
-        (13, (50, 57, 60, 64, 65), 38, 45),  # Dm9
-        (14, (58, 62, 65, 69), 46, 41),  # Bbmaj7
-        (15, (48, 55, 58, 62, 65), 36, 43),  # C9sus4
-        # Section B (bars 16..23): Sunlit departure lounge bridge
-        (16, (58, 62, 65, 69, 72), 46, 41),  # Bbmaj9
-        (17, (52, 55, 58, 60, 62), 40, 48),  # C9/E
-        (18, (57, 60, 64, 67), 45, 52),  # Am7
-        (19, (50, 53, 57, 60, 64), 38, 45),  # Dm9
-        (20, (55, 58, 62, 65, 69), 43, 50),  # Gm9
-        (21, (57, 60, 64, 67), 45, 48),  # Am7
-        (22, (58, 62, 65, 69), 46, 41),  # Bbmaj7
-        (23, (48, 55, 58, 62, 65), 43, 36),  # G->C9sus4
-        # Section C (bars 24..31): Evening boarding glow -> smooth return to bar 0 Fmaj9
-        (24, (53, 57, 60, 64, 67), 41, 48),  # Fmaj9
-        (25, (52, 55, 60, 64, 67), 40, 48),  # C/E
-        (26, (50, 57, 60, 64, 65), 38, 45),  # Dm9
-        (27, (60, 63, 65, 69), 36, 41),  # F7/C
-        (28, (58, 62, 65, 69), 46, 41),  # Bbmaj7
-        (29, (55, 58, 62, 65, 69), 43, 50),  # Gm9
-        (30, (48, 58, 62, 65, 69), 36, 43),  # Bbmaj7/C
-        (31, (48, 55, 58, 62, 65), 36, 43),  # C9sus4 -> resolves cleanly to Fmaj9
+        # Section A (bars 0..7)
+        (0, (48, 55, 59, 62, 64), 36, 43),  # Cmaj9
+        (1, (45, 52, 55, 59, 60), 33, 40),  # Am9
+        (2, (53, 57, 60, 64, 67), 41, 48),  # Fmaj9
+        (3, (43, 53, 57, 60, 62), 43, 36),  # G13sus4
+        (4, (48, 55, 59, 62, 64), 36, 43),  # Cmaj9
+        (5, (52, 55, 59, 62), 40, 47),  # Em7
+        (6, (50, 57, 60, 64, 65), 38, 45),  # Dm9
+        (7, (43, 53, 57, 59, 64), 43, 38),  # G13
+        # Section A' (bars 8..15)
+        (8, (48, 55, 59, 62, 64), 36, 43),  # Cmaj9
+        (9, (45, 52, 55, 59, 60), 33, 40),  # Am9
+        (10, (50, 57, 60, 64, 65), 38, 45),  # Dm9
+        (11, (43, 53, 57, 60, 62), 43, 36),  # G13sus4
+        (12, (52, 55, 59, 62), 40, 47),  # Em7
+        (13, (45, 52, 55, 59, 60), 33, 40),  # Am9
+        (14, (53, 57, 60, 64, 67), 41, 48),  # Fmaj9
+        (15, (43, 53, 57, 59, 64), 43, 36),  # G13
+        # Section B (bars 16..23)
+        (16, (53, 57, 60, 64, 67), 41, 48),  # Fmaj9
+        (17, (55, 59, 62, 64, 67), 43, 41),  # G6/F bass feel
+        (18, (52, 55, 59, 62), 40, 47),  # Em7
+        (19, (45, 52, 55, 59, 60), 33, 40),  # Am9
+        (20, (50, 57, 60, 64, 65), 38, 45),  # Dm9
+        (21, (52, 55, 59, 62), 40, 45),  # Em7
+        (22, (53, 57, 60, 64, 67), 41, 48),  # Fmaj9
+        (23, (43, 53, 57, 60, 62), 43, 36),  # G9sus4
+        # Section C (bars 24..31): Calm final resolution to Cmaj9
+        (24, (48, 55, 59, 62, 64), 36, 43),  # Cmaj9
+        (25, (47, 55, 59, 62, 67), 47, 43),  # G/B
+        (26, (45, 52, 55, 59, 60), 33, 40),  # Am9
+        (27, (55, 58, 60, 64), 43, 36),  # C7/G
+        (28, (53, 57, 60, 64), 41, 48),  # Fmaj7
+        (29, (50, 57, 60, 64, 65), 38, 45),  # Dm9
+        (30, (43, 53, 57, 59, 64), 43, 36),  # G13
+        (31, (48, 55, 59, 62, 64), 36, 43),  # Cmaj9 home resolve
     ]
 
     for bar_idx, chord, bass_root, bass_alt in progression:
         t0 = bar_idx * bar_s
-        # Rhodes chord voicing with subtle human roll (18 ms per voice)
+        is_final = bar_idx == bars - 1
+        hold_beats = 3.85 if not is_final else 3.2
         for v_idx, note in enumerate(chord):
             _add_epiano_note(
                 left,
@@ -423,11 +996,10 @@ def build_terminal_lounge_music(sr: int = 44100) -> tuple[int, list[float], list
                 sr,
                 t0 + v_idx * 0.018,
                 note,
-                bar_s * 0.96,
+                hold_beats * beat_s,
                 0.76,
                 pan=-0.16 + 0.08 * (v_idx % 3),
             )
-        # Gentle beat 3.5 / beat 3 Rhodes comping push in A', B, and C
         if 8 <= bar_idx <= 29 and bar_idx % 2 == 1:
             push_t = t0 + 2.5 * beat_s
             for v_idx, note in enumerate(chord[1:4]):
@@ -438,78 +1010,76 @@ def build_terminal_lounge_music(sr: int = 44100) -> tuple[int, list[float], list
                     push_t + v_idx * 0.014,
                     note,
                     1.35 * beat_s,
-                    0.48,
+                    0.46,
                     pan=0.14 - 0.07 * v_idx,
                 )
-
-        # Warm upright bass: beat 1 root, beat 3 fifth/alt, subtle beat 4 walk in B
-        _add_upright_bass_note(left, right, sr, t0, bass_root, 1.85 * beat_s, 0.85)
-        _add_upright_bass_note(left, right, sr, t0 + 2.0 * beat_s, bass_alt, 1.65 * beat_s, 0.72)
+        _add_upright_bass_note(left, right, sr, t0, bass_root, 1.85 * beat_s, 0.84)
+        if not is_final:
+            _add_upright_bass_note(left, right, sr, t0 + 2.0 * beat_s, bass_alt, 1.65 * beat_s, 0.70)
         if 16 <= bar_idx <= 23 and bar_idx % 2 == 0:
             _add_upright_bass_note(
-                left, right, sr, t0 + 3.5 * beat_s, bass_root + 2, 0.55 * beat_s, 0.52
+                left, right, sr, t0 + 3.5 * beat_s, bass_root + 2, 0.55 * beat_s, 0.50
             )
 
-    # Playful, spacious wooden marimba melody motifs (bars with generous breathing rests)
-    # Tuple: (bar_idx, beat_offset, midi, dur_beats, vel)
-    marimba_phrases = [
-        # Section A: gentle introduction motif (bars 2..3, 6..7)
+    # Soft vibraphone lounge melody (C major / A minor)
+    vibe_phrases = [
         (2, 0.0, 69, 1.2, 0.72),  # A4
-        (2, 1.5, 72, 1.0, 0.75),  # C5
-        (2, 2.5, 74, 1.3, 0.78),  # D5
-        (3, 0.0, 72, 1.6, 0.70),  # C5
-        (3, 2.0, 67, 1.4, 0.64),  # G4
-        (6, 0.5, 69, 1.0, 0.72),  # A4
-        (6, 1.5, 70, 1.0, 0.70),  # Bb4
-        (6, 2.5, 74, 1.2, 0.76),  # D5
-        (7, 0.0, 72, 1.8, 0.74),  # C5
-        # Section A': cheerful call & response (bars 8..9, 12..14)
-        (8, 0.0, 69, 0.9, 0.75),  # A4
-        (8, 1.0, 72, 0.9, 0.78),  # C5
-        (8, 2.0, 74, 0.9, 0.80),  # D5
-        (8, 3.0, 76, 1.2, 0.82),  # E5
-        (9, 0.5, 79, 1.3, 0.82),  # G5
-        (9, 2.0, 76, 1.2, 0.74),  # E5
-        (9, 3.0, 74, 1.3, 0.70),  # D5
-        (10, 0.0, 72, 1.8, 0.72),  # C5 (rest bar 11)
-        (12, 0.0, 76, 1.0, 0.78),  # E5
-        (12, 1.5, 74, 0.9, 0.74),  # D5
-        (12, 2.5, 72, 1.2, 0.72),  # C5
-        (13, 0.0, 69, 1.4, 0.72),  # A4
-        (13, 2.0, 72, 1.2, 0.75),  # C5
-        (14, 0.0, 74, 1.6, 0.78),  # D5
-        (14, 2.0, 72, 1.5, 0.68),  # C5 (rest bar 15)
-        # Section B: sunlit bridge melody (bars 16..22)
-        (16, 0.0, 74, 1.2, 0.78),  # D5
-        (16, 1.5, 77, 1.1, 0.82),  # F5
-        (16, 2.5, 79, 1.3, 0.84),  # G5
-        (17, 0.0, 81, 1.5, 0.82),  # A5
-        (17, 2.0, 79, 1.3, 0.76),  # G5
-        (18, 0.5, 76, 1.1, 0.76),  # E5
-        (18, 2.0, 79, 1.3, 0.78),  # G5
-        (19, 0.0, 74, 1.9, 0.74),  # D5
-        (20, 0.0, 70, 0.9, 0.74),  # Bb4
-        (20, 1.0, 74, 0.9, 0.76),  # D5
-        (20, 2.0, 77, 1.2, 0.80),  # F5
-        (21, 0.0, 76, 1.4, 0.76),  # E5
-        (21, 2.0, 72, 1.3, 0.72),  # C5
-        (22, 0.0, 74, 1.6, 0.76),  # D5 (bar 23 breathes before C)
-        # Section C: warm wind-down & return turnaround (bars 24..29, bars 30..31 open)
-        (24, 0.0, 72, 1.2, 0.74),  # C5
-        (24, 1.5, 76, 1.1, 0.76),  # E5
-        (24, 2.5, 79, 1.4, 0.78),  # G5
-        (25, 0.0, 76, 1.5, 0.72),  # E5
-        (26, 0.5, 74, 1.1, 0.72),  # D5
-        (26, 2.0, 72, 1.4, 0.70),  # C5
-        (27, 0.0, 69, 1.8, 0.72),  # A4
-        (28, 0.0, 70, 1.2, 0.70),  # Bb4
-        (28, 1.5, 74, 1.2, 0.72),  # D5
-        (29, 0.0, 72, 1.6, 0.68),  # C5
-        (29, 2.0, 69, 1.5, 0.62),  # A4 (bars 30..31 calm turnaround)
+        (2, 1.5, 72, 1.1, 0.76),  # C5
+        (2, 2.5, 76, 1.4, 0.80),  # E5
+        (3, 0.0, 74, 1.7, 0.72),  # D5
+        (3, 2.0, 71, 1.3, 0.65),  # B4
+        (6, 0.5, 69, 1.0, 0.72),
+        (6, 1.5, 72, 1.0, 0.72),
+        (6, 2.5, 74, 1.2, 0.76),
+        (7, 0.0, 71, 1.8, 0.74),
+        # Section A'
+        (8, 0.0, 72, 0.9, 0.76),
+        (8, 1.0, 74, 0.9, 0.78),
+        (8, 2.0, 76, 0.9, 0.80),
+        (8, 3.0, 79, 1.3, 0.84),
+        (9, 0.5, 76, 1.3, 0.78),
+        (9, 2.0, 74, 1.2, 0.74),
+        (9, 3.0, 72, 1.3, 0.70),
+        (10, 0.0, 69, 1.8, 0.72),
+        (12, 0.0, 76, 1.0, 0.78),
+        (12, 1.5, 74, 0.9, 0.74),
+        (12, 2.5, 72, 1.2, 0.72),
+        (13, 0.0, 71, 1.4, 0.72),
+        (13, 2.0, 69, 1.2, 0.72),
+        (14, 0.0, 72, 1.6, 0.76),
+        (14, 2.0, 74, 1.5, 0.70),
+        # Section B
+        (16, 0.0, 76, 1.2, 0.78),
+        (16, 1.5, 79, 1.1, 0.82),
+        (16, 2.5, 81, 1.3, 0.84),
+        (17, 0.0, 79, 1.5, 0.80),
+        (17, 2.0, 76, 1.3, 0.74),
+        (18, 0.5, 74, 1.1, 0.76),
+        (18, 2.0, 76, 1.3, 0.78),
+        (19, 0.0, 72, 1.9, 0.74),
+        (20, 0.0, 69, 0.9, 0.74),
+        (20, 1.0, 72, 0.9, 0.76),
+        (20, 2.0, 74, 1.2, 0.80),
+        (21, 0.0, 76, 1.4, 0.76),
+        (21, 2.0, 74, 1.3, 0.72),
+        (22, 0.0, 72, 1.6, 0.76),
+        # Section C
+        (24, 0.0, 76, 1.2, 0.76),
+        (24, 1.5, 74, 1.1, 0.74),
+        (24, 2.5, 72, 1.4, 0.76),
+        (25, 0.0, 71, 1.5, 0.72),
+        (26, 0.5, 69, 1.1, 0.72),
+        (26, 2.0, 72, 1.4, 0.72),
+        (27, 0.0, 76, 1.7, 0.74),
+        (28, 0.0, 74, 1.2, 0.70),
+        (28, 1.5, 72, 1.2, 0.70),
+        (29, 0.0, 69, 1.5, 0.68),
+        (30, 0.0, 71, 1.4, 0.66),
+        (31, 0.0, 72, 2.6, 0.68),
     ]
-    for bar_idx, beat_off, midi, dur_beats, vel in marimba_phrases:
-        pan = max(-0.30, min(0.30, (midi - 72.0) * 0.025))
-        _add_marimba_note(
+    for bar_idx, beat_off, midi, dur_beats, vel in vibe_phrases:
+        pan = max(-0.28, min(0.28, (midi - 72.0) * 0.025))
+        _add_vibraphone_note(
             left,
             right,
             sr,
@@ -520,104 +1090,602 @@ def build_terminal_lounge_music(sr: int = 44100) -> tuple[int, list[float], list
             pan=pan,
         )
 
-    _apply_stereo_reverb(left, right, sr)
+    return _finalize_music_track(left, right, sr, track_n)
 
-    # Wrap-add musical tail [loop_n .. loop_n + tail_n) onto [0 .. tail_n) for seamless loop
-    for i in range(tail_n):
-        left[i] += left[loop_n + i]
-        right[i] += right[loop_n + i]
-    left = left[:loop_n]
-    right = right[:loop_n]
 
-    # Subtle low-level terminal room air + faint murmur bed (crossfaded across loop_n)
-    xfade_n = int(round(3.0 * sr))
-    bed_n = loop_n + xfade_n
-    rng_l = random.Random(20270615)
-    rng_r = random.Random(20270616)
-    air_l = _one_pole_highpass(
-        _one_pole_lowpass(_one_pole_lowpass([rng_l.uniform(-1.0, 1.0) for _ in range(bed_n)], 320.0, sr), 340.0, sr),
-        65.0,
-        sr,
-    )
-    air_r = _one_pole_highpass(
-        _one_pole_lowpass(_one_pole_lowpass([rng_r.uniform(-1.0, 1.0) for _ in range(bed_n)], 320.0, sr), 340.0, sr),
-        65.0,
-        sr,
-    )
-    mur_l = _one_pole_highpass(
-        _one_pole_lowpass(_one_pole_lowpass([rng_l.uniform(-1.0, 1.0) for _ in range(bed_n)], 620.0, sr), 560.0, sr),
-        220.0,
-        sr,
-    )
-    mur_r = _one_pole_highpass(
-        _one_pole_lowpass(_one_pole_lowpass([rng_r.uniform(-1.0, 1.0) for _ in range(bed_n)], 620.0, sr), 560.0, sr),
-        220.0,
-        sr,
-    )
-    bed_l = [0.0] * bed_n
-    bed_r = [0.0] * bed_n
-    for i in range(bed_n):
-        t = i / sr
-        air_env = 0.88 + 0.12 * math.sin(TAU * (2.0 / loop_s) * t + 0.3)
-        mur_env = 0.60 + 0.25 * math.sin(TAU * (3.0 / loop_s) * t + 0.8)
-        bed_l[i] = 0.040 * air_env * air_l[i] + 0.018 * mur_env * mur_l[i]
-        bed_r[i] = 0.040 * air_env * air_r[i] + 0.018 * mur_env * mur_r[i]
-    for i in range(xfade_n):
-        w = 0.5 - 0.5 * math.cos(math.pi * i / xfade_n)
-        left[i] += bed_l[i] * w + bed_l[loop_n + i] * (1.0 - w)
-        right[i] += bed_r[i] * w + bed_r[loop_n + i] * (1.0 - w)
-    for i in range(xfade_n, loop_n):
-        left[i] += bed_l[i]
-        right[i] += bed_r[i]
+def build_morning_bossa_music(sr: int = 44100) -> tuple[int, list[float], list[float], dict]:
+    """Track 2: 88.9 s (40 bars @ 108 BPM, F major) Morning Bossa Nova."""
+    bpm = 108.0
+    beat_s = 60.0 / bpm
+    bar_s = 4.0 * beat_s
+    bars = 40
+    track_n = int(round(bars * bar_s * sr))
+    buf_n = track_n + int(round(3.0 * sr))
 
-    # Remove tiny DC offset & scale to cozy -12.0 dBFS peak headroom
-    dc_l_raw = sum(left) / loop_n
-    dc_r_raw = sum(right) / loop_n
-    for i in range(loop_n):
-        left[i] -= dc_l_raw
-        right[i] -= dc_r_raw
+    left = [0.0] * buf_n
+    right = [0.0] * buf_n
 
-    raw_peak = max(max(abs(x) for x in left), max(abs(x) for x in right), 1e-9)
-    target_peak = 10.0 ** (-12.0 / 20.0)  # ~0.2512 (-12.0 dBFS)
-    gain = target_peak / raw_peak
-    for i in range(loop_n):
-        left[i] *= gain
-        right[i] *= gain
+    # F major cozy bossa nova progression
+    prog_cycle = [
+        ((53, 57, 60, 64), 41, 48),  # Fmaj7
+        ((55, 59, 62, 65), 43, 50),  # G7
+        ((55, 58, 62, 65), 43, 50),  # Gm7
+        ((48, 55, 58, 62, 64), 36, 43),  # C9
+        ((57, 60, 64, 67), 45, 52),  # Am7
+        ((50, 54, 57, 60), 38, 45),  # D7
+        ((55, 58, 62, 65), 43, 50),  # Gm7
+        ((48, 55, 58, 64, 69), 36, 43),  # C13
+    ]
+    bridge_cycle = [
+        ((58, 62, 65, 69), 46, 41),  # Bbmaj7
+        ((58, 61, 65, 68), 46, 41),  # Bbm7
+        ((57, 60, 64, 67), 45, 52),  # Am7
+        ((50, 54, 57, 60), 38, 45),  # D7
+        ((55, 58, 62, 65), 43, 50),  # Gm7
+        ((48, 55, 58, 62, 64), 36, 43),  # C9
+        ((53, 57, 60, 64), 41, 48),  # Fmaj7
+        ((48, 55, 58, 62, 64), 36, 43),  # C9
+    ]
+    bossa_hits = (0.0, 0.75, 1.5, 2.5, 3.25)
 
-    # Verification metrics
-    peak = max(max(abs(x) for x in left), max(abs(x) for x in right))
-    peak_db = 20.0 * math.log10(max(peak, 1e-12))
-    rms_sq = (sum(x * x for x in left) + sum(x * x for x in right)) / (2.0 * loop_n)
-    rms_db = 10.0 * math.log10(max(rms_sq, 1e-12))
-    dc_l = sum(left) / loop_n
-    dc_r = sum(right) / loop_n
-    seam_diff = max(abs(left[0] - left[-1]), abs(right[0] - right[-1]))
-    step_diffs_sq = 0.0
-    max_step_diff = 0.0
-    for i in range(1, loop_n):
-        dl = abs(left[i] - left[i - 1])
-        dr = abs(right[i] - right[i - 1])
-        d = dl if dl > dr else dr
-        step_diffs_sq += dl * dl + dr * dr
-        if d > max_step_diff:
-            max_step_diff = d
-    rms_step_diff = math.sqrt(step_diffs_sq / (2.0 * (loop_n - 1)))
+    for bar_idx in range(bars):
+        is_bridge = 16 <= bar_idx <= 23
+        chord, bass_root, bass_alt = (
+            bridge_cycle[bar_idx - 16] if is_bridge else prog_cycle[bar_idx % 8]
+        )
+        if bar_idx == bars - 1:
+            chord, bass_root, bass_alt = prog_cycle[0]
+        t0 = bar_idx * bar_s
+        is_final = bar_idx == bars - 1
 
-    stats = {
-        "duration_s": loop_s,
-        "sample_rate": sr,
-        "channels": 2,
-        "samples": loop_n,
-        "peak": peak,
-        "peak_db": peak_db,
-        "rms_db": rms_db,
-        "dc_l": dc_l,
-        "dc_r": dc_r,
-        "seam_diff": seam_diff,
-        "rms_step_diff": rms_step_diff,
-        "max_step_diff": max_step_diff,
-    }
-    return sr, left, right, stats
+        # Syncopated bossa nylon guitar comping
+        if is_final:
+            for v_idx, note in enumerate(chord):
+                _add_nylon_guitar_note(
+                    left, right, sr, t0 + v_idx * 0.022, note, 3.0 * beat_s, 0.72, pan=-0.18
+                )
+        else:
+            for hit_idx, beat_off in enumerate(bossa_hits):
+                if hit_idx % 2 == 0:
+                    for v_idx, note in enumerate(chord):
+                        _add_nylon_guitar_note(
+                            left,
+                            right,
+                            sr,
+                            t0 + beat_off * beat_s + v_idx * 0.010,
+                            note,
+                            0.65 * beat_s,
+                            0.68 if hit_idx == 0 else 0.56,
+                            pan=-0.20 + 0.06 * v_idx,
+                        )
+                else:
+                    for note in chord[1:3]:
+                        _add_nylon_guitar_note(
+                            left,
+                            right,
+                            sr,
+                            t0 + beat_off * beat_s,
+                            note,
+                            0.45 * beat_s,
+                            0.48,
+                            pan=-0.12,
+                        )
+
+        # Classic dotted-quarter bossa bass pattern
+        _add_upright_bass_note(left, right, sr, t0, bass_root, 1.35 * beat_s, 0.82)
+        if not is_final:
+            _add_upright_bass_note(left, right, sr, t0 + 1.5 * beat_s, bass_alt, 0.50 * beat_s, 0.62)
+            _add_upright_bass_note(left, right, sr, t0 + 2.0 * beat_s, bass_alt, 1.35 * beat_s, 0.74)
+            _add_upright_bass_note(left, right, sr, t0 + 3.5 * beat_s, bass_root, 0.50 * beat_s, 0.60)
+
+        # Gentle brushed shaker 8ths (bars 2..37)
+        if 2 <= bar_idx <= bars - 3:
+            for step in range(8):
+                vel = 0.65 if step % 2 == 0 else 0.36
+                _add_shaker_hit(
+                    left,
+                    right,
+                    sr,
+                    t0 + step * 0.5 * beat_s,
+                    vel,
+                    seed_val=9100 + bar_idx * 16 + step,
+                    pan=0.28,
+                )
+
+    # Soft mellow flute melody over the bossa groove
+    flute_phrases = [
+        (2, 0.5, 69, 1.0, 0.74),  # A4
+        (2, 1.5, 72, 1.0, 0.76),  # C5
+        (2, 2.5, 76, 1.4, 0.80),  # E5
+        (3, 0.0, 74, 1.6, 0.74),  # D5
+        (4, 0.5, 72, 1.0, 0.74),  # C5
+        (4, 1.5, 74, 0.9, 0.76),  # D5
+        (4, 2.5, 77, 1.3, 0.80),  # F5
+        (5, 0.0, 76, 1.5, 0.76),  # E5
+        (6, 0.5, 74, 1.0, 0.74),
+        (6, 1.5, 72, 1.0, 0.74),
+        (6, 2.5, 70, 1.2, 0.72),
+        (7, 0.0, 69, 1.8, 0.72),
+        # Repeat / variation bars 10..15
+        (10, 0.0, 72, 0.9, 0.78),
+        (10, 1.0, 74, 0.9, 0.80),
+        (10, 2.0, 77, 1.2, 0.82),
+        (11, 0.0, 79, 1.5, 0.82),
+        (11, 2.0, 76, 1.2, 0.74),
+        (12, 0.5, 74, 1.1, 0.74),
+        (12, 2.0, 72, 1.4, 0.74),
+        (13, 0.0, 69, 1.7, 0.72),
+        (14, 0.5, 70, 1.0, 0.74),
+        (14, 1.5, 72, 1.0, 0.74),
+        (14, 2.5, 74, 1.2, 0.76),
+        (15, 0.0, 72, 1.7, 0.72),
+        # Bridge bars 16..23
+        (16, 0.0, 77, 1.2, 0.80),
+        (16, 1.5, 79, 1.0, 0.82),
+        (16, 2.5, 81, 1.4, 0.84),
+        (17, 0.0, 77, 1.6, 0.78),
+        (18, 0.5, 76, 1.0, 0.76),
+        (18, 1.5, 74, 1.0, 0.74),
+        (18, 2.5, 72, 1.3, 0.74),
+        (19, 0.0, 74, 1.7, 0.74),
+        (20, 0.5, 72, 1.0, 0.74),
+        (20, 1.5, 74, 1.0, 0.76),
+        (20, 2.5, 76, 1.2, 0.78),
+        (21, 0.0, 77, 1.5, 0.76),
+        (22, 0.0, 76, 1.3, 0.74),
+        (22, 1.5, 74, 1.3, 0.72),
+        # Return bars 26..38
+        (26, 0.0, 72, 1.0, 0.76),
+        (26, 1.5, 74, 1.0, 0.78),
+        (26, 2.5, 76, 1.2, 0.80),
+        (27, 0.0, 74, 1.6, 0.74),
+        (28, 0.5, 69, 1.0, 0.72),
+        (28, 1.5, 72, 1.0, 0.74),
+        (28, 2.5, 74, 1.3, 0.76),
+        (29, 0.0, 72, 1.6, 0.72),
+        (32, 0.0, 77, 1.1, 0.78),
+        (32, 1.5, 76, 1.0, 0.76),
+        (32, 2.5, 74, 1.2, 0.74),
+        (33, 0.0, 72, 1.6, 0.74),
+        (34, 0.5, 70, 1.1, 0.72),
+        (34, 2.0, 69, 1.3, 0.70),
+        (36, 0.0, 72, 1.4, 0.72),
+        (37, 0.0, 69, 2.0, 0.68),
+        (39, 0.0, 69, 2.4, 0.64),
+    ]
+    for bar_idx, beat_off, midi, dur_beats, vel in flute_phrases:
+        _add_soft_flute_note(
+            left, right, sr, bar_idx * bar_s + beat_off * beat_s, midi, dur_beats * beat_s, vel, pan=0.16
+        )
+
+    return _finalize_music_track(left, right, sr, track_n)
+
+
+def build_sunny_marimba_music(sr: int = 44100) -> tuple[int, list[float], list[float], dict]:
+    """Track 3: 88.4 s (42 bars @ 114 BPM, G major) Playful Marimba & Kalimba."""
+    bpm = 114.0
+    beat_s = 60.0 / bpm
+    bar_s = 4.0 * beat_s
+    bars = 42
+    track_n = int(round(bars * bar_s * sr))
+    buf_n = track_n + int(round(3.0 * sr))
+
+    left = [0.0] * buf_n
+    right = [0.0] * buf_n
+
+    # G major sunlit progression
+    section_a = [
+        ((55, 59, 62, 66), 43, 50),  # Gmaj7
+        ((52, 55, 59, 62, 66), 40, 47),  # Em9
+        ((48, 55, 59, 64), 36, 43),  # Cmaj7
+        ((50, 57, 60, 64), 38, 45),  # D9sus4
+        ((55, 59, 62, 66), 43, 50),  # Gmaj7
+        ((59, 62, 66, 69), 47, 42),  # Bm7
+        ((57, 60, 64, 67), 45, 52),  # Am7
+        ((50, 57, 60, 66), 38, 45),  # D9
+    ]
+    section_b = [
+        ((59, 62, 66, 69), 47, 54),  # Bm7
+        ((52, 55, 59, 62), 40, 47),  # Em7
+        ((57, 60, 64, 67, 71), 45, 52),  # Am9
+        ((50, 57, 60, 64, 66), 38, 45),  # D13
+        ((48, 55, 59, 62), 36, 43),  # Cmaj9
+        ((55, 59, 62, 66), 43, 50),  # Gmaj7
+        ((57, 60, 64, 67), 45, 52),  # Am7
+        ((50, 57, 60, 64), 38, 45),  # D9sus4
+    ]
+
+    for bar_idx in range(bars):
+        if 16 <= bar_idx <= 23:
+            chord, bass_root, bass_alt = section_b[bar_idx - 16]
+        else:
+            chord, bass_root, bass_alt = section_a[bar_idx % 8]
+        if bar_idx == bars - 1:
+            chord, bass_root, bass_alt = section_a[0]
+        t0 = bar_idx * bar_s
+        is_final = bar_idx == bars - 1
+
+        # Bouncy kalimba arpeggios across the 4 beats
+        if is_final:
+            for v_idx, note in enumerate(chord):
+                _add_kalimba_note(
+                    left, right, sr, t0 + v_idx * 0.04, note, 1.6 * beat_s, 0.72, pan=-0.18 + 0.09 * v_idx
+                )
+        else:
+            arp_order = (0, 1, 2, 3, 2, 1, 3, 2)
+            for step in range(8):
+                note = chord[arp_order[step] % len(chord)] + (12 if step in (3, 6) else 0)
+                vel = 0.66 if step % 2 == 0 else 0.50
+                _add_kalimba_note(
+                    left,
+                    right,
+                    sr,
+                    t0 + step * 0.5 * beat_s,
+                    note,
+                    0.48 * beat_s,
+                    vel,
+                    pan=-0.24 + 0.06 * (step % 4),
+                )
+
+        # Light pizzicato upright bass + sunny offbeat woodblock
+        _add_upright_bass_note(left, right, sr, t0, bass_root, 0.9 * beat_s, 0.80)
+        if not is_final:
+            _add_upright_bass_note(left, right, sr, t0 + 1.5 * beat_s, bass_alt, 0.6 * beat_s, 0.64)
+            _add_upright_bass_note(left, right, sr, t0 + 2.0 * beat_s, bass_root, 0.9 * beat_s, 0.72)
+            _add_upright_bass_note(left, right, sr, t0 + 3.0 * beat_s, bass_alt, 0.6 * beat_s, 0.60)
+            if 4 <= bar_idx <= bars - 3:
+                _add_woodblock_hit(left, right, sr, t0 + 1.0 * beat_s, 920.0, 0.62, pan=-0.28)
+                _add_woodblock_hit(left, right, sr, t0 + 3.0 * beat_s, 780.0, 0.56, pan=0.28)
+
+    # Bright cheerful marimba lead phrases (G major)
+    marimba_lead = [
+        (2, 0.0, 71, 0.8, 0.76),  # B4
+        (2, 1.0, 74, 0.8, 0.78),  # D5
+        (2, 2.0, 79, 1.0, 0.82),  # G5
+        (2, 3.0, 78, 0.8, 0.76),  # F#5
+        (3, 0.0, 76, 1.3, 0.76),  # E5
+        (3, 2.0, 74, 1.2, 0.72),  # D5
+        (6, 0.0, 72, 0.8, 0.74),  # C5
+        (6, 1.0, 74, 0.8, 0.76),  # D5
+        (6, 2.0, 76, 1.0, 0.80),  # E5
+        (7, 0.0, 74, 1.5, 0.76),  # D5
+        # Section A' (bars 8..15)
+        (8, 0.0, 79, 0.8, 0.82),
+        (8, 1.0, 78, 0.8, 0.78),
+        (8, 2.0, 76, 0.8, 0.78),
+        (8, 3.0, 74, 0.9, 0.76),
+        (9, 0.5, 71, 1.1, 0.76),
+        (9, 2.0, 74, 1.2, 0.74),
+        (10, 0.0, 76, 1.4, 0.78),
+        (10, 2.0, 79, 1.1, 0.80),
+        (11, 0.0, 78, 1.5, 0.74),
+        (12, 0.0, 74, 0.8, 0.76),
+        (12, 1.0, 76, 0.8, 0.78),
+        (12, 2.0, 79, 1.0, 0.82),
+        (13, 0.0, 81, 1.2, 0.82),
+        (13, 2.0, 79, 1.0, 0.76),
+        (14, 0.0, 76, 1.3, 0.76),
+        (15, 0.0, 74, 1.6, 0.74),
+        # Section B (bars 16..23)
+        (16, 0.0, 78, 0.9, 0.80),
+        (16, 1.5, 79, 0.9, 0.82),
+        (16, 2.5, 83, 1.2, 0.84),
+        (17, 0.0, 81, 1.4, 0.80),
+        (17, 2.0, 79, 1.2, 0.76),
+        (18, 0.0, 76, 0.9, 0.76),
+        (18, 1.0, 79, 0.9, 0.78),
+        (18, 2.0, 81, 1.1, 0.80),
+        (19, 0.0, 78, 1.6, 0.76),
+        (20, 0.0, 76, 0.9, 0.76),
+        (20, 1.5, 79, 1.0, 0.80),
+        (21, 0.0, 78, 1.2, 0.76),
+        (21, 2.0, 74, 1.1, 0.72),
+        (22, 0.0, 76, 1.4, 0.74),
+        (23, 0.0, 74, 1.6, 0.72),
+        # Final return (bars 26..40)
+        (26, 0.0, 71, 0.8, 0.76),
+        (26, 1.0, 74, 0.8, 0.78),
+        (26, 2.0, 79, 1.1, 0.82),
+        (27, 0.0, 76, 1.4, 0.76),
+        (28, 0.5, 74, 1.0, 0.74),
+        (28, 2.0, 71, 1.2, 0.72),
+        (30, 0.0, 76, 1.0, 0.76),
+        (30, 1.5, 78, 1.0, 0.76),
+        (31, 0.0, 79, 1.6, 0.80),
+        (34, 0.0, 74, 0.9, 0.74),
+        (34, 1.5, 76, 0.9, 0.76),
+        (35, 0.0, 79, 1.4, 0.78),
+        (36, 0.0, 78, 1.2, 0.74),
+        (36, 2.0, 74, 1.2, 0.70),
+        (38, 0.0, 76, 1.2, 0.72),
+        (39, 0.0, 74, 1.5, 0.70),
+        (41, 0.0, 79, 2.0, 0.72),
+    ]
+    for bar_idx, beat_off, midi, dur_beats, vel in marimba_lead:
+        _add_marimba_note(
+            left,
+            right,
+            sr,
+            bar_idx * bar_s + beat_off * beat_s,
+            midi,
+            dur_beats * beat_s,
+            vel,
+            pan=0.14,
+        )
+
+    return _finalize_music_track(left, right, sr, track_n)
+
+
+def build_breezy_stroll_music(sr: int = 44100) -> tuple[int, list[float], list[float], dict]:
+    """Track 4: 90.0 s (44 bars in 3/4 waltz @ 88 BPM, D major) Celesta & Soft Clarinet."""
+    bpm = 88.0
+    beat_s = 60.0 / bpm
+    bar_s = 3.0 * beat_s  # 3/4 waltz time!
+    bars = 44
+    track_n = int(round(bars * bar_s * sr))  # 90.00 s exact
+    buf_n = track_n + int(round(3.0 * sr))
+
+    left = [0.0] * buf_n
+    right = [0.0] * buf_n
+
+    # D major 3/4 cozy waltz progression
+    waltz_a = [
+        ((50, 57, 61, 66), 38),  # Dmaj7
+        ((59, 62, 66, 69), 47),  # Bm7
+        ((55, 59, 62, 66), 43),  # Gmaj7
+        ((57, 62, 64, 67), 45),  # A7sus4
+        ((54, 57, 61, 64), 42),  # F#m7
+        ((59, 62, 66, 69), 47),  # Bm7
+        ((52, 55, 59, 64), 40),  # Em7
+        ((57, 61, 64, 67), 45),  # A7
+    ]
+    waltz_b = [
+        ((55, 59, 62, 66), 43),  # Gmaj7
+        ((57, 61, 64, 67), 43),  # A/G
+        ((54, 57, 61, 64), 42),  # F#m7
+        ((59, 62, 66, 69), 47),  # Bm7
+        ((52, 55, 59, 62), 40),  # Em7
+        ((57, 61, 64, 67), 45),  # A7
+        ((50, 57, 61, 66), 38),  # Dmaj7
+        ((57, 62, 64, 67), 45),  # A7sus4
+    ]
+
+    for bar_idx in range(bars):
+        if 16 <= bar_idx <= 23:
+            chord, bass_root = waltz_b[bar_idx - 16]
+        else:
+            chord, bass_root = waltz_a[bar_idx % 8]
+        if bar_idx == bars - 1:
+            chord, bass_root = waltz_a[0]
+        t0 = bar_idx * bar_s
+        is_final = bar_idx == bars - 1
+
+        # 3/4 waltz bass on beat 1 + celesta chord sparkle on beats 2 & 3
+        _add_upright_bass_note(left, right, sr, t0, bass_root, 1.9 * beat_s, 0.80)
+        if is_final:
+            for v_idx, note in enumerate(chord):
+                _add_celesta_note(
+                    left, right, sr, t0 + v_idx * 0.045, note, 2.2 * beat_s, 0.72, pan=-0.16 + 0.1 * v_idx
+                )
+        else:
+            for beat in (1.0, 2.0):
+                vel = 0.64 if beat == 1.0 else 0.54
+                for v_idx, note in enumerate(chord[1:]):
+                    _add_celesta_note(
+                        left,
+                        right,
+                        sr,
+                        t0 + beat * beat_s + v_idx * 0.012,
+                        note,
+                        0.95 * beat_s,
+                        vel,
+                        pan=-0.22 + 0.12 * v_idx,
+                    )
+            # Gentle Rhodes pad accent on beat 1 every second bar
+            if bar_idx % 2 == 0:
+                for note in chord[:3]:
+                    _add_epiano_note(left, right, sr, t0, note, 2.5 * beat_s, 0.44, pan=-0.10)
+
+    # Relaxed strolling soft-clarinet melody in 3/4 (D major)
+    clarinet_phrases = [
+        (2, 0.0, 66, 2.0, 0.72),  # F#4
+        (2, 2.0, 69, 1.0, 0.74),  # A4
+        (3, 0.0, 74, 2.2, 0.78),  # D5
+        (4, 0.0, 73, 1.5, 0.74),  # C#5
+        (4, 1.5, 71, 1.5, 0.72),  # B4
+        (5, 0.0, 69, 2.4, 0.72),  # A4
+        (6, 0.0, 67, 1.5, 0.72),  # G4
+        (6, 1.5, 69, 1.5, 0.74),  # A4
+        (7, 0.0, 66, 2.5, 0.72),  # F#4
+        # A' (bars 8..15)
+        (8, 0.0, 69, 1.5, 0.74),
+        (8, 1.5, 71, 1.5, 0.76),
+        (9, 0.0, 74, 2.0, 0.80),
+        (9, 2.0, 76, 1.0, 0.80),
+        (10, 0.0, 78, 2.2, 0.82),  # F#5
+        (11, 0.0, 76, 1.5, 0.76),
+        (11, 1.5, 74, 1.5, 0.74),
+        (12, 0.0, 73, 2.4, 0.74),
+        (14, 0.0, 71, 1.5, 0.74),
+        (14, 1.5, 69, 1.5, 0.72),
+        (15, 0.0, 66, 2.4, 0.70),
+        # B (bars 16..23)
+        (16, 0.0, 71, 2.0, 0.76),
+        (16, 2.0, 74, 1.0, 0.78),
+        (17, 0.0, 73, 2.2, 0.78),
+        (18, 0.0, 69, 1.5, 0.74),
+        (18, 1.5, 73, 1.5, 0.76),
+        (19, 0.0, 74, 2.4, 0.78),
+        (20, 0.0, 76, 1.5, 0.78),
+        (20, 1.5, 74, 1.5, 0.74),
+        (21, 0.0, 73, 2.4, 0.74),
+        (22, 0.0, 74, 2.6, 0.76),
+        # Return (bars 26..42)
+        (26, 0.0, 66, 1.5, 0.74),
+        (26, 1.5, 69, 1.5, 0.76),
+        (27, 0.0, 74, 2.4, 0.78),
+        (28, 0.0, 73, 1.5, 0.74),
+        (28, 1.5, 71, 1.5, 0.72),
+        (29, 0.0, 69, 2.4, 0.72),
+        (32, 0.0, 74, 2.0, 0.76),
+        (32, 2.0, 73, 1.0, 0.74),
+        (33, 0.0, 71, 2.2, 0.74),
+        (34, 0.0, 69, 1.5, 0.72),
+        (34, 1.5, 67, 1.5, 0.70),
+        (35, 0.0, 66, 2.5, 0.70),
+        (38, 0.0, 69, 1.8, 0.70),
+        (39, 0.0, 67, 1.8, 0.68),
+        (40, 0.0, 66, 2.0, 0.68),
+        (42, 0.0, 62, 2.8, 0.64),
+    ]
+    for bar_idx, beat_off, midi, dur_beats, vel in clarinet_phrases:
+        _add_clarinet_note(
+            left, right, sr, bar_idx * bar_s + beat_off * beat_s, midi, dur_beats * beat_s, vel, pan=0.12
+        )
+
+    return _finalize_music_track(left, right, sr, track_n)
+
+
+def build_sunset_acoustic_music(sr: int = 44100) -> tuple[int, list[float], list[float], dict]:
+    """Track 5: 93.7 s (32 bars @ 82 BPM, Eb / Bb major) Evening Rhodes, Acoustic & Warm Pad."""
+    bpm = 82.0
+    beat_s = 60.0 / bpm
+    bar_s = 4.0 * beat_s
+    bars = 32
+    track_n = int(round(bars * bar_s * sr))  # ~93.66 s
+    buf_n = track_n + int(round(3.0 * sr))
+
+    left = [0.0] * buf_n
+    right = [0.0] * buf_n
+
+    # Eb major / Bb major warm evening progression
+    prog_eb = [
+        ((51, 55, 58, 62, 65), 39, 46),  # Ebmaj9
+        ((48, 55, 58, 62, 63), 36, 43),  # Cm9
+        ((56, 60, 63, 67), 44, 51),  # Abmaj7
+        ((46, 53, 56, 60, 63), 34, 41),  # Bb9sus4
+        ((55, 58, 62, 65), 43, 50),  # Gm7
+        ((48, 55, 58, 62, 63), 36, 43),  # Cm9
+        ((53, 56, 60, 63, 67), 41, 48),  # Fm9
+        ((46, 53, 56, 62, 67), 34, 41),  # Bb13
+    ]
+    prog_bb = [
+        ((58, 62, 65, 69), 46, 41),  # Bbmaj7
+        ((51, 55, 58, 62), 46, 39),  # Ebmaj7/Bb
+        ((57, 60, 63, 67), 45, 53),  # Am7b5 -> F9/A
+        ((50, 57, 60, 65), 38, 45),  # Dm7
+        ((55, 58, 62, 65), 43, 50),  # Gm7
+        ((48, 55, 58, 62), 36, 43),  # Cm9
+        ((56, 60, 63, 67), 44, 51),  # Abmaj7
+        ((46, 53, 56, 60, 63), 34, 41),  # Bb9sus4
+    ]
+
+    for bar_idx in range(bars):
+        if 16 <= bar_idx <= 23:
+            chord, bass_root, bass_alt = prog_bb[bar_idx - 16]
+        else:
+            chord, bass_root, bass_alt = prog_eb[bar_idx % 8]
+        if bar_idx == bars - 1:
+            chord, bass_root, bass_alt = prog_eb[0]
+        t0 = bar_idx * bar_s
+        is_final = bar_idx == bars - 1
+
+        # Warm slow pad bed on chord tones
+        for v_idx, note in enumerate(chord[:4]):
+            _add_warm_pad_note(
+                left,
+                right,
+                sr,
+                t0,
+                note,
+                bar_s * (0.85 if is_final else 1.02),
+                0.70,
+                pan=-0.20 + 0.13 * v_idx,
+            )
+
+        # Gentle fingerpicked nylon acoustic arpeggio across the bar
+        if not is_final:
+            pick_steps = (0, 1, 2, 3, 2, 1, 2, 3)
+            for step in range(8):
+                note = chord[pick_steps[step] % len(chord)]
+                _add_nylon_guitar_note(
+                    left,
+                    right,
+                    sr,
+                    t0 + step * 0.5 * beat_s,
+                    note,
+                    1.1 * beat_s,
+                    0.56 if step % 2 == 0 else 0.44,
+                    pan=-0.22 + 0.06 * (step % 4),
+                )
+
+        # Mellow evening Rhodes chord shimmer on beat 1 of even bars
+        if bar_idx % 2 == 0:
+            for v_idx, note in enumerate(chord):
+                _add_epiano_note(
+                    left,
+                    right,
+                    sr,
+                    t0 + v_idx * 0.025,
+                    note,
+                    3.2 * beat_s,
+                    0.52,
+                    pan=0.12 - 0.06 * v_idx,
+                )
+
+        # Deep warm bass
+        _add_upright_bass_note(left, right, sr, t0, bass_root, 2.2 * beat_s, 0.84)
+        if not is_final:
+            _add_upright_bass_note(left, right, sr, t0 + 2.5 * beat_s, bass_alt, 1.4 * beat_s, 0.66)
+
+    # Mellow evening acoustic + Rhodes lead melody (Eb / Bb major)
+    lead_notes = [
+        (1, 2.0, 67, 1.5, 0.72),  # G4
+        (2, 0.0, 70, 1.8, 0.76),  # Bb4
+        (2, 2.0, 74, 1.6, 0.78),  # D5
+        (3, 0.0, 72, 2.2, 0.74),  # C5
+        (5, 2.0, 70, 1.4, 0.72),  # Bb4
+        (6, 0.0, 75, 1.6, 0.78),  # Eb5
+        (6, 2.0, 74, 1.4, 0.74),  # D5
+        (7, 0.0, 70, 2.4, 0.72),  # Bb4
+        # Bars 8..15
+        (8, 0.0, 74, 1.5, 0.76),  # D5
+        (8, 2.0, 75, 1.5, 0.78),  # Eb5
+        (9, 0.0, 77, 1.8, 0.80),  # F5
+        (9, 2.0, 75, 1.4, 0.74),  # Eb5
+        (10, 0.0, 74, 2.0, 0.74),
+        (11, 0.0, 70, 2.2, 0.72),
+        (12, 1.0, 72, 1.4, 0.72),
+        (12, 2.5, 74, 1.4, 0.74),
+        (13, 0.0, 75, 2.0, 0.76),
+        (14, 0.0, 72, 1.6, 0.72),
+        (15, 0.0, 70, 2.2, 0.70),
+        # Bridge bars 16..23 (Bb major glow)
+        (16, 0.0, 74, 1.5, 0.76),
+        (16, 2.0, 77, 1.6, 0.80),
+        (17, 0.0, 79, 2.0, 0.82),  # G5
+        (18, 0.0, 77, 1.8, 0.76),
+        (19, 0.0, 74, 2.2, 0.74),
+        (20, 1.0, 75, 1.4, 0.74),
+        (20, 2.5, 74, 1.3, 0.72),
+        (21, 0.0, 72, 2.0, 0.72),
+        (22, 0.0, 70, 2.4, 0.70),
+        # Final return (bars 24..31)
+        (24, 0.0, 75, 1.6, 0.76),
+        (24, 2.0, 74, 1.5, 0.74),
+        (25, 0.0, 72, 2.0, 0.72),
+        (26, 1.0, 70, 1.5, 0.70),
+        (27, 0.0, 67, 2.2, 0.70),
+        (28, 0.0, 70, 1.8, 0.70),
+        (29, 0.0, 67, 2.0, 0.66),
+        (31, 0.0, 67, 2.6, 0.64),
+    ]
+    for bar_idx, beat_off, midi, dur_beats, vel in lead_notes:
+        _add_epiano_note(
+            left, right, sr, bar_idx * bar_s + beat_off * beat_s, midi, dur_beats * beat_s, vel, pan=0.16
+        )
+
+    return _finalize_music_track(left, right, sr, track_n)
 
 
 def _find_blender_bin() -> str | None:
@@ -1303,6 +2371,14 @@ def main() -> None:
         "staff_wipe.wav": build_staff_wipe,
         "staff_yawn.wav": build_staff_yawn,
     }
+    ogg_builders = {
+        "terminal_ambience_bed.ogg": build_terminal_ambience_bed,
+        "terminal_lounge.ogg": build_terminal_lounge_music,
+        "music_morning_bossa.ogg": build_morning_bossa_music,
+        "music_sunny_marimba.ogg": build_sunny_marimba_music,
+        "music_breezy_stroll.ogg": build_breezy_stroll_music,
+        "music_sunset_acoustic.ogg": build_sunset_acoustic_music,
+    }
     only: str | None = None
     if "--only" in sys.argv:
         idx = sys.argv.index("--only")
@@ -1321,23 +2397,27 @@ def main() -> None:
             f"wrote {target.relative_to(REPO_ROOT)} "
             f"({len(samples)} samples @ {sr} Hz, {size_kb:.1f} KB, boundary_delta={boundary_delta:.5f})"
         )
-    if only is not None:
-        return
-
-    lounge_sr, lounge_l, lounge_r, stats = build_terminal_lounge_music()
-    lounge_path = OUT_DIR / "terminal_lounge.ogg"
-    encoder = _encode_ogg_from_stereo(lounge_path, lounge_sr, lounge_l, lounge_r, bitrate_kbps=160)
-    lounge_kb = lounge_path.stat().st_size / 1024.0
-    print(
-        f"wrote {lounge_path.relative_to(REPO_ROOT)} "
-        f"({stats['samples']} samples @ {stats['sample_rate']} Hz stereo, "
-        f"{stats['duration_s']:.2f} s, {lounge_kb:.1f} KB, encoder={encoder}, "
-        f"peak={stats['peak_db']:.2f} dBFS, rms={stats['rms_db']:.2f} dBFS, "
-        f"dc=({stats['dc_l']:.6f}, {stats['dc_r']:.6f}), "
-        f"seam_diff={stats['seam_diff']:.6f}, "
-        f"internal_rms_diff={stats['rms_step_diff']:.6f}, "
-        f"internal_max_diff={stats['max_step_diff']:.6f})"
-    )
+    for filename, fn in ogg_builders.items():
+        if only is not None and filename != only:
+            continue
+        track_sr, track_l, track_r, stats = fn()
+        if stats["has_nan"]:
+            raise RuntimeError(f"{filename}: generated audio contains NaN/Inf")
+        if stats["peak_db"] > -1.0:
+            raise RuntimeError(f"{filename}: peak {stats['peak_db']:.2f} dBFS exceeds -1.0 dBFS")
+        target = OUT_DIR / filename
+        encoder = _encode_ogg_from_stereo(target, track_sr, track_l, track_r, bitrate_kbps=160)
+        size_kb = target.stat().st_size / 1024.0
+        if size_kb <= 1.0:
+            raise RuntimeError(f"{filename}: encoded file unexpectedly tiny ({size_kb:.1f} KB)")
+        print(
+            f"wrote {target.relative_to(REPO_ROOT)} "
+            f"({stats['samples']} samples @ {stats['sample_rate']} Hz stereo, "
+            f"{stats['duration_s']:.2f} s, {size_kb:.1f} KB, encoder={encoder}, "
+            f"peak={stats['peak_db']:.2f} dBFS, rms={stats['rms_db']:.2f} dBFS, "
+            f"dc=({stats['dc_l']:.6f}, {stats['dc_r']:.6f}), "
+            f"end_amp={stats['end_amp']:.6f})"
+        )
 
 
 if __name__ == "__main__":

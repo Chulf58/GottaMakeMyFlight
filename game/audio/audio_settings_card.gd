@@ -1,10 +1,11 @@
 class_name AudioSettingsCard
 extends PanelContainer
 ## Shared cozy cream/navy audio controls card for both GameMenu (Esc -> Settings)
-## and TitleScreen (decision demo-audio-floor-d5-cozy-terminal-ambience-loop-
-## light-tactil): Master, Ambience and SFX 0..100% HSliders plus a Mute audio
-## CheckButton, live-synced with /root/GameAudio. Dragging a slider previews dB
-## live on AudioServer and writes ConfigFile once on drag_ended.
+## and TitleScreen (decisions demo-audio-floor-d5-cozy-terminal-ambience-loop-
+## light-tactil and cozy-5-track-procedural-music-playlist-and-separate-music-
+## ambience-sliders): Master, Music, Ambience and SFX 0..100% HSliders plus a
+## Mute audio CheckButton, live-synced with /root/GameAudio. Dragging a slider
+## previews dB live on AudioServer and writes ConfigFile once on drag_ended.
 
 const GAME_AUDIO := preload("res://audio/game_audio.gd")
 const AUDIO_NODE_PATH := ^"/root/GameAudio"
@@ -22,12 +23,15 @@ var _dirty_while_dragging := false
 var _heading: Label
 var _mute_switch: CheckButton
 var _master_label: Label
+var _music_label: Label
 var _ambience_label: Label
 var _sfx_label: Label
 var _master_slider: HSlider
+var _music_slider: HSlider
 var _ambience_slider: HSlider
 var _sfx_slider: HSlider
 var _master_value: Label
+var _music_value: Label
 var _ambience_value: Label
 var _sfx_value: Label
 
@@ -53,6 +57,10 @@ func _init() -> void:
 	_master_slider = master_parts[0]
 	_master_value = master_parts[1]
 	_master_label = master_parts[2]
+	var music_parts := _add_slider_row(box, "Music", tr("Music"), _on_music_changed)
+	_music_slider = music_parts[0]
+	_music_value = music_parts[1]
+	_music_label = music_parts[2]
 	var ambience_parts := _add_slider_row(box, "Ambience", tr("Ambience"), _on_ambience_changed)
 	_ambience_slider = ambience_parts[0]
 	_ambience_value = ambience_parts[1]
@@ -92,6 +100,10 @@ func master_slider() -> HSlider:
 	return _master_slider
 
 
+func music_slider() -> HSlider:
+	return _music_slider
+
+
 func ambience_slider() -> HSlider:
 	return _ambience_slider
 
@@ -107,6 +119,7 @@ func sync_from_audio() -> void:
 		return
 	_mute_switch.set_pressed_no_signal(_audio.muted)
 	_set_slider(_master_slider, _master_value, _audio.master_volume)
+	_set_slider(_music_slider, _music_value, _audio.music_volume)
 	_set_slider(_ambience_slider, _ambience_value, _audio.ambience_volume)
 	_set_slider(_sfx_slider, _sfx_value, _audio.sfx_volume)
 
@@ -155,6 +168,8 @@ func _retranslate() -> void:
 		_mute_switch.text = tr("Mute audio")
 	if _master_label != null:
 		_master_label.text = tr("Master")
+	if _music_label != null:
+		_music_label.text = tr("Music")
 	if _ambience_label != null:
 		_ambience_label.text = tr("Ambience")
 	if _sfx_label != null:
@@ -206,6 +221,14 @@ func _on_master_changed(value: float) -> void:
 	if _dragging:
 		_dirty_while_dragging = true
 	_audio.set_master_volume(value / 100.0, not _dragging)
+
+
+func _on_music_changed(value: float) -> void:
+	if _audio == null:
+		return
+	if _dragging:
+		_dirty_while_dragging = true
+	_audio.set_music_volume(value / 100.0, not _dragging)
 
 
 func _on_ambience_changed(value: float) -> void:
