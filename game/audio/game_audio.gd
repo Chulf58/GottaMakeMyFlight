@@ -1,14 +1,18 @@
+# gdlint:disable = max-public-methods
 extends Node
 ## The demo audio floor autoload (decisions demo-audio-floor-d5-cozy-terminal-
-## ambience-loop-light-tactil and demo-audio-pa-announcer-and-sound-jokes-
-## e612caf3-procedural): ensures the Master, Ambience and SFX buses exist,
+## ambience-loop-light-tactil, demo-audio-pa-announcer-and-sound-jokes-
+## e612caf3-procedural, and cozy-5-track-procedural-music-playlist-and-separate-
+## music-ambience-sliders): ensures Master, Music, Ambience and SFX buses exist,
 ## loads and saves per-bus linear volumes and mute state in
 ## user://audio_settings.cfg (shielded during script/test runs just like
 ## HudFlagSetting, so tests never read or overwrite the player's config), loops
-## cozy terminal ambience while a gameplay scene (BuildMode) is in the tree,
-## plays tactile UI/build/cash/gameplay/joke SFX on a fixed child pool, and
-## emits warm PA chimes paired with translated dry announcements via
-## pa_announced with cooldowns and load/fast-forward suppression.
+## a quiet terminal ambience bed on BUS_AMBIENCE and shuffles a 5-track cozy
+## procedural music playlist on BUS_MUSIC with ambient breathers while a
+## gameplay scene (BuildMode) is in the tree, plays tactile UI/build/cash/
+## gameplay/joke SFX on a fixed child pool, and emits warm PA chimes paired with
+## translated dry announcements via pa_announced with cooldowns and
+## load/fast-forward suppression.
 
 signal changed
 signal pa_announced(text: String)
@@ -16,14 +20,20 @@ signal pa_announced(text: String)
 const DEFAULT_SETTINGS_PATH := "user://audio_settings.cfg"
 const SECTION := "audio"
 const BUS_MASTER := &"Master"
+const BUS_MUSIC := &"Music"
 const BUS_AMBIENCE := &"Ambience"
 const BUS_SFX := &"SFX"
 const DEFAULT_MASTER := 0.8
+const DEFAULT_MUSIC := 0.7
 const DEFAULT_AMBIENCE := 0.7
 const DEFAULT_SFX := 0.8
 const DEFAULT_MUTED := false
 const MIN_LINEAR := 0.0001
 const POOL_SIZE := 8
+const MUSIC_BREATHER_MIN_S := 4.0
+const MUSIC_BREATHER_MAX_S := 8.0
+const MUSIC_FADE_IN_S := 1.5
+const MUSIC_FADE_START_DB := -36.0
 const PA_COOLDOWN_MS := 7500
 const PA_PRIORITY_COOLDOWN_MS := 2500
 const BIRD_SCATTER_COOLDOWN_MS := 5000
@@ -40,7 +50,14 @@ const FINAL_CALL_POLL_TICKS := 10
 const FINAL_CALL_LEAD_TICKS := 300
 const STAR_MILESTONES: Array[float] = [3.0, 4.0, 5.0]
 
-const AMBIENCE_PATH := "res://assets/audio/terminal_lounge.ogg"
+const AMBIENCE_PATH := "res://assets/audio/terminal_ambience_bed.ogg"
+const MUSIC_PLAYLIST_PATHS: Array[String] = [
+	"res://assets/audio/terminal_lounge.ogg",
+	"res://assets/audio/music_morning_bossa.ogg",
+	"res://assets/audio/music_sunny_marimba.ogg",
+	"res://assets/audio/music_breezy_stroll.ogg",
+	"res://assets/audio/music_sunset_acoustic.ogg",
+]
 const SFX_PATHS := {
 	&"ui_click": "res://assets/audio/ui_click.wav",
 	&"build_place": "res://assets/audio/build_place.wav",
@@ -119,6 +136,7 @@ const SFX_VOLUME_DB := {
 var protected_path := DEFAULT_SETTINGS_PATH
 var settings_path := DEFAULT_SETTINGS_PATH
 var master_volume := DEFAULT_MASTER
+var music_volume := DEFAULT_MUSIC
 var ambience_volume := DEFAULT_AMBIENCE
 var sfx_volume := DEFAULT_SFX
 var muted := DEFAULT_MUTED
@@ -126,6 +144,13 @@ var save_count := 0
 
 var _ambience_player: AudioStreamPlayer
 var _ambience_playing := false
+var _music_player: AudioStreamPlayer
+var _music_breather_timer: Timer
+var _music_fade_tween: Tween
+var _music_streams: Array[AudioStream] = []
+var _music_rng := RandomNumberGenerator.new()
+var _current_music_index := -1
+var _music_playing := false
 var _bird_player: AudioStreamPlayer
 var _pa_player: AudioStreamPlayer
 var _voice_player: AudioStreamPlayer
@@ -162,6 +187,7 @@ var _clock_ms := Callable()
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_music_rng.randomize()
 	ensure_buses()
 	_setup_players()
 	load_settings(settings_path)
@@ -174,8 +200,9 @@ func _exit_tree() -> void:
 		get_tree().node_added.disconnect(_on_node_added)
 
 
-## Ensures Master, Ambience and SFX buses exist on AudioServer and send to Master.
+## Ensures Master, Music, Ambience and SFX buses exist on AudioServer and send to Master.
 func ensure_buses() -> void:
+	_ensure_bus(BUS_MUSIC)
 	_ensure_bus(BUS_AMBIENCE)
 	_ensure_bus(BUS_SFX)
 
@@ -191,6 +218,7 @@ func load_settings(path: String = settings_path) -> void:
 	settings_path = path
 	ensure_buses()
 	master_volume = DEFAULT_MASTER
+	music_volume = DEFAULT_MUSIC
 	ambience_volume = DEFAULT_AMBIENCE
 	sfx_volume = DEFAULT_SFX
 	muted = DEFAULT_MUTED
@@ -200,6 +228,9 @@ func load_settings(path: String = settings_path) -> void:
 		if err == OK:
 			master_volume = clampf(
 				float(cfg.get_value(SECTION, "master_volume", DEFAULT_MASTER)), 0.0, 1.0
+			)
+			music_volume = clampf(
+				float(cfg.get_value(SECTION, "music_volume", DEFAULT_MUSIC)), 0.0, 1.0
 			)
 			ambience_volume = clampf(
 				float(cfg.get_value(SECTION, "ambience_volume", DEFAULT_AMBIENCE)), 0.0, 1.0
@@ -222,6 +253,7 @@ func save_settings() -> void:
 		push_error("GameAudio: cannot read %s (error %d)" % [settings_path, err])
 		return
 	cfg.set_value(SECTION, "master_volume", master_volume)
+	cfg.set_value(SECTION, "music_volume", music_volume)
 	cfg.set_value(SECTION, "ambience_volume", ambience_volume)
 	cfg.set_value(SECTION, "sfx_volume", sfx_volume)
 	cfg.set_value(SECTION, "muted", muted)
@@ -253,6 +285,8 @@ func reset_for_test() -> void:
 	_close_call_counts.clear()
 	_last_rating_stars = -1.0
 	_clock_ms = Callable()
+	_stop_music()
+	_current_music_index = -1
 	for player in _sfx_players:
 		player.stop()
 	if _bird_player != null:
@@ -267,6 +301,14 @@ func reset_for_test() -> void:
 
 func set_master_volume(value: float, persist := true) -> void:
 	master_volume = clampf(value, 0.0, 1.0)
+	_apply_buses()
+	if persist:
+		save_settings()
+	changed.emit()
+
+
+func set_music_volume(value: float, persist := true) -> void:
+	music_volume = clampf(value, 0.0, 1.0)
 	_apply_buses()
 	if persist:
 		save_settings()
@@ -298,6 +340,51 @@ func set_muted(value: bool) -> void:
 
 func is_ambience_playing() -> bool:
 	return _ambience_playing and _ambience_player != null and _ambience_player.playing
+
+
+func music_playlist_paths() -> Array[String]:
+	return MUSIC_PLAYLIST_PATHS.duplicate()
+
+
+func current_music_track() -> String:
+	if _current_music_index < 0 or _current_music_index >= MUSIC_PLAYLIST_PATHS.size():
+		return ""
+	return MUSIC_PLAYLIST_PATHS[_current_music_index]
+
+
+func is_music_playing() -> bool:
+	return _music_player != null and _music_player.playing
+
+
+func is_in_music_breather() -> bool:
+	return _music_breather_timer != null and not _music_breather_timer.is_stopped()
+
+
+## Advances to the next non-repeating playlist track with a gentle fade-in.
+func next_music_track() -> String:
+	var idx := _pick_next_music_index()
+	if idx < 0 or _music_player == null:
+		return ""
+	if _music_breather_timer != null:
+		_music_breather_timer.stop()
+	_kill_music_fade()
+	_current_music_index = idx
+	_music_player.stream = _music_streams[idx]
+	if is_inside_tree():
+		_music_player.volume_db = MUSIC_FADE_START_DB
+		_music_player.play()
+		_music_fade_tween = create_tween()
+		(
+			_music_fade_tween
+			. tween_property(_music_player, "volume_db", 0.0, MUSIC_FADE_IN_S)
+			. set_trans(Tween.TRANS_SINE)
+			. set_ease(Tween.EASE_OUT)
+		)
+	else:
+		_music_player.volume_db = 0.0
+		_music_player.play()
+	_music_playing = true
+	return MUSIC_PLAYLIST_PATHS[idx]
 
 
 ## Plays `sfx_id` on the SFX bus (or Ambience bus for `bird_scatter`) when off
@@ -505,6 +592,7 @@ func _ensure_bus(bus_name: StringName) -> void:
 func _apply_buses() -> void:
 	ensure_buses()
 	_set_bus_level(BUS_MASTER, master_volume, muted or master_volume <= MIN_LINEAR)
+	_set_bus_level(BUS_MUSIC, music_volume, music_volume <= MIN_LINEAR)
 	_set_bus_level(BUS_AMBIENCE, ambience_volume, ambience_volume <= MIN_LINEAR)
 	_set_bus_level(BUS_SFX, sfx_volume, sfx_volume <= MIN_LINEAR)
 
@@ -534,12 +622,80 @@ func _prepare_ambience_stream(stream: AudioStream) -> AudioStream:
 	return stream
 
 
+func _prepare_music_stream(stream: AudioStream) -> AudioStream:
+	if stream == null:
+		return null
+	if stream is AudioStreamOggVorbis:
+		var ogg := stream.duplicate() as AudioStreamOggVorbis
+		ogg.loop = false
+		return ogg
+	return stream
+
+
+func _pick_next_music_index() -> int:
+	var count := _music_streams.size()
+	if count <= 0:
+		return -1
+	if count == 1:
+		return 0
+	if _current_music_index < 0 or _current_music_index >= count:
+		return _music_rng.randi_range(0, count - 1)
+	var offset := _music_rng.randi_range(0, count - 2)
+	return offset + 1 if offset >= _current_music_index else offset
+
+
+func _kill_music_fade() -> void:
+	if _music_fade_tween != null and _music_fade_tween.is_valid():
+		_music_fade_tween.kill()
+	_music_fade_tween = null
+
+
+func _stop_music() -> void:
+	_kill_music_fade()
+	if _music_breather_timer != null:
+		_music_breather_timer.stop()
+	if _music_player != null:
+		_music_player.stop()
+	_music_playing = false
+
+
+func _on_music_track_finished() -> void:
+	if _gameplay_nodes.is_empty():
+		_stop_music()
+		return
+	if _music_breather_timer != null:
+		_music_breather_timer.start(
+			_music_rng.randf_range(MUSIC_BREATHER_MIN_S, MUSIC_BREATHER_MAX_S)
+		)
+
+
+func _on_music_breather_timeout() -> void:
+	if _gameplay_nodes.is_empty():
+		_stop_music()
+		return
+	next_music_track()
+
+
 func _setup_players() -> void:
 	_ambience_player = AudioStreamPlayer.new()
 	_ambience_player.name = "AmbiencePlayer"
 	_ambience_player.bus = BUS_AMBIENCE
 	_ambience_player.stream = _prepare_ambience_stream(load(AMBIENCE_PATH) as AudioStream)
 	add_child(_ambience_player)
+	for path: String in MUSIC_PLAYLIST_PATHS:
+		var music_stream := _prepare_music_stream(load(path) as AudioStream)
+		if music_stream != null:
+			_music_streams.append(music_stream)
+	_music_player = AudioStreamPlayer.new()
+	_music_player.name = "MusicPlayer"
+	_music_player.bus = BUS_MUSIC
+	_music_player.finished.connect(_on_music_track_finished)
+	add_child(_music_player)
+	_music_breather_timer = Timer.new()
+	_music_breather_timer.name = "MusicBreatherTimer"
+	_music_breather_timer.one_shot = true
+	_music_breather_timer.timeout.connect(_on_music_breather_timeout)
+	add_child(_music_breather_timer)
 	for id: StringName in SFX_PATHS:
 		var stream := load(SFX_PATHS[id]) as AudioStream
 		if stream != null:
@@ -641,8 +797,7 @@ func _sync_ambience() -> void:
 	var should_play := not _gameplay_nodes.is_empty()
 	if _ambience_player == null:
 		_ambience_playing = false
-		return
-	if should_play and not _ambience_player.playing:
+	elif should_play and not _ambience_player.playing:
 		_ambience_player.play()
 		_ambience_playing = true
 	elif not should_play and _ambience_player.playing:
@@ -650,6 +805,10 @@ func _sync_ambience() -> void:
 		_ambience_playing = false
 	else:
 		_ambience_playing = should_play and _ambience_player.playing
+	if should_play and not _music_playing:
+		next_music_track()
+	elif not should_play and (_music_playing or is_music_playing() or is_in_music_breather()):
+		_stop_music()
 
 
 func _bind_finances(finances: Finances) -> void:

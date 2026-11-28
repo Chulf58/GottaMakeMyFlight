@@ -48,28 +48,38 @@ func after_test() -> void:
 
 func test_buses_exist_and_route_to_master() -> void:
 	var master_idx := AudioServer.get_bus_index(&"Master")
+	var music_idx := AudioServer.get_bus_index(&"Music")
 	var amb_idx := AudioServer.get_bus_index(&"Ambience")
 	var sfx_idx := AudioServer.get_bus_index(&"SFX")
 	assert_int(master_idx).is_equal(0)
+	assert_int(music_idx).is_greater(0)
 	assert_int(amb_idx).is_greater(0)
 	assert_int(sfx_idx).is_greater(0)
+	assert_str(String(AudioServer.get_bus_send(music_idx))).is_equal("Master")
 	assert_str(String(AudioServer.get_bus_send(amb_idx))).is_equal("Master")
 	assert_str(String(AudioServer.get_bus_send(sfx_idx))).is_equal("Master")
 
 
 func test_linear_volume_and_mute_drive_audio_server_buses() -> void:
 	var master_idx := AudioServer.get_bus_index(&"Master")
+	var music_idx := AudioServer.get_bus_index(&"Music")
 	var amb_idx := AudioServer.get_bus_index(&"Ambience")
 	var sfx_idx := AudioServer.get_bus_index(&"SFX")
 
 	_audio.set_master_volume(0.5)
+	_audio.set_music_volume(0.6)
 	_audio.set_ambience_volume(0.25)
 	_audio.set_sfx_volume(0.0)
 	assert_float(AudioServer.get_bus_volume_db(master_idx)).is_equal_approx(linear_to_db(0.5), 0.05)
+	assert_float(AudioServer.get_bus_volume_db(music_idx)).is_equal_approx(linear_to_db(0.6), 0.05)
 	assert_float(AudioServer.get_bus_volume_db(amb_idx)).is_equal_approx(linear_to_db(0.25), 0.05)
 	assert_bool(AudioServer.is_bus_mute(master_idx)).is_false()
+	assert_bool(AudioServer.is_bus_mute(music_idx)).is_false()
 	assert_bool(AudioServer.is_bus_mute(amb_idx)).is_false()
 	assert_bool(AudioServer.is_bus_mute(sfx_idx)).is_true()
+
+	_audio.set_music_volume(0.0)
+	assert_bool(AudioServer.is_bus_mute(music_idx)).is_true()
 
 	_audio.set_muted(true)
 	assert_bool(AudioServer.is_bus_mute(master_idx)).is_true()
@@ -80,42 +90,62 @@ func test_linear_volume_and_mute_drive_audio_server_buses() -> void:
 
 func test_settings_persist_to_isolated_config_and_shield_protected_path() -> void:
 	_audio.set_master_volume(0.42)
+	_audio.set_music_volume(0.58)
 	_audio.set_ambience_volume(0.35)
 	_audio.set_sfx_volume(0.64)
 	_audio.set_muted(true)
 	assert_bool(FileAccess.file_exists(_cfg_path)).is_true()
 
 	_audio.master_volume = 1.0
+	_audio.music_volume = 1.0
 	_audio.ambience_volume = 1.0
 	_audio.sfx_volume = 1.0
 	_audio.muted = false
 	_audio.load_settings(_cfg_path)
 	assert_float(_audio.master_volume).is_equal_approx(0.42, 0.001)
+	assert_float(_audio.music_volume).is_equal_approx(0.58, 0.001)
 	assert_float(_audio.ambience_volume).is_equal_approx(0.35, 0.001)
 	assert_float(_audio.sfx_volume).is_equal_approx(0.64, 0.001)
 	assert_bool(_audio.muted).is_true()
+
+	# Legacy config missing `music_volume` falls back to DEFAULT_MUSIC cleanly.
+	var legacy := ConfigFile.new()
+	legacy.set_value(GAME_AUDIO.SECTION, "master_volume", 0.51)
+	legacy.set_value(GAME_AUDIO.SECTION, "ambience_volume", 0.33)
+	legacy.set_value(GAME_AUDIO.SECTION, "sfx_volume", 0.77)
+	legacy.set_value(GAME_AUDIO.SECTION, "muted", false)
+	assert_int(legacy.save(_cfg_path)).is_equal(OK)
+	_audio.load_settings(_cfg_path)
+	assert_float(_audio.master_volume).is_equal_approx(0.51, 0.001)
+	assert_float(_audio.music_volume).is_equal_approx(GAME_AUDIO.DEFAULT_MUSIC, 0.001)
+	assert_float(_audio.ambience_volume).is_equal_approx(0.33, 0.001)
+	assert_float(_audio.sfx_volume).is_equal_approx(0.77, 0.001)
 
 	# Shield check: pointing protected_path + settings_path at _shield_path drops writes in -s runs.
 	_audio.protected_path = _shield_path
 	_audio.set_settings_path(_shield_path)
 	_audio.set_master_volume(0.15)
+	_audio.set_music_volume(0.22)
 	assert_bool(FileAccess.file_exists(_shield_path)).is_false()
 
 
 func test_ambience_loops_only_while_gameplay_is_in_tree() -> void:
 	assert_bool(_audio.is_ambience_playing()).is_false()
+	assert_bool(_audio.is_music_playing()).is_false()
 	var mode := BuildMode.new()
 	add_child(mode)
 	assert_bool(_audio.is_ambience_playing()).is_true()
+	assert_bool(_audio.is_music_playing()).is_true()
 	var amb_player := _audio.get_node("AmbiencePlayer") as AudioStreamPlayer
 	assert_str(String(amb_player.bus)).is_equal("Ambience")
 	var ogg := amb_player.stream as AudioStreamOggVorbis
 	assert_object(ogg).is_not_null()
 	assert_bool(ogg.loop).is_true()
 	assert_bool(ogg.has_loop()).is_true()
-	assert_float(ogg.get_length()).is_between(55.0, 95.0)
+	assert_float(ogg.get_length()).is_between(18.0, 32.0)
 	mode.free()
 	assert_bool(_audio.is_ambience_playing()).is_false()
+	assert_bool(_audio.is_music_playing()).is_false()
 
 
 func test_prepare_ambience_stream_supports_ogg_and_wav_loops() -> void:
@@ -185,6 +215,7 @@ func test_ui_button_build_flight_departure_and_lump_cash_events_trigger_sfx() ->
 
 func test_game_menu_settings_sliders_init_from_saved_state_and_save_once_on_drag_end() -> void:
 	_audio.set_master_volume(0.30)
+	_audio.set_music_volume(0.55)
 	_audio.set_ambience_volume(0.45)
 	_audio.set_sfx_volume(0.65)
 	_audio.set_muted(true)
@@ -204,6 +235,7 @@ func test_game_menu_settings_sliders_init_from_saved_state_and_save_once_on_drag
 
 	# Reverse sync: controls initialize to the pre-existing non-default values.
 	assert_float(menu.audio_card.master_slider().value).is_equal_approx(30.0, 0.01)
+	assert_float(menu.audio_card.music_slider().value).is_equal_approx(55.0, 0.01)
 	assert_float(menu.audio_card.ambience_slider().value).is_equal_approx(45.0, 0.01)
 	assert_float(menu.audio_card.sfx_slider().value).is_equal_approx(65.0, 0.01)
 	assert_bool(menu.audio_card.mute_switch().button_pressed).is_true()
@@ -223,6 +255,15 @@ func test_game_menu_settings_sliders_init_from_saved_state_and_save_once_on_drag
 	slider.drag_ended.emit(true)
 	assert_int(_audio.save_count).is_equal(saves_before + 1)
 
+	var music_idx := AudioServer.get_bus_index(&"Music")
+	var m_slider := menu.audio_card.music_slider()
+	m_slider.drag_started.emit()
+	m_slider.value = 80.0
+	assert_float(AudioServer.get_bus_volume_db(music_idx)).is_equal_approx(linear_to_db(0.80), 0.05)
+	assert_int(_audio.save_count).is_equal(saves_before + 1)
+	m_slider.drag_ended.emit(true)
+	assert_int(_audio.save_count).is_equal(saves_before + 2)
+
 	menu.audio_card.ambience_slider().value = 50.0
 	menu.audio_card.sfx_slider().value = 90.0
 	menu.audio_card.mute_switch().button_pressed = false
@@ -232,6 +273,7 @@ func test_game_menu_settings_sliders_init_from_saved_state_and_save_once_on_drag
 
 	_audio.load_settings(_cfg_path)
 	assert_float(_audio.master_volume).is_equal_approx(0.70, 0.001)
+	assert_float(_audio.music_volume).is_equal_approx(0.80, 0.001)
 	assert_float(_audio.ambience_volume).is_equal_approx(0.50, 0.001)
 	assert_float(_audio.sfx_volume).is_equal_approx(0.90, 0.001)
 	assert_bool(_audio.muted).is_false()
@@ -239,6 +281,7 @@ func test_game_menu_settings_sliders_init_from_saved_state_and_save_once_on_drag
 
 func test_title_screen_audio_card_inits_from_saved_state_toggles_and_syncs() -> void:
 	_audio.set_master_volume(0.25)
+	_audio.set_music_volume(0.40)
 	_audio.set_ambience_volume(0.55)
 	_audio.set_sfx_volume(0.85)
 	_audio.set_muted(true)
@@ -260,15 +303,18 @@ func test_title_screen_audio_card_inits_from_saved_state_toggles_and_syncs() -> 
 
 	# Reverse sync: sliders and mute reflect pre-existing GameAudio state on open.
 	assert_float(title.audio_card.master_slider().value).is_equal_approx(25.0, 0.01)
+	assert_float(title.audio_card.music_slider().value).is_equal_approx(40.0, 0.01)
 	assert_float(title.audio_card.ambience_slider().value).is_equal_approx(55.0, 0.01)
 	assert_float(title.audio_card.sfx_slider().value).is_equal_approx(85.0, 0.01)
 	assert_bool(title.audio_card.mute_switch().button_pressed).is_true()
 
 	title.audio_card.master_slider().value = 60.0
+	title.audio_card.music_slider().value = 68.0
 	title.audio_card.ambience_slider().value = 20.0
 	title.audio_card.sfx_slider().value = 75.0
 	title.audio_card.mute_switch().button_pressed = false
 	assert_float(_audio.master_volume).is_equal_approx(0.60, 0.001)
+	assert_float(_audio.music_volume).is_equal_approx(0.68, 0.001)
 	assert_float(_audio.ambience_volume).is_equal_approx(0.20, 0.001)
 	assert_float(_audio.sfx_volume).is_equal_approx(0.75, 0.001)
 	assert_bool(_audio.muted).is_false()

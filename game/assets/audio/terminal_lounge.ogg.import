@@ -12,7 +12,7 @@ dest_files=["res://.godot/imported/terminal_lounge.ogg-e5bfe23ae04cbc36dd68cd6fb
 
 [params]
 
-loop=true
+loop=false
 loop_offset=0
 bpm=96
 beat_count=128
