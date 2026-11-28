@@ -19,12 +19,15 @@ enum PropKind {
 	PHONE,
 	MAGAZINE,
 	CLOTH,
+	SUITCASES,
 }
 
 const TOON_BASE := preload("res://assets/materials/tp_atlas_simple_toon.tres")
 const PROP_META := &"staff_hand_props"
 const BROOM_CARRY_META := &"broom_carry_arm"
 const BAG_CARRY_META := &"bag_carry_arm"
+const SUITCASE_R_CARRY_META := &"ramp_suitcase_carry_r"
+const SUITCASE_L_CARRY_META := &"ramp_suitcase_carry_l"
 const WEIGHT_MIN := 0.3
 const OUTLINE_PX := 1.0
 const OUTLINE_BIAS_M := 0.002
@@ -128,9 +131,12 @@ static func desired_prop(
 	cleaner_working: bool = false,
 	cleaner_patrolling: bool = false,
 	cleaner_bag: bool = false,
+	ramp_bag_colors: Array = [],
 ) -> PropKind:
 	if tucked:
 		return PropKind.NONE
+	if role == StaffMember.Role.RAMP and not ramp_bag_colors.is_empty():
+		return PropKind.SUITCASES
 	if role == StaffMember.Role.CLEANER:
 		if cleaner_bag:
 			return PropKind.TRASH_BAG
@@ -216,6 +222,7 @@ static func update(
 	cleaner_working: bool = false,
 	cleaner_patrolling: bool = false,
 	cleaner_bag: bool = false,
+	ramp_bag_colors: Array = [],
 ) -> void:
 	var kind := desired_prop(
 		mode,
@@ -230,12 +237,15 @@ static func update(
 		cleaner_working,
 		cleaner_patrolling,
 		cleaner_bag,
+		ramp_bag_colors,
 	)
 	if kind == PropKind.NONE and not node.has_meta(PROP_META):
 		if node.has_meta(BROOM_CARRY_META):
 			_set_broom_carry(node, false)
 		if node.has_meta(BAG_CARRY_META):
 			_set_bag_carry(node, false)
+		_set_suitcase_carry(node, 0, false)
+		_set_suitcase_carry(node, 1, false)
 		return
 	var rec := _ensure(node)
 	if rec.is_empty():
@@ -248,6 +258,10 @@ static func update(
 	for key: int in extra:
 		for prop_node: Node3D in extra[key]:
 			prop_node.visible = (key == kind)
+	if kind == PropKind.SUITCASES:
+		_sync_ramp_suitcases(props, extra, ramp_bag_colors)
+	_set_suitcase_carry(node, 0, kind == PropKind.SUITCASES and ramp_bag_colors.size() >= 1)
+	_set_suitcase_carry(node, 1, kind == PropKind.SUITCASES and ramp_bag_colors.size() >= 2)
 	var carry_broom := kind == PropKind.BROOM and not cleaner_working
 	var carry_bag := kind == PropKind.TRASH_BAG and not cleaner_working
 	var broom := props.get(PropKind.BROOM) as Node3D
@@ -264,6 +278,8 @@ static func hide_all(node: Node3D) -> void:
 		return
 	_set_broom_carry(node, false)
 	_set_bag_carry(node, false)
+	_set_suitcase_carry(node, 0, false)
+	_set_suitcase_carry(node, 1, false)
 	if not node.has_meta(PROP_META):
 		return
 	var rec: Dictionary = node.get_meta(PROP_META)
@@ -344,6 +360,59 @@ static func _set_bag_carry(node: Node3D, carry_active: bool) -> void:
 		arm.active = carry_active
 
 
+static func _sync_ramp_suitcases(props: Dictionary, extra: Dictionary, colors: Array) -> void:
+	var right := props.get(PropKind.SUITCASES) as Node3D
+	if right != null:
+		if colors.size() >= 1:
+			_paint_carry_suitcase(right, int(colors[0]))
+			right.visible = true
+		else:
+			right.visible = false
+	var extras: Array = extra.get(PropKind.SUITCASES, [])
+	if not extras.is_empty():
+		var left := extras[0] as Node3D
+		if colors.size() >= 2:
+			_paint_carry_suitcase(left, int(colors[1]))
+			left.visible = true
+		else:
+			left.visible = false
+
+
+static func _paint_carry_suitcase(bag_node: Node3D, color_idx: int) -> void:
+	if not bag_node.has_meta(&"bag_color") or int(bag_node.get_meta(&"bag_color")) != color_idx:
+		Bag.paint_suitcase(bag_node, color_idx)
+		bag_node.set_meta(&"bag_color", color_idx)
+
+
+static func _set_suitcase_carry(node: Node3D, arm_side: int, carry_active: bool) -> void:
+	var meta := SUITCASE_R_CARRY_META if arm_side == 0 else SUITCASE_L_CARRY_META
+	if not carry_active and not node.has_meta(meta):
+		return
+	var arm: CarryArm
+	if node.has_meta(meta):
+		arm = node.get_meta(meta) as CarryArm
+	else:
+		var skeletons := node.find_children("*", "Skeleton3D", true, false)
+		if skeletons.is_empty():
+			return
+		var skeleton := skeletons[0] as Skeleton3D
+		arm = CarryArm.new()
+		arm.name = "RampSuitcaseArmR" if arm_side == 0 else "RampSuitcaseArmL"
+		arm.side = arm_side
+		arm.holds = true
+		arm.angle_degrees = 16.0
+		arm.swing_kept = 0.28
+		arm.lean_back_degrees = -4.0
+		arm.rest_twist_weight = 1.0
+		arm.twist_degrees = 6.0
+		arm.grip_curl = 1.0
+		arm.active = false
+		skeleton.add_child(arm)
+		node.set_meta(meta, arm)
+	if is_instance_valid(arm):
+		arm.active = carry_active
+
+
 ## Currently visible PropKind on `node`, or PropKind.NONE.
 static func active_prop(node: Node3D) -> PropKind:
 	if node == null or not node.has_meta(PROP_META):
@@ -412,9 +481,11 @@ static func _ensure(node: Node3D) -> Dictionary:
 		PropKind.MAGAZINE: _add_prop(att_r, _build_magazine()),
 		PropKind.CLOTH: _add_prop(att_r, _build_cloth()),
 		PropKind.TRASH_BAG: _add_prop(att_r, _build_trash_bag()),
+		PropKind.SUITCASES: _add_prop(att_r, _build_carry_suitcase("SuitcaseR", true)),
 	}
 	var extra := {
 		PropKind.MARSHAL_WANDS: [_add_prop(att_l, _build_marshal_wand("MarshalWandL", false))],
+		PropKind.SUITCASES: [_add_prop(att_l, _build_carry_suitcase("SuitcaseL", false))],
 	}
 	var rec := {"att_r": att_r, "att_l": att_l, "props": props, "extra": extra}
 	node.set_meta(PROP_META, rec)
@@ -720,6 +791,27 @@ static func _build_marshal_wand(node_name: String, right_hand: bool) -> Node3D:
 	)
 	root.add_child(grip)
 	root.add_child(cone)
+	return root
+
+
+static func _build_carry_suitcase(node_name: String, right_hand: bool) -> Node3D:
+	var root := Node3D.new()
+	root.name = node_name
+	root.position = Vector3(0.038 if right_hand else -0.038, 0.16, 0.0)
+	var bag := BaggageViews.BAG_SCENE.instantiate() as Node3D
+	bag.name = "SuitcaseMesh"
+	bag.transform = Transform3D(
+		(
+			(
+				Basis(Vector3.BACK, Vector3.RIGHT, Vector3.UP)
+				if right_hand
+				else Basis(Vector3.FORWARD, Vector3.LEFT, Vector3.UP)
+			)
+			. scaled(Vector3.ONE * 0.80)
+		),
+		Vector3.ZERO,
+	)
+	root.add_child(bag)
 	return root
 
 

@@ -52,20 +52,23 @@ func test_cart_shuttle_animates_out_to_stand_during_load_lead_and_settles_loaded
 	assert_array(dispatched).is_equal([[1, BagTestWorld.FLIGHT, cart_id]])
 	assert_int(_world.sim.shuttles().size()).is_equal(1)
 	var shuttle := _world.sim.shuttles()[0]
-	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.LOADING)
+	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.TRANSFER_OUT)
 	assert_int(bag.shuttle_id).is_equal(shuttle.id)
 	assert_int(bag.state).is_equal(Bag.State.IN_ROOM)
-	assert_bool(shuttle.carrying_bags()).is_true()
+	assert_array(shuttle.carried_bag_ids).is_equal([bag.id])
+	assert_bool(shuttle.carrying_bags()).is_false()
 	assert_int(shuttle.unload_tick).is_less(_world.flights.doors_close_tick(BagTestWorld.FLIGHT))
-	# Bag leaves the end stack once loaded onto the cart; cart node appears with Cart_Bags visible.
+	# Bag leaves end stack once picked up; cart node appears and gains Cart_Bags at start_tick.
 	assert_object(_views.node_for(bag.id)).is_null()
 	var cart_node := _views.shuttle_node_for(shuttle.id)
 	assert_object(cart_node).is_not_null()
 	var cart_bags := cart_node.find_child(BaggageViews.CART_BAGS_NODE, true, false) as Node3D
 	assert_object(cart_bags).is_not_null()
-	assert_bool(cart_bags.visible).is_true()
+	assert_bool(cart_bags.visible).is_false()
 	_world.run_to(shuttle.start_tick)
 	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.OUTBOUND)
+	assert_bool(shuttle.carrying_bags()).is_true()
+	assert_bool(cart_bags.visible).is_true()
 	# Mid-outbound: cart moves smoothly toward the plane stand cargo point.
 	var mid_tick := int((shuttle.start_tick + shuttle.arrive_tick) / 2.0)
 	_world.run_to(mid_tick)
@@ -223,59 +226,36 @@ func test_decorative_cart_outside_bag_room_does_not_service_that_room() -> void:
 
 
 func test_plan_route_guarantees_wall_clear_apron_segments() -> void:
-	for x in range(4, 9):
-		_world.grid.apply(BuildEdit.place_wall(Vector2i(x, 4), BuildGrid.Side.NORTH))
-		_world.grid.apply(BuildEdit.place_wall(Vector2i(x, 8), BuildGrid.Side.SOUTH))
+	var grid := BuildGrid.new(Vector2i(14, 12))
 	for y in range(4, 9):
-		_world.grid.apply(BuildEdit.place_wall(Vector2i(4, y), BuildGrid.Side.WEST))
-		_world.grid.apply(BuildEdit.place_wall(Vector2i(8, y), BuildGrid.Side.EAST))
-	# Case A: outside origin -> target must keep EVERY segment wall-clear.
-	var ext_origin := _world.grid.cell_to_world(Vector2i(6, 9))
-	var target := _world.grid.cell_to_world(Vector2i(6, 1))
-	var ext_pts := BaggageShuttle.plan_route(_world.grid, ext_origin, target)
+		for x in range(4, 9):
+			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	for x in range(4, 9):
+		grid.apply(BuildEdit.place_wall(Vector2i(x, 4), BuildGrid.Side.NORTH))
+		grid.apply(BuildEdit.place_wall(Vector2i(x, 8), BuildGrid.Side.SOUTH))
+	for y in range(4, 9):
+		grid.apply(BuildEdit.place_wall(Vector2i(4, y), BuildGrid.Side.WEST))
+		grid.apply(BuildEdit.place_wall(Vector2i(8, y), BuildGrid.Side.EAST))
+	# Case A: outside apron origin -> target must keep EVERY segment wall-clear.
+	var ext_origin := grid.cell_to_world(Vector2i(6, 9))
+	var target := grid.cell_to_world(Vector2i(6, 1))
+	var ext_pts := BaggageShuttle.plan_route(grid, ext_origin, target)
 	assert_int(ext_pts.size()).is_greater(2)
 	for i in ext_pts.size() - 1:
-		(
-			assert_bool(BaggageShuttle.segment_hits_wall(_world.grid, ext_pts[i], ext_pts[i + 1]))
-			. is_false()
-		)
-	# Case B: enclosed bag_room with an internal partition wall inside room_rect ->
-	# routes around the internal partition inside the room, exits once through the
-	# exterior wall face, and keeps all subsequent apron segments wall-clear.
-	_world.grid.apply(BuildEdit.place_wall(Vector2i(5, 7), BuildGrid.Side.WEST))
-	_world.grid.apply(BuildEdit.place_wall(Vector2i(5, 7), BuildGrid.Side.SOUTH))
+		assert_bool(BaggageShuttle.segment_hits_wall(grid, ext_pts[i], ext_pts[i + 1])).is_false()
+	# Case B: enclosed bag_room with NO baggage_bay_door -> B2 refuses wall-crossing shortcut.
+	grid.apply(BuildEdit.place_wall(Vector2i(5, 7), BuildGrid.Side.WEST))
+	grid.apply(BuildEdit.place_wall(Vector2i(5, 7), BuildGrid.Side.SOUTH))
 	var bag_room := Rect2i(4, 6, 3, 3)
-	assert_bool(_world.grid.apply(BuildEdit.place_room(bag_room, &"bag_room")).ok).is_true()
-	var room_origin := _world.grid.cell_to_world(Vector2i(5, 7))
-	var room_pts := BaggageShuttle.plan_route(_world.grid, room_origin, target)
-	assert_int(room_pts.size()).is_greater(3)
-	var apron_idx := -1
-	for i in room_pts.size():
-		if not bag_room.has_point(_world.grid.world_to_cell(room_pts[i])):
-			apron_idx = i
-			break
-		assert_int(_world.grid.world_to_cell(room_pts[i]).y).is_greater_equal(bag_room.position.y)
-	assert_int(apron_idx).is_greater_equal(2)
-	for i in apron_idx - 1:
-		(
-			assert_bool(
-				BaggageShuttle.segment_hits_wall(_world.grid, room_pts[i], room_pts[i + 1], true)
-			)
-			. override_failure_message("interior seg=%d pts=%s" % [i, room_pts])
-			. is_false()
-		)
-	for i in range(apron_idx, room_pts.size() - 1):
-		(
-			assert_bool(BaggageShuttle.segment_hits_wall(_world.grid, room_pts[i], room_pts[i + 1]))
-			. override_failure_message("apron_idx=%d seg=%d pts=%s" % [apron_idx, i, room_pts])
-			. is_false()
-		)
-	# Case C: exterior DOOR on bag_room -> exits through the door with zero solid wall crossings.
+	assert_bool(grid.apply(BuildEdit.place_room(bag_room, &"bag_room")).ok).is_true()
+	var room_origin := grid.cell_to_world(Vector2i(5, 7))
+	var no_door_pts := BaggageShuttle.plan_route(grid, room_origin, target)
+	assert_array(no_door_pts).is_empty()
+	# Case C: passenger WallKind.DOOR on bag_room -> B2 never routes shuttles through passenger doors.
 	(
 		assert_bool(
 			(
-				_world
-				. grid
+				grid
 				. apply(
 					BuildEdit.place_wall(
 						Vector2i(4, 7), BuildGrid.Side.WEST, BuildGrid.WallKind.DOOR
@@ -286,13 +266,19 @@ func test_plan_route_guarantees_wall_clear_apron_segments() -> void:
 		)
 		. is_true()
 	)
-	var door_pts := BaggageShuttle.plan_route(_world.grid, room_origin, target)
-	assert_int(door_pts.size()).is_greater(3)
-	for i in door_pts.size() - 1:
+	var pax_door_pts := BaggageShuttle.plan_route(grid, room_origin, target)
+	assert_array(pax_door_pts).is_empty()
+	# Case D: exterior baggage_bay_door on bag_room -> routes orthogonally through bay door.
+	assert_bool(grid.apply(BuildEdit.place_wall(Vector2i(4, 7), BuildGrid.Side.WEST)).ok).is_true()
+	for edit in DoorPlacement.edits_for(
+		grid, BuildEdit.place_object(BuildCatalog.BAY_DOOR_ID, Vector2i(4, 7), 3)
+	):
+		assert_bool(grid.apply(edit).ok).is_true()
+	var bay_pts := BaggageShuttle.plan_route(grid, room_origin, target)
+	assert_int(bay_pts.size()).is_greater(3)
+	for i in bay_pts.size() - 1:
 		(
-			assert_bool(
-				BaggageShuttle.segment_hits_wall(_world.grid, door_pts[i], door_pts[i + 1], true)
-			)
-			. override_failure_message("door seg=%d pts=%s" % [i, door_pts])
+			assert_bool(BaggageShuttle.segment_hits_wall(grid, bay_pts[i], bay_pts[i + 1], false))
+			. override_failure_message("bay door seg=%d pts=%s" % [i, bay_pts])
 			. is_false()
 		)

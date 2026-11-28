@@ -226,6 +226,10 @@ func test_cart_demolition_mid_trip_cancels_shuttle_and_releases_worker() -> void
 	var bag := _bag_world.sim.check_in(1, BagTestWorld.FLIGHT, desk)
 	_bag_world.run_to(bag.cutoff_tick)
 	assert_int(_bag_world.sim.shuttles().size()).is_equal(1)
+	var shuttle: BaggageShuttle = _bag_world.sim.shuttles()[0]
+	_bag_world.run_to(shuttle.start_tick)
+	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.OUTBOUND)
+	assert_bool(shuttle.bag_ids.has(bag.id)).is_true()
 	var worker := staff.get_member(ramp_id)
 	assert_int(worker.ramp_job).is_equal(StaffMember.RampJob.SHUTTLE)
 

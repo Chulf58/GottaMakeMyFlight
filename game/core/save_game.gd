@@ -176,7 +176,10 @@ signal loaded(ok: bool)
 ## version 48 saves are refused (no migration).
 ## 50: Airport Goals tracker (part "goals", AirportGoals v1: active_ids,
 ## completed_ids, counters); version 49 saves are refused (no migration).
-const SAVE_VERSION := 50
+## 51: Bag Room Rethink B2: BaggageSnapshot v5 (TO_BAG_ROOM/TRANSFER_OUT/TRANSFER_IN
+## phases, bay_door_id, transfer_start_tick, pickup/bay anchors, carried_bag_ids);
+## version 50 saves are refused (no migration).
+const SAVE_VERSION := 51
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

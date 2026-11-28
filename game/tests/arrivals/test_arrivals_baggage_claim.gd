@@ -420,12 +420,17 @@ func test_connect_gating_inbound_shuttle_claim_bonus_and_cart_chaining() -> void
 				for entry: Dictionary in PassengerThoughts.entries(p):
 					if int(entry["kind"]) == PassengerThoughts.Kind.CLAIMED_BAG:
 						thought_found = true
-		if chain_bag == null and seen_returning_carrying and bag_sim.shuttles().is_empty():
-			# Cart just freed from inbound return: check in an outbound bag that will
-			# reach cutoff after riding the 10-cell belt and reuse the exact same cart!
+		var has_inbound := false
+		for s: BaggageShuttle in bag_sim.shuttles():
+			if s.inbound:
+				has_inbound = true
+				break
+		if chain_bag == null and seen_returning_carrying and not has_inbound:
+			# Inbound shuttle just freed the cart (another BOARDING wave may also claim it
+			# under B2): check in an outbound bag that will ride the belt and chain onto the cart!
 			chain_bag = bag_sim.check_in(99001, starter, grid.object_at(Vector2i(14, 11) + offset))
 			if chain_bag != null:
-				chain_bag.cutoff_tick = clock.tick + 240
+				chain_bag.cutoff_tick = clock.tick + 360
 		if bag_sim.inbound_claimed_total >= inbound_bags.size():
 			break
 
@@ -441,7 +446,7 @@ func test_connect_gating_inbound_shuttle_claim_bonus_and_cart_chaining() -> void
 
 	# Also wait for the chained outbound bag to dispatch on the freed cart.
 	assert_object(chain_bag).is_not_null()
-	for _j in 600:
+	for _j in 900:
 		SaveTestKit.step(m)
 		if chain_bag.state == Bag.State.LOADED:
 			break
@@ -567,7 +572,7 @@ func test_save_v49_round_trip_v47_refusal_and_save_links_validation() -> void:
 
 	# Version 47 refusal.
 	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_save_path))
-	assert_int(int(raw["save_version"])).is_equal(50)
+	assert_int(int(raw["save_version"])).is_equal(51)
 	var v47: Dictionary = raw.duplicate(true)
 	v47["save_version"] = 47
 	FileAccess.open(_save_path, FileAccess.WRITE).store_string(JSON.stringify(v47))

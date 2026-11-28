@@ -553,8 +553,8 @@ func test_snapshot_validation_and_save_game_v50_load_suppresses_payouts() -> voi
 	bad_counter["counters"]["departing_made"] = -1
 	assert_str(AirportGoals.validation_problem(bad_counter)).is_not_empty()
 
-	# SaveGame v50 round-trip + loading suppression check.
-	assert_int(SaveGame.SAVE_VERSION).is_equal(50)
+	# SaveGame v51 round-trip + loading suppression check.
+	assert_int(SaveGame.SAVE_VERSION).is_equal(51)
 	var src := _boot_world(SEED)
 	var src_goals := src.get_node("AirportGoals") as AirportGoals
 	var src_save := src.get_node("SaveGame") as SaveGame
@@ -579,6 +579,6 @@ func test_snapshot_validation_and_save_game_v50_load_suppresses_payouts() -> voi
 
 	# v49 save is refused.
 	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_save_path))
-	assert_int(int(raw["save_version"])).is_equal(50)
-	raw["save_version"] = 49
+	assert_int(int(raw["save_version"])).is_equal(51)
+	raw["save_version"] = 50
 	assert_bool(dst_save.load_world(raw)).is_false()
