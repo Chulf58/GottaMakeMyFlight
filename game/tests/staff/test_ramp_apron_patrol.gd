@@ -414,6 +414,8 @@ func test_shuttle_pose_and_smooth_return_preserved() -> void:
 	var bag := bag_world.sim.check_in(1, BagTestWorld.FLIGHT, bag_world.line())
 	bag_world.run_to(bag.cutoff_tick)
 	var shuttle := bag_world.sim.shuttles()[0]
+	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.TO_BAG_ROOM)
+	bag_world.run_to(shuttle.start_tick)
 	chars.sync(true)
 	chars.draw()
 	var node := chars.node_for(ramp_id)

@@ -114,6 +114,8 @@ func _clear_bay_apron_north(x_start: int, y_end: int) -> void:
 		for x in range(x_start, x_start + 2):
 			if grid.floor_at(Vector2i(x, y)) != BuildGrid.FLOOR_NONE:
 				grid.apply(BuildEdit.remove_floor(Vector2i(x, y)))
+	for x in range(x_start, x_start + 2):
+		grid.apply(BuildEdit.remove_wall(Vector2i(x, 0), BuildGrid.Side.NORTH))
 
 
 func cart(cell := Vector2i(11, 7), facing := 0) -> int:

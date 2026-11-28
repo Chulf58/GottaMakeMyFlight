@@ -114,6 +114,7 @@ var _poses: Dictionary = {}
 var _ramp_idle_slots: Dictionary = {}
 ## Role.RAMP member id -> {"was_busy", "returning", "tick"} for smooth job transitions.
 var _ramp_state: Dictionary = {}
+var _ramp_approach: Dictionary = {}
 var _ramp_loop: Dictionary = {}
 var _ramp_loop_key := ""
 var _break_views: Dictionary = {}
@@ -177,7 +178,7 @@ func _notification(what: int) -> void:
 func _process(_delta: float) -> void:
 	if _dirty:
 		_dirty = false
-		sync(true)
+		sync(true, false)
 	draw()
 
 
@@ -373,11 +374,12 @@ func bin_yaw(spot: Vector2i, bin: Vector2i) -> float:
 
 ## Records positions for the members on the floor and updates their poses. With
 ## `snap` both recorded positions are set to now, so nothing glides.
-func sync(snap: bool = false) -> void:
+func sync(snap: bool = false, snap_ramp: bool = true) -> void:
 	var seen := {}
 	var pose_ctx := StaffStationPose.build_context(staff, _flights(), plane_fleet, _baggage())
 	var tick_now := _tick()
 	var back_in_time := _last_sync_tick >= 0.0 and tick_now < _last_sync_tick
+	var ramp_snap := (snap and snap_ramp) or back_in_time
 	_last_sync_tick = tick_now
 	if snap or back_in_time:
 		_break_views.clear()
@@ -386,11 +388,13 @@ func sync(snap: bool = false) -> void:
 		_rush_state.clear()
 		_served_once.clear()
 		_last_pose_key.clear()
-	if snap:
+	if ramp_snap:
 		_ramp_idle_slots.clear()
 		_ramp_state.clear()
+		_ramp_approach.clear()
 		_ramp_loop.clear()
 		_ramp_loop_key = ""
+	if snap:
 		_prev_yaw.clear()
 		_cur_yaw.clear()
 	var resting_pos := _prepare_break_views(tick_now, snap)
@@ -403,14 +407,15 @@ func sync(snap: bool = false) -> void:
 			var ramp_pose := {}
 			var job_started := false
 			if m.ramp_job == StaffMember.RampJob.NONE:
+				_ramp_approach.erase(id)
 				var slot_idx := _assign_ramp_idle_slot(id)
 				ramp_pose = _idle_ramp_patrol_pose(
-					id, slot_idx, _cached_ramp_loop(), tick_now, snap
+					id, slot_idx, _cached_ramp_loop(), tick_now, ramp_snap
 				)
 			else:
 				_ramp_idle_slots.erase(id)
 				job_started = not bool(_ramp_state.get(id, {}).get("was_busy", false))
-				ramp_pose = _ramp_pose(m)
+				ramp_pose = _ramp_pose(m, ramp_snap)
 				_ramp_state[id] = {"was_busy": true, "returning": false, "tick": int(tick_now)}
 			if ramp_pose.is_empty():
 				continue
@@ -425,7 +430,7 @@ func sync(snap: bool = false) -> void:
 				_nodes[id] = node
 			var ramp_now: Vector3 = ramp_pose["pos"]
 			var ramp_yaw := float(ramp_pose["yaw"])
-			if snap or fresh or job_started:
+			if ramp_snap or fresh:
 				_prev[id] = ramp_now
 				_prev_yaw[id] = ramp_yaw
 				node.position = ramp_now
@@ -637,6 +642,7 @@ func draw() -> void:
 			and m.is_moving()
 			and (m.state == StaffMember.State.IDLE or cleaner_walking_to_mess)
 		)
+		var ramp_colors := _ramp_bag_colors(m)
 		(
 			StaffHandProps
 			. update(
@@ -653,6 +659,7 @@ func draw() -> void:
 				cleaner_working,
 				cleaner_patrolling,
 				cleaner_bag,
+				ramp_colors,
 			)
 		)
 		var player := node.get_node("AnimationPlayer") as AnimationPlayer
@@ -687,7 +694,7 @@ func _sync_follow_anchor() -> void:
 func _on_ticked(_tick: int) -> void:
 	var snap := _dirty
 	_dirty = false
-	sync(snap)
+	sync(snap, false)
 
 
 ## Inside a tick the tick's own sync shows the change; between ticks the next
@@ -703,6 +710,12 @@ func _mark_dirty() -> void:
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 	_ramp_loop.clear()
 	_ramp_loop_key = ""
+	for rid: int in _ramp_state.keys():
+		if _ramp_state[rid] is Dictionary:
+			(_ramp_state[rid] as Dictionary)["path"] = []
+	for rid: int in _ramp_approach.keys():
+		if _ramp_approach[rid] is Dictionary:
+			(_ramp_approach[rid] as Dictionary)["path"] = []
 	_mark_dirty()
 
 
@@ -842,6 +855,7 @@ func _release(id: int) -> void:
 	_poses.erase(id)
 	_ramp_idle_slots.erase(id)
 	_ramp_state.erase(id)
+	_ramp_approach.erase(id)
 	_break_views.erase(id)
 	_chat_state.erase(id)
 	_cheer_until.erase(id)
@@ -940,9 +954,34 @@ func _live_tug_transform(flight_id: String) -> Transform3D:
 	return Transform3D.IDENTITY
 
 
-func _ramp_pose(m: StaffMember) -> Dictionary:
+func carried_bag_colors_of(id: int) -> Array[int]:
+	var m := staff.get_member(id) if staff != null else null
+	return _ramp_bag_colors(m)
+
+
+func _ramp_bag_colors(m: StaffMember) -> Array[int]:
+	var out: Array[int] = []
+	if m == null or m.role != StaffMember.Role.RAMP or m.ramp_job != StaffMember.RampJob.SHUTTLE:
+		return out
+	var bag_sim := _baggage()
+	var shuttle := bag_sim.get_shuttle(m.ramp_shuttle_id) if bag_sim != null else null
+	if shuttle == null:
+		return out
+	if (
+		shuttle.phase != BaggageShuttle.Phase.TRANSFER_OUT
+		and shuttle.phase != BaggageShuttle.Phase.TRANSFER_IN
+	):
+		return out
+	for bid in shuttle.carried_bag_ids:
+		var bag := bag_sim.get_bag(bid)
+		out.append(bag.color if bag != null else 0)
+	return out
+
+
+func _ramp_pose(m: StaffMember, snap := false) -> Dictionary:
 	if m.ramp_job == StaffMember.RampJob.SHUTTLE:
-		return _shuttle_pose(m)
+		return _shuttle_pose(m, snap)
+	_ramp_approach.erase(m.id)
 	if m.ramp_job == StaffMember.RampJob.PUSHBACK:
 		return _pushback_pose(m)
 	if m.ramp_job == StaffMember.RampJob.MARSHAL:
@@ -968,15 +1007,42 @@ func _idle_ramp_patrol_pose(
 		var step_m := RampPatrol.PATROL_WALK_MPS / float(SimClock.TICK_RATE)
 		var path: Array = prev_st.get("path", [])
 		var idx := int(prev_st.get("idx", 1))
-		if bool(prev_st.get("was_busy", false)):
+		if (
+			bool(prev_st.get("was_busy", false))
+			or (bool(prev_st.get("returning", false)) and path.is_empty())
+		):
 			var plan := _plan_ramp_return(from_pos, patrol["pos"], ramp_loop, tick_now, slot_idx)
 			if not bool(plan["ok"]):
+				var cell := grid.world_to_cell(from_pos) if grid != null else Vector2i.ZERO
+				var is_indoor := grid != null and (grid.is_indoor(cell) or grid.room_at(cell) != 0)
+				var blocked := (
+					is_indoor
+					or BaggageShuttle.segment_hits_wall(grid, from_pos, patrol["pos"], false)
+				)
+				if blocked:
+					_ramp_state[id] = {
+						"was_busy": false,
+						"returning": true,
+						"path": [],
+						"idx": 1,
+						"tick": int(tick_now)
+					}
+					return _idle_hold_pose(id, from_pos, patrol["yaw"])
 				_ramp_state[id] = {"was_busy": false, "returning": false, "tick": int(tick_now)}
 				return patrol
 			path = plan["points"]
 			idx = 1
 		var step := _step_return_path(from_pos, path, idx, step_m, grid)
 		if not step.is_empty():
+			if BaggageShuttle.segment_hits_wall(grid, from_pos, step["pose"]["pos"], false):
+				_ramp_state[id] = {
+					"was_busy": false,
+					"returning": true,
+					"path": [],
+					"idx": 1,
+					"tick": int(tick_now)
+				}
+				return _idle_hold_pose(id, from_pos, patrol["yaw"])
 			_ramp_state[id] = {
 				"was_busy": false,
 				"returning": true,
@@ -998,22 +1064,48 @@ func _plan_ramp_return(
 ) -> Dictionary:
 	var grid := _grid()
 	var fl := _flights()
-	var plan0 := RampPatrol.plan_return_path(from_pos, patrol_pos, fl, grid)
+	var prefix: Array[Vector3] = []
+	var apron_start := from_pos
+	if (
+		grid != null
+		and (
+			grid.is_indoor(grid.world_to_cell(from_pos))
+			or grid.room_at(grid.world_to_cell(from_pos)) != 0
+		)
+	):
+		prefix = BaggageShuttle.exit_path_to_apron(grid, from_pos)
+		if prefix.is_empty():
+			return {"ok": false, "points": [] as Array[Vector3]}
+		apron_start = prefix[prefix.size() - 1]
+	var plan0 := RampPatrol.plan_return_path(apron_start, patrol_pos, fl, grid)
 	if not bool(plan0["ok"]):
+		var apron_route := BaggageShuttle.plan_route(grid, apron_start, patrol_pos)
+		if apron_route.size() >= 2:
+			return {"ok": true, "points": _combine_paths(prefix, apron_route)}
 		return plan0
-	var pts: Array = plan0["points"]
-	var dist_m := 0.0
-	for i in pts.size() - 1:
-		var a := pts[i] as Vector3
-		var b := pts[i + 1] as Vector3
-		dist_m += Vector2(b.x - a.x, b.z - a.z).length()
+	var pts: Array[Vector3] = _combine_paths(prefix, plan0["points"])
+	var dist_m := BaggageShuttle.route_length(pts)
 	var step_m := RampPatrol.PATROL_WALK_MPS / float(SimClock.TICK_RATE)
 	var est_ticks := roundi(dist_m / step_m)
 	if est_ticks <= 1:
-		return plan0
+		return {"ok": true, "points": pts}
 	var arr_pose := RampPatrol.sample(ramp_loop, tick_now + float(est_ticks), slot_idx, grid)
-	var plan_arr := RampPatrol.plan_return_path(from_pos, arr_pose["pos"], fl, grid)
-	return plan_arr if bool(plan_arr["ok"]) else plan0
+	var plan_arr := RampPatrol.plan_return_path(apron_start, arr_pose["pos"], fl, grid)
+	if bool(plan_arr["ok"]):
+		return {"ok": true, "points": _combine_paths(prefix, plan_arr["points"])}
+	return {"ok": true, "points": pts}
+
+
+static func _combine_paths(prefix: Array[Vector3], tail: Array) -> Array[Vector3]:
+	if prefix.is_empty():
+		var out: Array[Vector3] = []
+		for p: Vector3 in tail:
+			out.append(p)
+		return out
+	var out: Array[Vector3] = prefix.duplicate()
+	for i in range(1, tail.size()):
+		out.append(tail[i] as Vector3)
+	return out
 
 
 func _step_return_path(
@@ -1066,23 +1158,213 @@ func _cached_ramp_loop() -> Dictionary:
 	return _ramp_loop
 
 
-func _shuttle_pose(m: StaffMember) -> Dictionary:
+func _idle_hold_pose(id: int, pos: Vector3, fallback_yaw: float) -> Dictionary:
+	return {
+		"pos": pos,
+		"yaw": float(_cur_yaw.get(id, fallback_yaw)),
+		"clip": "idle",
+		"speed": 1.0,
+		"can_fidget": true,
+	}
+
+
+func _set_ramp_tracking(id: int, shuttle: BaggageShuttle) -> void:
+	_ramp_approach[id] = {"shuttle_id": shuttle.id, "phase": shuttle.phase, "active": false}
+
+
+func _shuttle_pose(m: StaffMember, snap := false) -> Dictionary:
 	var bag_sim := _baggage()
 	var shuttle := bag_sim.get_shuttle(m.ramp_shuttle_id) if bag_sim != null else null
 	if shuttle == null:
+		_ramp_approach.erase(m.id)
 		return {}
-	var cart_xform := shuttle.pose_at(bag_sim.tick, bag_sim.grid)
-	var pos := cart_xform * SHUTTLE_OFFSET
-	pos.y = BaggageShuttle.ground_y(bag_sim.grid, pos)
-	if shuttle.phase == BaggageShuttle.Phase.UNLOADING:
-		var to_cart := cart_xform.origin - pos
-		return {"pos": pos, "yaw": atan2(to_cart.x, to_cart.z), "clip": "idle", "speed": 1.0}
-	var forward := cart_xform.basis.z.slide(Vector3.UP)
-	var yaw := atan2(forward.x, forward.z) if forward.length() > 0.001 else 0.0
-	var next_xform := shuttle.pose_at(bag_sim.tick + 1, bag_sim.grid)
-	var step_m := (next_xform * SHUTTLE_OFFSET - pos).slide(Vector3.UP).length()
-	var speed := clampf((step_m * SimClock.TICK_RATE) / CLIP_WALK_MPS[m.role], 0.5, 2.5)
-	return {"pos": pos, "yaw": yaw, "clip": "walk", "speed": speed}
+	var target_pose := shuttle.agent_pose_at(bag_sim.tick, bag_sim.grid, bag_sim)
+	if snap or not _cur.has(m.id) or bag_sim.grid == null:
+		_set_ramp_tracking(m.id, shuttle)
+		return target_pose
+	var cur_pos: Vector3 = _cur[m.id]
+	var target_pos: Vector3 = target_pose["pos"]
+	var step_m := BaggageShuttle.RAMP_WALK_MPS / float(SimClock.TICK_RATE)
+	var cur_indoor := bag_sim.grid.is_indoor(bag_sim.grid.world_to_cell(cur_pos))
+	var target_indoor := bag_sim.grid.is_indoor(bag_sim.grid.world_to_cell(target_pos))
+	var hits_wall := BaggageShuttle.segment_hits_wall(bag_sim.grid, cur_pos, target_pos, false)
+	var app: Dictionary = _ramp_approach.get(m.id, {})
+	var tracking := (
+		int(app.get("shuttle_id", 0)) == shuttle.id and not bool(app.get("active", false))
+	)
+	var in_room_transfer := (
+		(
+			shuttle.phase == BaggageShuttle.Phase.TRANSFER_OUT
+			or shuttle.phase == BaggageShuttle.Phase.TRANSFER_IN
+		)
+		and cur_indoor
+		and target_indoor
+		and not hits_wall
+	)
+	var start_approach := (
+		bool(app.get("active", false))
+		or cur_indoor != target_indoor
+		or hits_wall
+		or (
+			not tracking and not in_room_transfer and cur_pos.distance_to(target_pos) > step_m * 2.0
+		)
+	)
+	if not start_approach:
+		_set_ramp_tracking(m.id, shuttle)
+		return target_pose
+	return _advance_shuttle_approach(
+		m.id,
+		cur_pos,
+		target_pos,
+		target_pose,
+		cur_indoor,
+		target_indoor,
+		hits_wall,
+		step_m,
+		shuttle,
+		bag_sim.grid
+	)
+
+
+func _advance_shuttle_approach(
+	id: int,
+	cur_pos: Vector3,
+	target_pos: Vector3,
+	target_pose: Dictionary,
+	cur_indoor: bool,
+	target_indoor: bool,
+	hits_wall: bool,
+	step_m: float,
+	shuttle: BaggageShuttle,
+	grid: BuildGrid,
+) -> Dictionary:
+	var app: Dictionary = _ramp_approach.get(id, {})
+	var prev_path: Array = app.get("path", [])
+	var target_moved := (
+		not target_indoor
+		and not prev_path.is_empty()
+		and (prev_path[prev_path.size() - 1] as Vector3).distance_to(target_pos) > 1.0
+	)
+	var need_replan := (
+		not bool(app.get("active", false))
+		or int(app.get("shuttle_id", 0)) != shuttle.id
+		or int(app.get("phase", -1)) != shuttle.phase
+		or prev_path.is_empty()
+		or target_moved
+	)
+	if need_replan:
+		if (
+			cur_indoor == target_indoor
+			and not hits_wall
+			and cur_pos.distance_to(target_pos) <= step_m * 2.0
+		):
+			_set_ramp_tracking(id, shuttle)
+			return target_pose
+		var path := _build_shuttle_approach(cur_pos, shuttle, target_pos, grid)
+		if path.size() < 2:
+			return _hold_or_target(
+				id, cur_pos, target_pose, cur_indoor != target_indoor or hits_wall, shuttle
+			)
+		app = {
+			"shuttle_id": shuttle.id,
+			"phase": shuttle.phase,
+			"path": path,
+			"idx": 1,
+			"active": true,
+		}
+	var step := _step_return_path(cur_pos, app["path"], int(app["idx"]), step_m, grid)
+	if step.is_empty():
+		var arrived := (
+			cur_indoor == target_indoor
+			and not hits_wall
+			and cur_pos.distance_to(target_pos) <= maxf(step_m * 2.5, 0.5)
+		)
+		if arrived:
+			_set_ramp_tracking(id, shuttle)
+			return target_pose
+		var next_path := _build_shuttle_approach(cur_pos, shuttle, target_pos, grid)
+		step = (
+			_step_return_path(cur_pos, next_path, 1, step_m, grid) if next_path.size() >= 2 else {}
+		)
+		if step.is_empty():
+			return _hold_or_target(
+				id, cur_pos, target_pose, cur_indoor != target_indoor or hits_wall, shuttle
+			)
+		app = {
+			"shuttle_id": shuttle.id,
+			"phase": shuttle.phase,
+			"path": next_path,
+			"idx": 1,
+			"active": true,
+		}
+	app["idx"] = int(step["idx"])
+	_ramp_approach[id] = app
+	var pose: Dictionary = step["pose"]
+	pose["speed"] = BaggageShuttle.RAMP_WALK_MPS / CLIP_WALK_MPS[StaffMember.Role.RAMP]
+	return pose
+
+
+func _hold_or_target(
+	id: int, cur_pos: Vector3, target_pose: Dictionary, blocked: bool, shuttle: BaggageShuttle
+) -> Dictionary:
+	if blocked:
+		_ramp_approach[id] = {
+			"shuttle_id": shuttle.id, "phase": shuttle.phase, "path": [], "idx": 1, "active": true
+		}
+		return _idle_hold_pose(id, cur_pos, float(target_pose.get("yaw", 0.0)))
+	_set_ramp_tracking(id, shuttle)
+	return target_pose
+
+
+func _apron_approach_path(from_pos: Vector3, dest_pos: Vector3, grid: BuildGrid) -> Array[Vector3]:
+	var apron_plan := RampPatrol.plan_return_path(from_pos, dest_pos, _flights(), grid)
+	if bool(apron_plan["ok"]):
+		return _combine_paths([], apron_plan["points"])
+	var wall_clear := BaggageShuttle.plan_route(grid, from_pos, dest_pos)
+	if wall_clear.size() >= 2:
+		return wall_clear
+	if not BaggageShuttle.segment_hits_wall(grid, from_pos, dest_pos, false):
+		return [from_pos, dest_pos]
+	return []
+
+
+func _build_shuttle_approach(
+	from_pos: Vector3, shuttle: BaggageShuttle, target_pos: Vector3, grid: BuildGrid
+) -> Array[Vector3]:
+	var from_indoor := grid.is_indoor(grid.world_to_cell(from_pos))
+	var target_indoor := grid.is_indoor(grid.world_to_cell(target_pos))
+	var out: Array[Vector3] = []
+	if from_indoor and not target_indoor:
+		var exit_pts := BaggageShuttle.exit_path_to_apron(grid, from_pos)
+		if not exit_pts.is_empty():
+			var tail := _apron_approach_path(exit_pts[exit_pts.size() - 1], target_pos, grid)
+			if tail.size() >= 2:
+				out = _combine_paths(exit_pts, tail)
+	elif not from_indoor and target_indoor:
+		var entry := (
+			BaggageShuttle.entry_path_from_apron(grid, shuttle.bay_door_id, target_pos)
+			if shuttle.bay_door_id > 0
+			else ([] as Array[Vector3])
+		)
+		if not entry.is_empty():
+			var apron := _apron_approach_path(from_pos, entry[0], grid)
+			if apron.size() >= 2 or from_pos.distance_to(entry[0]) <= 0.25:
+				out = _combine_paths(apron, entry)
+		elif shuttle.bay_outside_world != Vector3.ZERO:
+			var apron_fb := _apron_approach_path(from_pos, shuttle.bay_outside_world, grid)
+			if apron_fb.size() >= 2 or from_pos.distance_to(shuttle.bay_outside_world) <= 0.25:
+				for pt in [shuttle.bay_door_world, shuttle.bay_inside_world]:
+					if pt != Vector3.ZERO:
+						apron_fb.append(pt)
+				apron_fb.append(target_pos)
+				out = apron_fb
+	elif not from_indoor and not target_indoor:
+		out = _apron_approach_path(from_pos, target_pos, grid)
+	elif not BaggageShuttle.segment_hits_wall(grid, from_pos, target_pos, false):
+		out = [from_pos, target_pos]
+	else:
+		out = BaggageShuttle.plan_route(grid, from_pos, target_pos)
+	return out
 
 
 func _pushback_pose(m: StaffMember) -> Dictionary:

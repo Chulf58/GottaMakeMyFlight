@@ -184,7 +184,56 @@ static func dispatch_shuttles(sim: BaggageSim) -> void:
 		):
 			continue
 		var plan := sim._shuttle_plan(cart_id, flight_id, stand)
+		if not bool(plan.get("ok", false)):
+			continue
 		_start_shuttle(sim, cart_id, flight_id, stand, plan, group)
+
+
+static func reserves_cart_for_inbound(sim: BaggageSim, cart_id: int) -> bool:
+	if sim.grid == null or sim.flights == null or sim.routes == null:
+		return false
+	var waiting := _on_plane_by_flight(sim)
+	if waiting.is_empty():
+		return false
+	var has_active_inbound_flight := false
+	for flight_id: String in waiting.keys():
+		var state: int = sim.flights.state_of(flight_id)
+		var stand := sim.flights.flight_stand(flight_id)
+		if (
+			not stand.is_empty()
+			and state >= FlightSim.State.AT_STAND
+			and state < FlightSim.State.PUSHBACK
+		):
+			has_active_inbound_flight = true
+			break
+	if not has_active_inbound_flight:
+		return false
+	var ends := sim.routes.inbound_bag_room_ends()
+	if ends.is_empty():
+		return false
+	var rooms := {}
+	for end_cell in ends:
+		var rid := sim.grid.room_at(end_cell)
+		if rid != 0:
+			rooms[rid] = true
+	var cart_is_inbound := false
+	var idle_inbound_count := 0
+	for object_id in sim.grid.object_ids():
+		var record := sim.grid.get_object(object_id)
+		if StringName(record["def"]) != BaggageSim.CART_DEF:
+			continue
+		if sim._cart_busy(object_id):
+			continue
+		var in_inbound_room := false
+		for rid: int in rooms.keys():
+			if RoomRules.piece_inside(sim.grid, object_id, sim.grid.get_room(rid)["rect"]):
+				in_inbound_room = true
+				break
+		if in_inbound_room:
+			idle_inbound_count += 1
+			if object_id == cart_id:
+				cart_is_inbound = true
+	return cart_is_inbound and idle_inbound_count <= 1
 
 
 static func waiting_for_ramp_carts(sim: BaggageSim, out: Array[int]) -> void:
@@ -241,6 +290,65 @@ static func finish_unloading_shuttle(sim: BaggageSim, shuttle: BaggageShuttle) -
 	shuttle.pending_bag_ids.clear()
 
 
+static func start_transfer_in(sim: BaggageSim, shuttle: BaggageShuttle) -> bool:
+	if shuttle.bag_ids.is_empty():
+		return true
+	var drop_cell := drop_cell_for_shuttle(sim, shuttle)
+	if drop_cell == Vector2i(-1, -1):
+		finish_returning_shuttle(sim, shuttle)
+		return true
+	var drop_w := sim.grid.cell_to_world(drop_cell)
+	drop_w.y = BaggageShuttle.ground_y(sim.grid, drop_w)
+	shuttle.pickup_world = drop_w
+	shuttle.phase = BaggageShuttle.Phase.TRANSFER_IN
+	shuttle.load_step_ticks = maxi(1, shuttle.load_step_ticks)
+	_pickup_inbound_batch(sim, shuttle)
+	if shuttle.carried_bag_ids.is_empty():
+		return true
+	shuttle.next_load_tick = sim.tick + shuttle.load_step_ticks
+	return false
+
+
+static func advance_transfer_in(sim: BaggageSim, shuttle: BaggageShuttle) -> bool:
+	while sim.tick >= shuttle.next_load_tick:
+		if not shuttle.carried_bag_ids.is_empty():
+			var drop_cell := drop_cell_for_shuttle(sim, shuttle)
+			for bag_id in shuttle.carried_bag_ids:
+				var bag := sim.get_bag(bag_id)
+				if bag == null or bag.is_settled():
+					continue
+				if drop_cell == Vector2i(-1, -1):
+					settle_lost(sim, bag, Bag.Cause.LOST, sim.tick)
+				else:
+					bag.shuttle_id = 0
+					bag.state = Bag.State.IN_ROOM
+					bag.cell = drop_cell
+					bag.rest_tick = sim.tick
+					bag.wait_tick = sim.tick
+			shuttle.carried_bag_ids.clear()
+			if shuttle.bag_ids.is_empty():
+				return true
+			shuttle.next_load_tick += maxi(1, shuttle.load_step_ticks)
+		else:
+			_pickup_inbound_batch(sim, shuttle)
+			if shuttle.carried_bag_ids.is_empty():
+				return true
+			shuttle.next_load_tick += maxi(1, shuttle.load_step_ticks)
+	return false
+
+
+static func _pickup_inbound_batch(sim: BaggageSim, shuttle: BaggageShuttle) -> void:
+	while (
+		not shuttle.bag_ids.is_empty()
+		and shuttle.carried_bag_ids.size() < BaggageShuttle.CARRY_BATCH_SIZE
+	):
+		var bag_id: int = shuttle.bag_ids.pop_front()
+		var bag := sim.get_bag(bag_id)
+		if bag != null and not bag.is_settled():
+			bag.shuttle_id = shuttle.id
+			shuttle.carried_bag_ids.append(bag_id)
+
+
 static func finish_returning_shuttle(sim: BaggageSim, shuttle: BaggageShuttle) -> void:
 	var drop_cell := drop_cell_for_shuttle(sim, shuttle)
 	for bag_id in shuttle.bag_ids:
@@ -256,6 +364,19 @@ static func finish_returning_shuttle(sim: BaggageSim, shuttle: BaggageShuttle) -
 			bag.rest_tick = sim.tick
 			bag.wait_tick = sim.tick
 	shuttle.bag_ids.clear()
+	for bag_id in shuttle.carried_bag_ids:
+		var bag := sim.get_bag(bag_id)
+		if bag == null or bag.is_settled():
+			continue
+		if drop_cell == Vector2i(-1, -1):
+			settle_lost(sim, bag, Bag.Cause.LOST, sim.tick)
+		else:
+			bag.shuttle_id = 0
+			bag.state = Bag.State.IN_ROOM
+			bag.cell = drop_cell
+			bag.rest_tick = sim.tick
+			bag.wait_tick = sim.tick
+	shuttle.carried_bag_ids.clear()
 
 
 static func _on_plane_by_flight(sim: BaggageSim) -> Dictionary:
@@ -303,24 +424,38 @@ static func _start_shuttle(
 	var sorted := group.duplicate()
 	sorted.sort_custom(func(a: Bag, b: Bag) -> bool: return a.id < b.id)
 	var travel: int = plan["travel"]
+	var entry_ticks := BaggageShuttle.ENTRY_TICKS if sim.shuttle_can_dispatch.is_valid() else 0
 	var shuttle := BaggageShuttle.new()
 	shuttle.id = sim._next_shuttle_id
 	sim._next_shuttle_id += 1
 	shuttle.inbound = true
 	shuttle.cart_id = cart_id
+	shuttle.bay_door_id = int(plan["bay_door_id"])
 	shuttle.flight = flight_id
-	shuttle.phase = BaggageShuttle.Phase.OUTBOUND
+	shuttle.phase = (
+		BaggageShuttle.Phase.TO_BAG_ROOM if entry_ticks > 0 else BaggageShuttle.Phase.OUTBOUND
+	)
 	shuttle.load_start_tick = sim.tick
-	shuttle.load_step_ticks = 1
-	shuttle.next_load_tick = sim.tick
-	shuttle.start_tick = sim.tick
-	shuttle.arrive_tick = sim.tick + travel
+	shuttle.transfer_start_tick = sim.tick + entry_ticks
+	shuttle.load_step_ticks = BaggageShuttle.TRANSFER_LEG_TICKS
+	shuttle.next_load_tick = shuttle.transfer_start_tick
+	shuttle.start_tick = shuttle.transfer_start_tick
+	shuttle.arrive_tick = shuttle.start_tick + travel
 	shuttle.unload_tick = shuttle.arrive_tick + BaggageShuttle.UNLOAD_TICKS
 	shuttle.return_tick = shuttle.unload_tick + travel
 	shuttle.origin_world = plan["origin"]
 	shuttle.origin_yaw = float(plan["origin_yaw"])
 	shuttle.target_world = plan["target"]
 	shuttle.target_yaw = StandPlacement.SIDE_YAW[StandPlacement.side_of(stand)]
+	var drop_cell := drop_cell_for_shuttle(sim, shuttle)
+	var drop_w := (
+		sim.grid.cell_to_world(drop_cell) if drop_cell != Vector2i(-1, -1) else shuttle.origin_world
+	)
+	drop_w.y = BaggageShuttle.ground_y(sim.grid, drop_w)
+	shuttle.pickup_world = drop_w
+	shuttle.bay_inside_world = plan["bay_inside"]
+	shuttle.bay_door_world = plan["bay_door"]
+	shuttle.bay_outside_world = plan["bay_outside"]
 	shuttle.waypoints = plan["route"]
 	for bag: Bag in sorted:
 		bag.shuttle_id = shuttle.id

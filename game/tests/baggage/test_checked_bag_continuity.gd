@@ -207,33 +207,39 @@ func test_one_by_one_visible_cart_loading_preserves_colors_across_ticks() -> voi
 	w.run_to(b0.cutoff_tick)
 	assert_int(w.sim.shuttles().size()).is_equal(1)
 	var shuttle := w.sim.shuttles()[0]
-	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.LOADING)
-	assert_int(shuttle.bag_ids.size()).is_equal(1)
-	assert_int(shuttle.pending_bag_ids.size()).is_equal(2)
-	assert_int(views.shuttle_bag_count(shuttle.id)).is_equal(1)
-	assert_int(views.active_count()).is_equal(2)
+	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.TRANSFER_OUT)
+	assert_int(shuttle.bag_ids.size()).is_equal(0)
+	assert_int(shuttle.carried_bag_ids.size()).is_equal(2)
+	assert_int(shuttle.pending_bag_ids.size()).is_equal(1)
+	assert_int(views.shuttle_bag_count(shuttle.id)).is_equal(0)
+	assert_int(views.active_count()).is_equal(1)
 
 	w.run_to(b0.cutoff_tick + shuttle.load_step_ticks)
-	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.LOADING)
+	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.TRANSFER_OUT)
 	assert_int(shuttle.bag_ids.size()).is_equal(2)
+	assert_int(shuttle.carried_bag_ids.size()).is_equal(0)
 	assert_int(shuttle.pending_bag_ids.size()).is_equal(1)
 	assert_int(views.shuttle_bag_count(shuttle.id)).is_equal(2)
 	assert_int(views.active_count()).is_equal(1)
 
 	w.run_to(b0.cutoff_tick + shuttle.load_step_ticks * 2)
-	assert_int(shuttle.bag_ids.size()).is_equal(3)
+	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.TRANSFER_OUT)
+	assert_int(shuttle.bag_ids.size()).is_equal(2)
+	assert_int(shuttle.carried_bag_ids.size()).is_equal(1)
 	assert_int(shuttle.pending_bag_ids.size()).is_equal(0)
-	assert_int(views.shuttle_bag_count(shuttle.id)).is_equal(3)
+	assert_int(views.shuttle_bag_count(shuttle.id)).is_equal(2)
 	assert_int(views.active_count()).is_equal(0)
 
+	w.run_to(shuttle.start_tick)
+	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.OUTBOUND)
+	assert_int(shuttle.bag_ids.size()).is_equal(3)
+	assert_int(views.shuttle_bag_count(shuttle.id)).is_equal(3)
 	var cart_nodes: Array[Node3D] = views.shuttle_bag_nodes(shuttle.id)
 	assert_int(cart_nodes.size()).is_equal(3)
 	assert_bool(_bag_swatch_color(cart_nodes[0]).is_equal_approx(Bag.suitcase_color(0))).is_true()
 	assert_bool(_bag_swatch_color(cart_nodes[1]).is_equal_approx(Bag.suitcase_color(2))).is_true()
 	assert_bool(_bag_swatch_color(cart_nodes[2]).is_equal_approx(Bag.suitcase_color(4))).is_true()
 
-	w.run_to(shuttle.start_tick)
-	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.OUTBOUND)
 	w.run_to(shuttle.unload_tick)
 	assert_int(w.sim.loaded_total).is_equal(3)
 	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.RETURNING)
@@ -249,9 +255,10 @@ func test_mid_load_snapshot_round_trip_and_rejects_previous_save_version() -> vo
 	var c2 := ctrl.sim.check_in(3, BagTestWorld.FLIGHT, desk, 5)
 	ctrl.run_to(c0.cutoff_tick)
 	var shuttle := ctrl.sim.shuttles()[0]
-	ctrl.run_to(shuttle.load_start_tick + shuttle.load_step_ticks)
-	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.LOADING)
+	ctrl.run_to(shuttle.transfer_start_tick + shuttle.load_step_ticks)
+	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.TRANSFER_OUT)
 	assert_int(shuttle.bag_ids.size()).is_equal(2)
+	assert_int(shuttle.carried_bag_ids.size()).is_equal(0)
 	assert_int(shuttle.pending_bag_ids.size()).is_equal(1)
 
 	var snap: Dictionary = JSON.parse_string(JSON.stringify(ctrl.sim.to_snapshot()))
@@ -275,7 +282,7 @@ func test_mid_load_snapshot_round_trip_and_rejects_previous_save_version() -> vo
 
 	assert_int(loaded.sim.shuttles().size()).is_equal(1)
 	var ls := loaded.sim.shuttles()[0]
-	assert_int(ls.phase).is_equal(BaggageShuttle.Phase.LOADING)
+	assert_int(ls.phase).is_equal(BaggageShuttle.Phase.TRANSFER_OUT)
 	assert_int(ls.bag_ids.size()).is_equal(2)
 	assert_int(ls.pending_bag_ids.size()).is_equal(1)
 	assert_int(l_views.shuttle_bag_count(ls.id)).is_equal(2)
@@ -305,9 +312,9 @@ func test_malformed_loading_snapshot_and_cross_flight_bags_are_refused() -> void
 	w.run_to(b0.cutoff_tick)
 	assert_int(w.sim.shuttles().size()).is_equal(1)
 	var shuttle := w.sim.shuttles()[0]
-	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.LOADING)
-	assert_int(shuttle.bag_ids.size()).is_equal(1)
-	assert_int(shuttle.pending_bag_ids.size()).is_equal(2)
+	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.TRANSFER_OUT)
+	assert_int(shuttle.carried_bag_ids.size()).is_equal(2)
+	assert_int(shuttle.pending_bag_ids.size()).is_equal(1)
 
 	var base: Dictionary = JSON.parse_string(JSON.stringify(w.sim.to_snapshot()))
 
@@ -316,7 +323,7 @@ func test_malformed_loading_snapshot_and_cross_flight_bags_are_refused() -> void
 	assert_bool(BaggageSnapshot.load(zero_step).has("error")).is_true()
 
 	var over_step := base.duplicate(true)
-	over_step["shuttles"][0]["load_step_ticks"] = BaggageShuttle.LOAD_STEP_TICKS + 1
+	over_step["shuttles"][0]["load_step_ticks"] = BaggageShuttle.TRANSFER_LEG_TICKS + 1
 	assert_bool(BaggageSnapshot.load(over_step).has("error")).is_true()
 
 	var stale_next := base.duplicate(true)
@@ -333,16 +340,14 @@ func test_malformed_loading_snapshot_and_cross_flight_bags_are_refused() -> void
 	)
 	assert_bool(BaggageSnapshot.load(misaligned_next).has("error")).is_true()
 
-	var mismatched_counts := base.duplicate(true)
-	var moved_id: int = mismatched_counts["shuttles"][0]["pending_bag_ids"].pop_front()
-	mismatched_counts["shuttles"][0]["bag_ids"].append(moved_id)
-	for entry: Dictionary in mismatched_counts["bags"]:
-		if int(entry["id"]) == moved_id:
-			entry["shuttle_id"] = shuttle.id
-	assert_bool(BaggageSnapshot.load(mismatched_counts).has("error")).is_true()
+	var mismatched_carry := base.duplicate(true)
+	var moved_id: int = mismatched_carry["shuttles"][0]["carried_bag_ids"].pop_front()
+	mismatched_carry["shuttles"][0]["carried_bag_ids"].clear()
+	mismatched_carry["shuttles"][0]["bag_ids"].append(moved_id)
+	assert_bool(BaggageSnapshot.load(mismatched_carry).has("error")).is_true()
 
 	var dup_bag := base.duplicate(true)
-	dup_bag["shuttles"][0]["pending_bag_ids"][0] = int(dup_bag["shuttles"][0]["bag_ids"][0])
+	dup_bag["shuttles"][0]["pending_bag_ids"][0] = int(dup_bag["shuttles"][0]["carried_bag_ids"][0])
 	assert_bool(BaggageSnapshot.load(dup_bag).has("error")).is_true()
 
 	var cross_pending := base.duplicate(true)
@@ -350,8 +355,8 @@ func test_malformed_loading_snapshot_and_cross_flight_bags_are_refused() -> void
 	assert_bool(BaggageSnapshot.load(cross_pending).has("error")).is_true()
 
 	var cross_loaded := base.duplicate(true)
-	var orig_id: int = cross_loaded["shuttles"][0]["bag_ids"][0]
-	cross_loaded["shuttles"][0]["bag_ids"][0] = xbag.id
+	var orig_id: int = cross_loaded["shuttles"][0]["carried_bag_ids"][0]
+	cross_loaded["shuttles"][0]["carried_bag_ids"][0] = xbag.id
 	for entry: Dictionary in cross_loaded["bags"]:
 		if int(entry["id"]) == orig_id:
 			entry["shuttle_id"] = 0
@@ -361,7 +366,7 @@ func test_malformed_loading_snapshot_and_cross_flight_bags_are_refused() -> void
 
 
 func test_mid_loading_cart_room_and_belt_end_removals() -> void:
-	# Case A: removing cart mid-LOADING loses carried bag_ids and keeps pending IN_ROOM.
+	# Case A: removing cart mid-TRANSFER_OUT loses carried bags and keeps pending IN_ROOM.
 	var wa := BagTestWorld.make(self, 600)
 	var desk_a := wa.line()
 	var cart_a := wa.cart()
@@ -369,19 +374,18 @@ func test_mid_loading_cart_room_and_belt_end_removals() -> void:
 	var a1 := wa.sim.check_in(2, BagTestWorld.FLIGHT, desk_a, 1)
 	var a2 := wa.sim.check_in(3, BagTestWorld.FLIGHT, desk_a, 2)
 	wa.run_to(a0.cutoff_tick)
-	assert_int(wa.sim.shuttles()[0].bag_ids.size()).is_equal(1)
-	assert_int(wa.sim.shuttles()[0].pending_bag_ids.size()).is_equal(2)
+	assert_int(wa.sim.shuttles()[0].carried_bag_ids.size()).is_equal(2)
+	assert_int(wa.sim.shuttles()[0].pending_bag_ids.size()).is_equal(1)
 	assert_bool(wa.grid.apply(BuildEdit.remove_object(cart_a)).ok).is_true()
 	wa.step()
 	assert_array(wa.sim.shuttles()).is_empty()
 	assert_int(a0.state).is_equal(Bag.State.MISSED)
 	assert_int(a0.cause).is_equal(Bag.Cause.LOST)
-	assert_int(a1.state).is_equal(Bag.State.IN_ROOM)
+	assert_int(a1.state).is_equal(Bag.State.MISSED)
 	assert_int(a2.state).is_equal(Bag.State.IN_ROOM)
-	assert_int(a1.shuttle_id).is_equal(0)
 	assert_int(a2.shuttle_id).is_equal(0)
 
-	# Case B: removing bag_room mid-LOADING drops pending bags LOST and delivers loaded bag.
+	# Case B: removing bag_room mid-TRANSFER_OUT drops pending LOST and delivers carried bags.
 	var wb := BagTestWorld.make(self, 600)
 	var desk_b := wb.line()
 	wb.cart()
@@ -393,14 +397,14 @@ func test_mid_loading_cart_room_and_belt_end_removals() -> void:
 	var room_id := wb.grid.room_at(BagTestWorld.END)
 	assert_bool(wb.grid.apply(BuildEdit.remove_room(room_id)).ok).is_true()
 	wb.step()
-	assert_int(b1.state).is_equal(Bag.State.MISSED)
-	assert_int(b1.cause).is_equal(Bag.Cause.LOST)
 	assert_int(b2.state).is_equal(Bag.State.MISSED)
+	assert_int(b2.cause).is_equal(Bag.Cause.LOST)
 	assert_array(sb.pending_bag_ids).is_empty()
 	wb.run_to(sb.unload_tick)
 	assert_int(b0.state).is_equal(Bag.State.LOADED)
+	assert_int(b1.state).is_equal(Bag.State.LOADED)
 
-	# Case C: removing belt end mid-LOADING drops pending bags LOST and delivers loaded bag.
+	# Case C: removing belt end mid-TRANSFER_OUT drops pending LOST and delivers carried bags.
 	var wc := BagTestWorld.make(self, 600)
 	var desk_c := wc.line()
 	wc.cart()
@@ -411,12 +415,12 @@ func test_mid_loading_cart_room_and_belt_end_removals() -> void:
 	var sc := wc.sim.shuttles()[0]
 	wc.unlay(BagTestWorld.END)
 	wc.step()
-	assert_int(c1.state).is_equal(Bag.State.MISSED)
-	assert_int(c1.cause).is_equal(Bag.Cause.LOST)
 	assert_int(c2.state).is_equal(Bag.State.MISSED)
+	assert_int(c2.cause).is_equal(Bag.Cause.LOST)
 	assert_array(sc.pending_bag_ids).is_empty()
 	wc.run_to(sc.unload_tick)
 	assert_int(c0.state).is_equal(Bag.State.LOADED)
+	assert_int(c1.state).is_equal(Bag.State.LOADED)
 
 
 func test_boundary_straddling_cart_is_rejected_by_both_room_rules_and_sim() -> void:

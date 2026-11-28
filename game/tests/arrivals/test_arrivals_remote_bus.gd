@@ -418,7 +418,7 @@ func test_arriving_on_bus_isolated_from_late_count_flight_result_rescue_and_fore
 
 func test_save_game_v50_round_trip_mid_inbound_driving_back_and_validation() -> void:
 	_pax.auto_schedule = false
-	assert_int(SaveGame.SAVE_VERSION).is_equal(50)
+	assert_int(SaveGame.SAVE_VERSION).is_equal(51)
 	assert_int(BusShuttleSnapshot.SNAPSHOT_VERSION).is_equal(2)
 
 	var a_max := String(_flights.gate_grounds().get("A", {}).get("max_class", ""))
@@ -459,7 +459,7 @@ func test_save_game_v50_round_trip_mid_inbound_driving_back_and_validation() -> 
 
 	assert_bool(_save.save_to_file(_save_path)).is_true()
 	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_save_path))
-	assert_int(int(raw["save_version"])).is_equal(50)
+	assert_int(int(raw["save_version"])).is_equal(51)
 
 	# Refuse v48 saves.
 	var v48 := raw.duplicate(true)
