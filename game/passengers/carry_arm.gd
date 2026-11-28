@@ -262,13 +262,31 @@ func _reach(skeleton: Skeleton3D, chain: Array[Transform3D], outward: float) -> 
 	var shoulder := chain[0].origin
 	var elbow := chain[1].origin
 	var grip := _grip(skeleton, chain[2])
-	var joints := CarryStoop.two_bone(
-		shoulder,
-		elbow.distance_to(shoulder),
-		grip.distance_to(elbow),
-		target,
-		Vector3(outward, 0.0 if target.z < shoulder.z else -0.30, -0.5)
-	)
+	var upper_len := elbow.distance_to(shoulder)
+	var fore_len := grip.distance_to(elbow)
+	var pole := Vector3(outward, 0.0 if target.z < shoulder.z else -0.30, -0.5)
+	if (
+		target.distance_to(shoulder) < absf(upper_len - fore_len) + 0.08
+		and target.y >= shoulder.y - 0.04
+	):
+		var wrist_len := chain[2].origin.distance_to(elbow)
+		var hand_len := grip.distance_to(chain[2].origin)
+		var away := Vector3(outward * 0.05, 0.64, 0.77).normalized()
+		var wrist_goal := target + away * hand_len
+		var near_pole := Vector3(-outward * 0.28, -0.15, 0.95)
+		var joints := CarryStoop.two_bone(shoulder, upper_len, wrist_len, wrist_goal, near_pole)
+		var arm := chain[0]
+		var fore_in_arm := arm.affine_inverse() * chain[1]
+		var hand_in_fore := chain[1].affine_inverse() * chain[2]
+		arm.basis = CarryStoop.aim(arm.basis, elbow - shoulder, joints[0] - shoulder)
+		var fore := arm * fore_in_arm
+		var wrist_now := (fore * hand_in_fore).origin
+		fore.basis = CarryStoop.aim(fore.basis, wrist_now - fore.origin, joints[1] - fore.origin)
+		var hand := fore * hand_in_fore
+		var hand_grip := _grip(skeleton, hand)
+		hand.basis = CarryStoop.aim(hand.basis, hand_grip - hand.origin, target - hand.origin)
+		return [arm, fore, hand]
+	var joints := CarryStoop.two_bone(shoulder, upper_len, fore_len, target, pole)
 	var arm := chain[0]
 	var fore_in_arm := arm.affine_inverse() * chain[1]
 	var hand_in_fore := chain[1].affine_inverse() * chain[2]

@@ -79,8 +79,8 @@ func test_the_kind_is_a_fixed_hash_of_the_id() -> void:
 		assert_int(two_counts[kind]).is_between(IDS * 25 / 100, IDS * 42 / 100)
 
 
-## For <= 1 bags, a second bag never repeats a backpack or a roller; a second
-## shoulder bag or hard case is allowed, and every kind still comes up.
+## For <= 1 bags, a second bag never repeats a backpack, a roller, or a
+## shoulder tote (board 722abedf); only a hard case can repeat.
 func test_a_second_bag_never_repeats_a_backpack_or_a_roller() -> void:
 	var seconds := [0, 0, 0, 0]
 	var repeats := 0
@@ -93,6 +93,7 @@ func test_a_second_bag_never_repeats_a_backpack_or_a_roller() -> void:
 			repeats += 1
 			assert_int(first).is_not_equal(SecurityLooks.Kind.BACKPACK)
 			assert_int(first).is_not_equal(SecurityLooks.Kind.ROLLER)
+			assert_int(first).is_not_equal(SecurityLooks.Kind.SHOULDER)
 	print("second-bag kinds (<=1): %s, same kind twice: %d" % [seconds, repeats])
 	assert_int(repeats).is_greater(0)
 	for count: int in seconds:
@@ -100,7 +101,7 @@ func test_a_second_bag_never_repeats_a_backpack_or_a_roller() -> void:
 
 
 ## For 2-bag passengers, neither bag is ever a roller, all 3 non-roller kinds
-## appear, and bag 1 never repeats a backpack.
+## appear, and bag 1 never repeats a backpack or shoulder tote (only CASE repeats).
 func test_two_bag_passengers_never_get_a_roller_and_never_repeat_a_backpack() -> void:
 	var seconds := [0, 0, 0, 0]
 	var repeats := 0
@@ -115,6 +116,7 @@ func test_two_bag_passengers_never_get_a_roller_and_never_repeat_a_backpack() ->
 		if first == second:
 			repeats += 1
 			assert_int(first).is_not_equal(SecurityLooks.Kind.BACKPACK)
+			assert_int(first).is_not_equal(SecurityLooks.Kind.SHOULDER)
 	print("2-bag second kinds: %s, same kind twice: %d" % [seconds, repeats])
 	assert_int(seconds[SecurityLooks.Kind.ROLLER]).is_equal(0)
 	assert_int(repeats).is_greater(0)
@@ -166,27 +168,28 @@ func test_a_pulled_roller_runs_from_the_floor_to_the_hand() -> void:
 		assert_float(reached).is_equal_approx(local.z, 0.0001)
 
 
-## A worn shoulder bag hangs from its strap's bar over the shoulder joint,
-## upright, its inner face outside the hip (0.196 m), under the elbow.
+## A worn shoulder bag's strap bar tracks the shoulder bone (joint +
+## STRAP_SHOULDER_OUT_M), while the bag hangs STRAP_M below outside the hip.
 func test_a_shoulder_bag_hangs_from_the_shoulder_outside_the_hip() -> void:
 	var base := Vector3(0.0, 0.05, 0.14)
-	for side in 2:
-		var joint := Vector3(-0.206 if side == 0 else 0.206, 1.644, -0.061)
-		var hung := CarryWorn.shoulder(joint, Vector3.ZERO, 0.0, side, 1.0, base)
-		var xf: Transform3D = hung[0]
-		var length: float = hung[1]
-		var bar := xf * (base + Vector3(0.0, 0.0, length))
-		assert_float(bar.y).is_equal_approx(joint.y + CarryOnProps.STRAP_OVER_ARM_M, 0.0001)
-		assert_float(absf(bar.x)).is_equal_approx(CarryOnProps.STRAP_OUT_M, 0.0001)
-		assert_float(signf(bar.x)).is_equal(signf(joint.x))
-		assert_vector(xf.basis.z.normalized()).is_equal_approx(Vector3.UP, Vector3.ONE * 0.0001)
-		# The inner face (local y = 0) the strips' depth in from the strap, the
-		# bag's top STRAP_M under the bar.
-		var inner := xf * Vector3.ZERO
-		assert_float(absf(inner.x)).is_equal_approx(CarryOnProps.STRAP_OUT_M - base.y, 0.0001)
-		assert_float(absf(inner.x)).is_greater(0.21)
-		var top := xf * Vector3(0.0, 0.0, base.z)
-		assert_float(top.y).is_equal_approx(bar.y - CarryOnProps.STRAP_M, 0.0001)
+	for joint_x in [0.131, 0.206]:
+		for side in 2:
+			var joint := Vector3(-joint_x if side == 0 else joint_x, 1.644, -0.061)
+			var hung := CarryWorn.shoulder(joint, Vector3.ZERO, 0.0, side, 1.0, base)
+			var xf: Transform3D = hung[0]
+			var length: float = hung[1]
+			var bar := xf * (base + Vector3(0.0, 0.0, length))
+			assert_float(bar.y).is_equal_approx(joint.y + CarryOnProps.STRAP_OVER_ARM_M, 0.0001)
+			assert_float(absf(bar.x)).is_equal_approx(
+				joint_x + CarryOnProps.STRAP_SHOULDER_OUT_M, 0.0001
+			)
+			assert_float(signf(bar.x)).is_equal(signf(joint.x))
+			var root := xf * base
+			var hip_out := maxf(joint_x + CarryOnProps.STRAP_HIP_CLEAR_M, CarryOnProps.STRAP_OUT_M)
+			assert_float(absf(root.x)).is_equal_approx(hip_out, 0.0001)
+			assert_float(root.y).is_equal_approx(bar.y - CarryOnProps.STRAP_M, 0.0001)
+			var inner := xf * Vector3.ZERO
+			assert_float(absf(inner.x)).is_greater(0.20)
 
 
 ## A worn backpack: the top of its back panel BACK_FROM_SPINE_M behind the
@@ -411,3 +414,10 @@ func test_in_the_corridor_only_the_hard_case_turns_to_the_front() -> void:
 				assert_float(arms[1][2]).is_equal(0.0)
 			SecurityLooks.Kind.BACKPACK:
 				assert_bool(hand[0] or arms[1][0]).is_false()
+
+
+## Settled Arm.STRAP forearm hangs downward beside the hip (negative hand-up
+## angle), never raised forward across the chest like a zombie/T-Rex pose.
+func test_arm_strap_pose_hangs_down_not_raised_across_chest() -> void:
+	assert_float(CarryArmPose.STRAP_HAND_UP_DEGREES).is_less(-45.0)
+	assert_float(CarryArmPose.STRAP_UPPER_DEGREES).is_less(15.0)

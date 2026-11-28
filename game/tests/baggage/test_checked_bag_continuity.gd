@@ -505,3 +505,167 @@ func test_suitcase_material_regenerates_lower_mipmap_levels() -> void:
 			var px := mip.get_pixel(31 * cell_w + 1, 1)
 			assert_bool(px.is_equal_approx(Bag.suitcase_color(idx))).is_true()
 	bag_node.free()
+
+
+## _prev[id] advances to _cur[id] every tick so paused rendering (alpha = 0)
+## holds the suitcase beside the passenger instead of snapping to curb spawn.
+func test_checked_suitcase_prev_advances_across_ticks_so_pause_does_not_glitch() -> void:
+	var pw := PassengerTestWorld.reference_world(11)
+	BagRoomKit.connect_reference_desk2(pw.grid)
+	var bags: BaggageSim = auto_free(BaggageSim.new())
+	bags.bind(pw.clock, pw.flights, pw.grid, pw.sim)
+	var pviews := PassengerTestWorld.views()
+	pviews.clock = pw.clock
+	pviews.sim = pw.sim
+	add_child(pviews)
+
+	var pid := pw.sim.spawn_now(PassengerTestWorld.FLIGHT, 0)
+	pw.step()
+	pviews.draw()
+	await get_tree().process_frame
+	var pnode := pviews.node_for(pid)
+	var bag_node := pviews.checked_bag_node_for(pid)
+	assert_object(pnode).is_not_null()
+	assert_object(bag_node).is_not_null()
+	var spawn_pnode := pnode.global_position
+	var spawn_bag := bag_node.global_position
+	var moved := false
+	for _t in 60:
+		pw.step()
+		pviews.draw()
+		await get_tree().process_frame
+		if pnode.global_position.distance_to(spawn_pnode) > 2.0:
+			moved = true
+			break
+	assert_bool(moved).is_true()
+
+	var bags_view := pviews.get("_checked_bags") as CheckedSuitcaseViews
+	var bodies: Dictionary = pviews.get("_nodes")
+	var turns: PassengerTurns = pviews.get("_turns")
+	var props := pviews.carry_on_props()
+	var prev_pos: Vector3 = bags_view.get("_prev").get(pid, Vector3.ZERO)
+	var cur_pos: Vector3 = bags_view.get("_cur").get(pid, Vector3.ZERO)
+	assert_float(prev_pos.distance_to(cur_pos)).is_less(0.35)
+	assert_float(prev_pos.distance_to(spawn_pnode)).is_greater(1.5)
+	bags_view.draw(bodies, turns, 0.0, pw.sim, props, float(pw.clock.tick))
+	var ch := int((props._held.get(pid, {}) as Dictionary).get("checked_hand", -1))
+	assert_int(ch).is_greater_equal(0)
+	var delta_xz := Vector2(
+		bag_node.global_position.x - pnode.global_position.x,
+		bag_node.global_position.z - pnode.global_position.z
+	)
+	assert_float(delta_xz.length()).is_less(0.65)
+	assert_float(bag_node.global_position.distance_to(props.grip_of(pnode, ch))).is_less(0.38)
+	assert_float(bag_node.global_position.distance_to(spawn_bag)).is_greater(1.5)
+	pviews.free()
+	pw.free_all()
+
+
+## Checked suitcases assign one dedicated hand cleanly without overlapping
+## carry-ons (2-bag checked passengers always keep a backpack), smoothly hand off
+## onto the check-in desk belt during CHECKIN, and release into TO_SECURITY.
+func test_checked_suitcase_held_in_free_hand_without_overlap_and_handed_to_desk() -> void:
+	var pw := PassengerTestWorld.reference_world(19)
+	BagRoomKit.connect_reference_desk2(pw.grid)
+	var bags: BaggageSim = auto_free(BaggageSim.new())
+	bags.bind(pw.clock, pw.flights, pw.grid, pw.sim)
+	var pviews := PassengerTestWorld.views()
+	pviews.clock = pw.clock
+	pviews.sim = pw.sim
+	add_child(pviews)
+	var props := pviews.carry_on_props()
+
+	var pids: Array[int] = []
+	for i in 12:
+		var id := pw.sim.spawn_now(PassengerTestWorld.FLIGHT, 0)
+		pw.passenger(id).carry_on = i % 3
+		pids.append(id)
+	pw.step()
+
+	for pid in pids:
+		var p := pw.passenger(pid)
+		var ch := SecurityLooks.checked_hand(pw.sim, p)
+		assert_bool(ch == 0 or ch == 1).is_true()
+		var held := props._held[pid] as Dictionary
+		assert_int(int(held.get("checked_hand", -1))).is_equal(ch)
+		var hands: Array = held.get("hands", [])
+		var kinds: Array = []
+		for i in hands.size():
+			var bag: Dictionary = held["bags"][i]
+			kinds.append(bag["kind"])
+			var c: int = bag["carry"]
+			if c == SecurityLooks.Carry.HAND or c == SecurityLooks.Carry.PULL:
+				assert_int(int(hands[i])).is_not_equal(ch)
+			elif c == SecurityLooks.Carry.SHOULDER and p.carry_on == 1:
+				assert_int(ch).is_equal(1 - SecurityLooks.worn_side(i))
+		if p.carry_on == 2:
+			assert_bool(kinds.has(SecurityLooks.Kind.BACKPACK)).is_true()
+			assert_int(kinds.count(SecurityLooks.Kind.SHOULDER)).is_less_equal(1)
+
+	var desk_verified := false
+	var target_id := pids[0]
+	for _t in 400:
+		pw.step()
+		for pid in pids:
+			var p := pw.passenger(pid)
+			if p.stage == Passenger.Stage.CHECKIN:
+				var u := CheckedSuitcaseViews.handoff_progress(pw.sim, p, float(pw.clock.tick))
+				if u >= 0.70 and not desk_verified:
+					target_id = pid
+					pviews.draw()
+					var bnode := pviews.checked_bag_node_for(pid)
+					var desk_xf: Transform3D = BaggageViews.desk_transform(pw.grid, p.station, 0)
+					assert_object(bnode).is_not_null()
+					assert_float(bnode.global_position.distance_to(desk_xf.origin)).is_less(0.02)
+					desk_verified = true
+		if desk_verified and pw.passenger(target_id).stage == Passenger.Stage.TO_SECURITY:
+			break
+	assert_bool(desk_verified).is_true()
+	assert_int(pw.passenger(target_id).stage).is_equal(Passenger.Stage.TO_SECURITY)
+	assert_object(pviews.checked_bag_node_for(target_id)).is_null()
+	(
+		assert_int(int((props._held.get(target_id, {}) as Dictionary).get("checked_hand", -1)))
+		. is_equal(-1)
+	)
+	pviews.free()
+	pw.free_all()
+
+
+func test_bag_room_cache_invalidates_on_from_snapshot_and_roller_keeps_free_hand() -> void:
+	var unconnected := PassengerTestWorld.reference_world(21)
+	var snap_disconnected := unconnected.grid.to_snapshot()
+	unconnected.free_all()
+
+	var pw := PassengerTestWorld.reference_world(23)
+	BagRoomKit.connect_reference_desk2(pw.grid)
+	var bags: BaggageSim = auto_free(BaggageSim.new())
+	bags.bind(pw.clock, pw.flights, pw.grid, pw.sim)
+	var pviews := PassengerTestWorld.views()
+	pviews.clock = pw.clock
+	pviews.sim = pw.sim
+	add_child(pviews)
+
+	var roller_id := 0
+	for _try in 40:
+		var cand := pw.sim.spawn_now(PassengerTestWorld.FLIGHT, 0)
+		var pc := pw.passenger(cand)
+		if SecurityLooks.bag_kind(pc, 0) == SecurityLooks.Kind.ROLLER:
+			pc.carry_on = 1
+			roller_id = cand
+			break
+	assert_int(roller_id).is_greater(0)
+
+	var props := pviews.carry_on_props()
+	for _t in 25:
+		pw.step()
+		pviews.draw()
+		var ch := SecurityLooks.checked_hand(pw.sim, pw.passenger(roller_id))
+		assert_int(ch).is_equal(0)
+		var held := props._held.get(roller_id, {}) as Dictionary
+		assert_int(int((held.get("hands", []) as Array)[0])).is_equal(1)
+
+	assert_bool(CheckedSuitcaseViews.has_connected_bag_room(pw.sim)).is_true()
+	assert_bool(pw.grid.from_snapshot(snap_disconnected)).is_true()
+	assert_bool(CheckedSuitcaseViews.has_connected_bag_room(pw.sim)).is_false()
+	pviews.free()
+	pw.free_all()

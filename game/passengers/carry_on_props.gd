@@ -72,12 +72,14 @@ const KNEE_LIFT_M := 0.3
 const GRIP_BONES: Array[String] = ["Fingers.R", "Fingers.L"]
 const ARM_BONES: Array[String] = ["Arm.R", "Arm.L"]
 const SPINE_BONE := "Spine_03"
-## Shoulder bag: the strap this far out from the body's centre line, its bar
-## this far over the Arm bone (the shoulder joint), and this long from the bar
-## to the bag's top edge (the bag hangs outside the hip, its top about the hip
-## bone's height, under the elbow).
-const STRAP_OUT_M := 0.32
-const STRAP_OVER_ARM_M := 0.06
+## Shoulder bag: minimum hip offset out from centre line, outward offset
+## from upright Arm joint to tote top, outward offset from Arm joint onto
+## shoulder shelf, height of Strap_Top origin above Arm joint, and drop to
+## tote top rim.
+const STRAP_OUT_M := 0.275
+const STRAP_HIP_CLEAR_M := 0.095
+const STRAP_SHOULDER_OUT_M := 0.055
+const STRAP_OVER_ARM_M := 0.052
 const STRAP_M := 0.45
 ## The roller's axle in its own frame at scale 1 (build_carry_on_kit.py: on
 ## the rod line, at the wheels), and how far the grip bar's middle is past
@@ -110,6 +112,7 @@ static var _mounts := {}
 
 var sim: PassengerSim
 var views: PassengerViews
+var checked_bags: CheckedSuitcaseViews
 ## Sim time for bag moves; without one a move is instant.
 var clock: SimClock
 
@@ -202,6 +205,8 @@ func sync() -> void:
 		var p := sim.get_passenger(id)
 		var homes := SecurityLooks.bag_homes(sim, p)
 		var tray_at := SecurityLooks.tray(sim, p)
+		var checked_hand := SecurityLooks.checked_hand(sim, p)
+		var has_checked := checked_hand >= 0
 		# A basic scanner booth tucks the free arms in, with bags or without
 		# (decision basic-scanner-booth-passengers-carry-their-bags-in-front-
 		# and), so a passenger with none is kept until its arms are back out.
@@ -211,9 +216,14 @@ func sync() -> void:
 		# A lane's arch tucks the arms too, its bags in the tray.
 		var tuck_in := booth or SecurityLooks.in_arch_passage(sim, p)
 		var tucked := tuck_in or BoothCarry.tuck_weight(_held.get(id, {}), _tick()) > 0.0
-		if homes.is_empty() and not tucked:
+		if homes.is_empty() and not tucked and not has_checked:
 			CarryArmPose.arms_off(self, node)
-		if homes.is_empty() and tray_at == SecurityLooks.Tray.NONE and not tucked:
+		if (
+			homes.is_empty()
+			and tray_at == SecurityLooks.Tray.NONE
+			and not tucked
+			and not has_checked
+		):
 			continue
 		seen[id] = true
 		var hands: Array[int] = []
@@ -223,7 +233,7 @@ func sync() -> void:
 		# A roller is taken in hand before the turn to the front (StallCarry).
 		var lift_stall := StallCarry.held_by_hand(sim, p, StallCarry.LIFT_LEAD_M)
 		for i in homes.size():
-			kinds.append(SecurityLooks.bag_kind(p, i))
+			kinds.append(SecurityLooks.bag_kind_for(sim, p, i))
 			var roller := kinds[i] == SecurityLooks.Kind.ROLLER
 			lifts.append(_lifted(kinds[i], p, lift_stall if roller else at_stall, booth_bags))
 			# A worn bag keeps its side, so a narrow cell never moves it across.
@@ -251,6 +261,7 @@ func sync() -> void:
 		held["homes"] = homes
 		held["hands"] = hands
 		held["kinds"] = kinds
+		held["checked_hand"] = checked_hand
 		held["in_stall"] = StallCarry.in_stall(p)
 		held["sit_face"] = RollerPark.sit_face(sim, p)
 		# At its booth seat (BoothRoller.fix_start()), not queuing for it.
@@ -279,7 +290,33 @@ func sync() -> void:
 		BoothCarry.update_tuck(held, tuck_in, _released_at.get(id, -1.0) == _tick(), _tick())
 		# A roller held by its bar for a stall stays so (StallCarry.keeps_bar()).
 		var was: Array = held["bags"]
-		PullSide.resolve(was, sim, views, p, kinds, homes, lifts, hands, _tick())
+		if checked_hand >= 0:
+			for i in homes.size():
+				var worn_now: bool = (
+					not lifts[i]
+					and (
+						SecurityLooks.KIND_CARRY[kinds[i]]
+						in [SecurityLooks.Carry.BACK, SecurityLooks.Carry.SHOULDER]
+					)
+				)
+				if (
+					not worn_now
+					and homes[i] == SecurityLooks.Home.HAND
+					and hands[i] == checked_hand
+				):
+					hands[i] = 1 - checked_hand
+			for i in mini(was.size(), kinds.size()):
+				if (
+					kinds[i] == SecurityLooks.Kind.ROLLER
+					and homes[i] == SecurityLooks.Home.HAND
+					and not lifts[i]
+					and not was[i].is_empty()
+					and was[i].get("kind", -1) == kinds[i]
+				):
+					var walk := PullSide.walk_of(sim, views, p)
+					PullSide.tuck(was[i], sim.grid, walk[0], walk[1], walk[2], hands[i], _tick())
+		else:
+			PullSide.resolve(was, sim, views, p, kinds, homes, lifts, hands, _tick())
 		var near_row := StallCarry.beside_row(sim, p)
 		# Standing still in a queue, not turned to a front carry (RollerPark.queue_stand());
 		# a door case's turn (door_case) does not stop it.
@@ -634,6 +671,8 @@ func _unposed() -> void:
 			CarryPlace.place_bags(
 				self, held, body, CarryPlace.tray_transform(self, held, body), now, Placing.HAND
 			)
+			if int(held.get("checked_hand", -1)) >= 0 and checked_bags != null:
+				checked_bags.place_for_passenger(sim, id, body, self, held, now)
 
 
 ## Places every prop for this frame but the bags going to a hand, and takes
@@ -660,8 +699,23 @@ func draw() -> void:
 		held["draw_seq"] = int(held.get("draw_seq", 0)) + 1
 		CarryPlace.place_bags(self, held, body, tray_xf, now, Placing.NOT_HAND)
 		_step_hand_bags(held, body)
+		_sync_checked_pose(id, held, now)
 		CarryArmPose.lead_arms(self, held, body, now)
 		CarryArmPose.pose_arms(self, held, body, now)
+
+
+func _sync_checked_pose(id: int, held: Dictionary, now: float) -> void:
+	var checked_hand := int(held.get("checked_hand", -1))
+	if checked_hand < 0 or sim == null:
+		held["checked_holds"] = false
+		held["checked_reach"] = 0.0
+		held["checked_curl"] = 0.0
+		return
+	var pose := CheckedSuitcaseViews.handoff_pose(sim, sim.get_passenger(id), now)
+	held["checked_holds"] = pose["holds"]
+	held["checked_curl"] = pose["curl"]
+	held["checked_reach"] = pose["reach"]
+	held["checked_target"] = pose["target"]
 
 
 ## The once-per-draw part of the bags going to a hand (their moves are stamped
@@ -699,6 +753,8 @@ func _on_pose(body: Node3D) -> void:
 	CarryPlace.place_bags(
 		self, held, body, CarryPlace.tray_transform(self, held, body), _now(), Placing.HAND
 	)
+	if int(held.get("checked_hand", -1)) >= 0 and checked_bags != null:
+		checked_bags.place_for_passenger(sim, id, body, self, held, _now())
 
 
 ## Where hand `i` (right, then left) of a character grips a bag now.

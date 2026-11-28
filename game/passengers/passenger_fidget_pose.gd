@@ -178,11 +178,14 @@ static func arm_freedom(
 		for i in homes.size():
 			if homes[i] != SecurityLooks.Home.HAND:
 				continue
-			var carry := SecurityLooks.carry_of(p, i)
+			var carry := SecurityLooks.carry_of_for(sim, p, i)
 			if carry == SecurityLooks.Carry.SHOULDER:
 				arms[SecurityLooks.worn_side(i)] = false
 			elif carry != SecurityLooks.Carry.BACK:
 				arms[SecurityLooks.hand_of(sim, p, i)] = false
+		var checked_hand := SecurityLooks.checked_hand(sim, p)
+		if checked_hand >= 0:
+			arms[checked_hand] = false
 	if props != null:
 		if props.tuck_of(p.id) > 0.0 or props.front_weight_of(p.id) > 0.0:
 			arms = [false, false]
