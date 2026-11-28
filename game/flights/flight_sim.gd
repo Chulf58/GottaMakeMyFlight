@@ -149,7 +149,7 @@ const STARTER_TERMS := {
 	"airline": "Gotta Air",
 	"destination": "Oslo",
 	"plane_size": "small",
-	"booked_passengers": 6,
+	"booked_passengers": 8,
 	"fee_per_passenger": 50,
 }
 ## 2: occurrences are issued FlightTimetable.ISSUE_LEAD_TICKS (2400, was 1200)
@@ -1094,6 +1094,39 @@ func start_works(target: String) -> bool:
 	_changed()
 	check_planning_changed()
 	return true
+
+
+## Upgrades a SMALL runway to MEDIUM immediately as a subsidized sponsorship
+## grant (Big Jet Showcase). Clears any scheduled works booking cleanly so
+## RunwayWorks.scheduled() is false and saves remain valid. Returns true when
+## upgraded, false when already MEDIUM+.
+func grant_medium_runway() -> bool:
+	if runway.takes(PlaneClasses.MEDIUM):
+		return false
+	if runway.works.scheduled():
+		runway.works.clear()
+	runway.size = PlaneClasses.MEDIUM
+	runway.works_done.emit(PlaneClasses.MEDIUM)
+	_changed()
+	check_planning_changed()
+	return true
+
+
+## Returns the first departure minute in [min_minute, max_minute] (stepping by
+## `step`) on `day` where the one-off charter `terms_template` fits all gate,
+## stand, and taxi constraints regardless of current runway size, or -1 if none fits.
+func find_showcase_slot(
+	terms_template: Dictionary, day: int, min_minute: int, max_minute: int, step := 15
+) -> int:
+	if day < 0 or step < 1 or min_minute > max_minute:
+		return -1
+	var terms := terms_template.duplicate()
+	terms[FlightContract.ONE_OFF_DAY_KEY] = day
+	for minute in range(min_minute, max_minute + 1, step):
+		terms["departure_minute"] = minute
+		if _assignment(terms, [], false, true)["problem"] == "":
+			return minute
+	return -1
 
 
 ## Live flights: one-off flights and issued occurrences not yet pruned.

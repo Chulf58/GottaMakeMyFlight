@@ -12,7 +12,7 @@ func test_the_numbers_are_pinned() -> void:
 	assert_int(InfoDesk.RANGE_CELLS).is_equal(10)
 	assert_int(InfoDesk.RANGE_MM).is_equal(10000)
 	assert_int(InfoDesk.MAX_WALK_MM).is_equal(20000)
-	assert_int(InfoDesk.HELP_TICKS).is_equal(60)
+	assert_int(InfoDesk.HELP_TICKS).is_equal(80)
 	assert_int(InfoDesk.BOOST).is_equal(15)
 	assert_int(InfoDesk.STUCK_LOSS).is_equal(3)
 	assert_int(InfoDesk.CALM_STUCK_LOSS).is_equal(1)

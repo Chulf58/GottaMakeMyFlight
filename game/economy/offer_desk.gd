@@ -12,8 +12,20 @@ extends Node
 ## rating-ends-one-airline-contract-per-low-day): the ended contract, whose
 ## airline and destination the player is told.
 signal contract_ended(contract: Dictionary)
+## Emitted once in DemoMode on Day 4 when the Big Jet Showcase charter offer opens.
+signal showcase_offered(info: Dictionary)
 
 const CHARTER_CHECK_INTERVAL_TICKS := 300
+const SHOWCASE_DAY := 3
+const SHOWCASE_MIN_MINUTE := GameCalendar.START_MINUTE
+const SHOWCASE_MIN_LEAD_MINUTES := 180
+const SHOWCASE_DAY5_MAX_MINUTE := 19 * 60
+const SHOWCASE_ID := "BJSHOW4"
+const SHOWCASE_AIRLINE := "Polar Jet"
+const SHOWCASE_DESTINATION := "Rome"
+const SHOWCASE_PASSENGERS := 32
+const SHOWCASE_FEE := 55
+const SHOWCASE_BONUS := 1500
 
 ## The clock to follow when this node enters a scene. A scene must set it: a
 ## desk with no clock pushes an error and never draws. Tests call bind_clock.
@@ -34,6 +46,8 @@ const CHARTER_CHECK_INTERVAL_TICKS := 300
 ## The runway whose size limits the offers drawn. Unset, the scene's flights
 ## give it (FlightSim.runway); a desk with neither draws nothing and says so.
 var runway: Runway
+## Optional wallet override (resolved via sibling Finances in main.tscn when unset).
+var wallet: Wallet
 
 var board := OfferBoard.new()
 
@@ -84,6 +98,7 @@ func on_flight_state(flight_id: String, state: int) -> void:
 	var day: int = FlightTimetable.parse_occurrence(flight_id)["day"]
 	var gain := OfferTraits.loyalty_day_gain(contract[FlightContract.TRAITS_KEY])
 	board.note_flown(contract["airline"], day, gain)
+	_pay_showcase_bonus_if_due(String(contract["id"]))
 
 
 ## A new day first ends a contract the low rating has made due, then draws the
@@ -104,8 +119,10 @@ func on_tick(tick: int) -> void:
 		board.expire_charters(tick, day)
 		_end_contract_if_due()
 		_draw(day)
+		_maybe_offer_showcase(day, tick)
 		return
 	board.expire_charters(tick, day)
+	_maybe_offer_showcase(day, tick)
 	if tick % CHARTER_CHECK_INTERVAL_TICKS == 0:
 		try_open_charter()
 
@@ -134,6 +151,159 @@ func has_fitting_charter() -> bool:
 		if FlightFit.fits(flights, OfferBoard.terms_of(charter)):
 			return true
 	return false
+
+
+## Returns the pending Day-4 Big Jet Showcase offer dictionary, or {} if none.
+func pending_showcase() -> Dictionary:
+	return board.showcase() if board.has_pending_showcase() else {}
+
+
+## Applies the player's decision on the Day-4 Big Jet Showcase offer.
+func answer_showcase(accepted: bool) -> bool:
+	if not board.has_pending_showcase():
+		return false
+	if not accepted:
+		board.set_showcase_state(OfferBoard.DECLINED)
+		return true
+	var info := board.showcase()
+	if flights != null and not _commit_showcase_contract(info):
+		return false
+	board.set_showcase_state(OfferBoard.ACCEPTED)
+	return true
+
+
+func _commit_showcase_contract(info: Dictionary) -> bool:
+	var terms := _showcase_terms(info)
+	var slot_ok := (
+		flights.find_showcase_slot(
+			terms, int(info["day"]), int(info["departure_minute"]), int(info["departure_minute"])
+		)
+		>= 0
+	)
+	if not slot_ok:
+		var fallback := _find_showcase_slot(
+			int(info["day"]), clock.tick if clock != null else 0, info
+		)
+		if fallback.is_empty():
+			return false
+		info["day"] = fallback["day"]
+		info["departure_minute"] = fallback["minute"]
+		terms = _showcase_terms(info)
+	var prev_size := flights.runway.size
+	var prev_works := flights.runway.works.to_snapshot()
+	var upgraded := flights.grant_medium_runway()
+	if not flights.accept_contract(terms):
+		if upgraded:
+			flights.runway.size = prev_size
+			flights.runway.works.from_snapshot(prev_works)
+			flights.check_planning_changed()
+		return false
+	board.set_showcase(info)
+	return true
+
+
+func _maybe_offer_showcase(day: int, tick: int) -> void:
+	if (
+		not DemoMode.is_demo()
+		or day != SHOWCASE_DAY
+		or board.has_showcase()
+		or flights == null
+		or flights.opened_tick < 0
+		or clock == null
+	):
+		return
+	var minute := GameCalendar.minute_of_day(tick, clock.epoch)
+	if minute < SHOWCASE_MIN_MINUTE:
+		return
+	var info := {
+		"id": SHOWCASE_ID,
+		"day": day,
+		"departure_minute": 0,
+		"airline": SHOWCASE_AIRLINE,
+		"destination": SHOWCASE_DESTINATION,
+		"booked_passengers": SHOWCASE_PASSENGERS,
+		"fee_per_passenger": SHOWCASE_FEE,
+		"bonus": SHOWCASE_BONUS,
+		"needs_runway": not flights.runway.takes(PlaneClasses.MEDIUM),
+		"state": OfferBoard.OPEN,
+	}
+	var chosen := _find_showcase_slot(day, tick, info)
+	if chosen.is_empty():
+		return
+	info["day"] = chosen["day"]
+	info["departure_minute"] = chosen["minute"]
+	board.set_showcase(info)
+	showcase_offered.emit(info.duplicate())
+
+
+func _find_showcase_slot(day: int, tick: int, info: Dictionary) -> Dictionary:
+	if flights == null or clock == null:
+		return {}
+	var terms := _showcase_terms(info)
+	var now_minute := GameCalendar.minute_of_day(tick, clock.epoch)
+	var min_today := maxi(
+		FlightContract.FIRST_DEPARTURE_MINUTE,
+		_ceil_quarter_minute(now_minute + SHOWCASE_MIN_LEAD_MINUTES)
+	)
+	var slot := flights.find_showcase_slot(
+		terms, day, min_today, FlightContract.LAST_DEPARTURE_MINUTE
+	)
+	if slot >= 0:
+		return {"day": day, "minute": slot}
+	var next_day := day + 1
+	slot = flights.find_showcase_slot(
+		terms, next_day, FlightContract.FIRST_DEPARTURE_MINUTE, SHOWCASE_DAY5_MAX_MINUTE
+	)
+	if slot >= 0:
+		return {"day": next_day, "minute": slot}
+	return {}
+
+
+static func _ceil_quarter_minute(minute: int) -> int:
+	@warning_ignore("integer_division")
+	return (
+		((minute + OfferBoard.DEPARTURE_STEP - 1) / OfferBoard.DEPARTURE_STEP)
+		* OfferBoard.DEPARTURE_STEP
+	)
+
+
+static func _showcase_terms(info: Dictionary) -> Dictionary:
+	return {
+		"id": String(info["id"]),
+		"airline": String(info["airline"]),
+		"destination": String(info["destination"]),
+		"departure_minute": int(info["departure_minute"]),
+		"plane_size": PlaneClasses.MEDIUM,
+		"booked_passengers": int(info["booked_passengers"]),
+		"fee_per_passenger": int(info["fee_per_passenger"]),
+		FlightContract.TRAITS_KEY: OfferTraits.frozen({}),
+		FlightContract.ONE_OFF_DAY_KEY: int(info["day"]),
+	}
+
+
+func _pay_showcase_bonus_if_due(contract_id: String) -> void:
+	if contract_id != SHOWCASE_ID:
+		return
+	var info := board.showcase()
+	if info.get("state", "") != OfferBoard.ACCEPTED:
+		return
+	var target_wallet := _resolve_wallet()
+	if target_wallet != null:
+		target_wallet.credit(int(info["bonus"]), Wallet.Category.INCIDENT)
+	else:
+		push_warning("OfferDesk: no wallet set, so showcase bonus is not paid")
+	board.set_showcase_state(OfferBoard.SHOWCASE_PAID)
+
+
+func _resolve_wallet() -> Wallet:
+	if wallet != null:
+		return wallet
+	for host in [self, flights]:
+		if host != null and host.get_parent() != null:
+			var fin := host.get_parent().get_node_or_null("Finances") as Finances
+			if fin != null:
+				return fin.wallet
+	return null
 
 
 ## When the rating's low days have run out, the oldest contract still running

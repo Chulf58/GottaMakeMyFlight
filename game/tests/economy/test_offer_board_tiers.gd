@@ -250,21 +250,21 @@ func test_the_offer_save_version_is_11_and_versions_4_to_10_are_refused() -> voi
 func test_small_class_revenue_matches_starter_and_medium_stays_untouched() -> void:
 	var starter := FlightSim.STARTER_TERMS
 	assert_str(starter["plane_size"]).is_equal(PlaneClasses.SMALL)
-	assert_int(starter["booked_passengers"]).is_equal(6)
+	assert_int(starter["booked_passengers"]).is_equal(8)
 	assert_int(starter["fee_per_passenger"]).is_equal(50)
-	assert_int(int(starter["booked_passengers"]) * int(starter["fee_per_passenger"])).is_equal(300)
+	assert_int(int(starter["booked_passengers"]) * int(starter["fee_per_passenger"])).is_equal(400)
 	var small_pax: Array = OfferBoard.STARTER_SIZES[PlaneClasses.SMALL]
-	assert_array(small_pax).is_equal([4, 8])
+	assert_array(small_pax).is_equal([6, 8])
 	var small_fees: Array = OfferBoard.fee_range_for(0, PlaneClasses.SMALL)
 	assert_array(small_fees).is_equal([30, 70])
-	assert_int(int(small_pax[0]) * int(small_fees[0])).is_equal(120)
+	assert_int(int(small_pax[0]) * int(small_fees[0])).is_equal(180)
 	assert_int(int(small_pax[1]) * int(small_fees[1])).is_equal(560)
 	@warning_ignore("integer_division")
 	var mid_rev := (
 		((int(small_pax[0]) + int(small_pax[1])) / 2)
 		* ((int(small_fees[0]) + int(small_fees[1])) / 2)
 	)
-	assert_int(mid_rev).is_equal(300)
+	assert_int(mid_rev).is_equal(350)
 	assert_array(OfferBoard.STARTER_SIZES[PlaneClasses.MEDIUM]).is_equal([24, 48])
 	assert_array(OfferBoard.fee_range_for(0, PlaneClasses.MEDIUM)).is_equal([15, 35])
 	assert_array(OfferBoard.TIER_FEES).is_equal([[15, 35], [25, 45], [40, 60]])

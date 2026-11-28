@@ -190,7 +190,7 @@ func test_the_card_names_the_cause_and_the_fix_time() -> void:
 
 
 func test_the_catalogue_weighs_the_fault_by_the_stations_that_may_fault() -> void:
-	assert_int(IncidentCatalogue.VERSION).is_equal(3)
+	assert_int(IncidentCatalogue.VERSION).is_equal(4)
 	assert_int(IncidentCatalogue.weight(IncidentCatalogue.FAULT, {"faults": 0})).is_zero()
 	assert_int(IncidentCatalogue.weight(IncidentCatalogue.FAULT, {"faults": 2})).is_equal(
 		IncidentTuning.FAULT_WEIGHT
