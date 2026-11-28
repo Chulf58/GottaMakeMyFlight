@@ -474,6 +474,9 @@ static func _rolled_up(sim: PassengerSim, p: Passenger, index: int) -> bool:
 static func hand_of(sim: PassengerSim, p: Passenger, index: int) -> int:
 	if p.carry_on > 1:
 		return index
+	var checked := checked_hand(sim, p)
+	if checked >= 0 and bag_kind_for(sim, p, index) != Kind.SHOULDER:
+		return 1 - checked
 	return ParkSide.hand(sim, p, _cell_hand(sim, p))
 
 
@@ -522,21 +525,57 @@ static func bag_kind(p: Passenger, index: int) -> Kind:
 		if index == 0:
 			return TWO_BAG_KINDS[first_idx]
 		var second_idx := _mix(p.id * 2 + 1) % count
-		if second_idx == first_idx and TWO_BAG_KINDS[first_idx] == Kind.BACKPACK:
+		if second_idx == first_idx and TWO_BAG_KINDS[first_idx] in [Kind.BACKPACK, Kind.SHOULDER]:
 			second_idx = (first_idx + 1 + _mix(p.id * 2 + 7) % (count - 1)) % count
 		return TWO_BAG_KINDS[second_idx]
 	var first := _mix(p.id * 2) % Kind.size() as Kind
 	if index == 0:
 		return first
 	var second := _mix(p.id * 2 + 1) % Kind.size() as Kind
-	if second == first and (first == Kind.BACKPACK or first == Kind.ROLLER):
+	if second == first and first in [Kind.BACKPACK, Kind.ROLLER, Kind.SHOULDER]:
 		second = (first + 1 + _mix(p.id * 2 + 7) % (Kind.size() - 1)) % Kind.size() as Kind
 	return second
+
+
+static func trip_has_checked_bag(sim: PassengerSim, p: Passenger) -> bool:
+	if sim == null or p == null:
+		return false
+	if p.is_arriving():
+		return p.has_claimed_bag and not p.arrival_done
+	return CheckedSuitcaseViews.has_connected_bag_room(sim)
+
+
+static func bag_kind_for(sim: PassengerSim, p: Passenger, index: int) -> Kind:
+	if p == null:
+		return Kind.CASE
+	if p.carry_on <= 1 or not trip_has_checked_bag(sim, p):
+		return bag_kind(p, index)
+	var first := bag_kind(p, 0)
+	var second := bag_kind(p, 1)
+	if first == Kind.BACKPACK or second == Kind.BACKPACK:
+		return first if index == 0 else second
+	return Kind.BACKPACK if index == 0 else second
+
+
+static func checked_hand(sim: PassengerSim, p: Passenger) -> int:
+	if not CheckedSuitcaseViews.wants_suitcase(sim, p):
+		return -1
+	if p.carry_on <= 0:
+		return 0
+	if p.carry_on == 1:
+		return 1 if bag_kind_for(sim, p, 0) == Kind.SHOULDER else 0
+	return 0 if bag_kind_for(sim, p, 0) == Kind.BACKPACK else 1
 
 
 ## How bag `index` of `p` is carried while in hand (Carry).
 static func carry_of(p: Passenger, index: int) -> Carry:
 	return KIND_CARRY[bag_kind(p, index)]
+
+
+## How bag `index` of `p` is carried while in hand (Carry), matching
+## bag_kind_for(sim, p, index) when a connected bag room enforces a backpack.
+static func carry_of_for(sim: PassengerSim, p: Passenger, index: int) -> Carry:
+	return KIND_CARRY[bag_kind_for(sim, p, index)]
 
 
 ## The side a worn shoulder bag hangs on: 0 the right, 1 the left, by its

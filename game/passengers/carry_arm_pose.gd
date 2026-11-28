@@ -14,11 +14,11 @@ const FRONT_FREE_HAND_M := 0.33
 ## How much further forward the holding upper arm reaches half way through a
 ## turn between the side and the front carry (pose_arms).
 const TURN_REACH_DEGREES := 28.0
-## The strap hand: at the chest just inside the strap (so the forearm stays
-## clear of the strap), this far from the centre line, the forearm raised this
-## much.
+## The strap hand: relaxed downward beside the hip just inside the tote (so the
+## forearm hangs naturally clear of the bag instead of bent up across the chest).
 const STRAP_HAND_M := 0.15
-const STRAP_HAND_UP_DEGREES := 45.0
+const STRAP_HAND_UP_DEGREES := -78.0
+const STRAP_UPPER_DEGREES := 4.0
 ## The pulling arm: turned out a little, less swing, leaning back.
 const PULL_OUT_DEGREES := 12.0
 const PULL_SWING_KEPT := 0.2
@@ -78,6 +78,24 @@ static func lead_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 	for bag: Dictionary in held["bags"]:
 		if CarryPlace.leading(bag, now) and bag.has("lead"):
 			plans.append(bag["lead"])
+	var checked_hand: int = held.get("checked_hand", -1)
+	var checked_reach: float = held.get("checked_reach", 0.0)
+	if checked_hand >= 0 and checked_reach > 0.0:
+		var weights := [0.0, 0.0]
+		var targets := [Vector3.ZERO, Vector3.ZERO]
+		weights[checked_hand] = checked_reach
+		targets[checked_hand] = held.get("checked_target", Vector3.ZERO)
+		(
+			plans
+			. append(
+				{
+					"weights": weights,
+					"targets": targets,
+					"keeps": [0.5, 0.5],
+					"drops": [CarryStoop.HIPS_ALL, CarryStoop.HIPS_ALL],
+				}
+			)
+		)
 	CarryLeadArms.apply(held, plans, props._rig(body))
 
 
@@ -116,13 +134,18 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 				if homes[i] == SecurityLooks.Home.HAND and CarryPlace.leading(bag, now):
 					shoulder_holds[side] = k >= 0.38 and on <= 0.0
 					if int(bag.get("was", -1)) / 4 == SecurityLooks.Home.TRAY:
-						var s_opp := sin(PI * clampf((k - 0.35) / 0.33, 0.0, 1.0))
-						shoulder_opp_clear[1 - side] = maxf(
-							shoulder_opp_clear[1 - side], 0.88 * s_opp * s_opp
-						)
+						var s_opp := smoothstep(0.32, 0.40, k) * (1.0 - smoothstep(0.56, 0.70, k))
+						shoulder_opp_clear[1 - side] = maxf(shoulder_opp_clear[1 - side], s_opp)
 				if on > 0.0:
 					modes[side] = Arm.STRAP
 					strap[side] = on
+	var checked_hand: int = held.get("checked_hand", -1)
+	var checked_holds: bool = checked_hand >= 0 and bool(held.get("checked_holds", false))
+	var checked_curl: float = float(held.get("checked_curl", 1.0)) if checked_holds else 0.0
+	if checked_holds:
+		modes[checked_hand] = Arm.HAND
+		cases += 1
+		beside += 1
 	# The arms keep what was set until it changes (most frames nothing does).
 	var pull_tuck := [0.0, 0.0]
 	for i in homes.size():
@@ -146,6 +169,9 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 		shoulder_opp_clear,
 		cases,
 		beside,
+		checked_hand,
+		checked_holds,
+		snappedf(checked_curl, 0.02),
 		held["weight"],
 		tuck,
 		tucked,
@@ -165,7 +191,8 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 		var arm := arms[side] as CarryArm
 		var pulling: bool = modes[side] == Arm.PULL
 		arm.holds = modes[side] == Arm.HAND or pulling or shoulder_holds[side]
-		arm.grip_curl = 1.0 if modes[side] == Arm.HAND or shoulder_holds[side] else 0.0
+		var default_curl := 1.0 if modes[side] == Arm.HAND or shoulder_holds[side] else 0.0
+		arm.grip_curl = checked_curl if side == checked_hand and checked_holds else default_curl
 		arm.active = (
 			modes[side] != Arm.FREE
 			or cases > 0
@@ -177,12 +204,17 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 		arm.angle_degrees = pull_out if pulling else outs[side]
 		arm.swing_kept = PULL_SWING_KEPT if pulling else 0.5 * (1.0 - still)
 		arm.lean_back_degrees = PULL_LEAN_DEGREES if pulling else 0.0
-		arm.front_upper_degrees = 0.0 if modes[side] == Arm.STRAP else 20.0
+		arm.front_upper_degrees = STRAP_UPPER_DEGREES if modes[side] == Arm.STRAP else 20.0
 		arm.front_up_degrees = STRAP_HAND_UP_DEGREES if modes[side] == Arm.STRAP else -10.0
 		match modes[side]:
 			Arm.STRAP:
+				var strap_w: float = strap[side]
+				var u := clampf(strap_w, 0.0, 1.0)
+				var arc := 0.0 if u <= 0.0 or u >= 1.0 else pow(sin(PI * u), 0.7)
+				arm.front_upper_degrees = STRAP_UPPER_DEGREES + 28.0 * arc
+				arm.front_up_degrees = STRAP_HAND_UP_DEGREES + 64.0 * arc
 				arm.front_half_width = STRAP_HAND_M
-				arm.front_weight = strap[side]
+				arm.front_weight = smoothstep(0.0, 0.35, u)
 			Arm.PULL:
 				arm.front_weight = 0.0
 			Arm.HAND:
@@ -205,10 +237,10 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 					var base_w := tuck * (1.0 - opp_w)
 					var total_w := base_w + opp_w
 					var share := opp_w / total_w
-					arm.front_upper_degrees = lerpf(20.0, -28.0, share)
+					arm.front_upper_degrees = lerpf(20.0, -50.0, share)
 					arm.front_up_degrees = lerpf(-10.0, -122.0, share)
 					arm.front_half_width = lerpf(
-						BoothCarry.free_hand_width(false, tuck), 0.25, share
+						BoothCarry.free_hand_width(false, tuck), 0.40, share
 					)
 					arm.front_weight = total_w
 				else:

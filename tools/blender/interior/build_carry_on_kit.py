@@ -28,10 +28,13 @@ atlas swatch, the written file re-read: nodes, materials, no images, bounds, UV
 swatches). check_reach() re-reads each stretchable node's position from the written file.
 """
 
+import math
 import os
 import sys
 
+import bmesh
 import bpy
+from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import build_activities_kit as act  # noqa: E402
@@ -50,8 +53,9 @@ PACK = (0.24, 0.42, 0.13)
 PACK_STRAP = 0.012
 # Tote: long side, height (top edge at -y), thickness.
 TOTE = (0.38, 0.28, 0.10)
-# Strap strips run up from the top edge at x = +-TOTE_STRAP_X, mid-thickness.
-TOTE_STRAP_X = 0.13
+# Strap strips leave the top rim at x = +-TOTE_STRAP_X and converge smoothly to +-TOTE_ARCH_X.
+TOTE_STRAP_X = 0.120
+TOTE_ARCH_X = 0.088
 TOTE_STRAP_Z = TOTE[2] / 2.0
 # Roller: width, length (top end at -y), thickness; wheels and rods on the back panel.
 ROLLER = (0.32, 0.44, 0.20)
@@ -126,19 +130,72 @@ def build_carry_backpack(root, c):
     tbox("Pack_Loop", (-0.04, -hy - 0.025, s + 0.05), (0.04, -hy, s + 0.09), "dark", root, c)
 
 
+def _ribbon_mesh(name, samples, half_z, pal, parent, c):
+    bm = bmesh.new()
+    rings = []
+    for cx, cy, nx, ny, half_t in samples:
+        v0 = bm.verts.new((cx - nx * half_t, cy - ny * half_t, -half_z))
+        v1 = bm.verts.new((cx + nx * half_t, cy + ny * half_t, -half_z))
+        v2 = bm.verts.new((cx + nx * half_t, cy + ny * half_t, half_z))
+        v3 = bm.verts.new((cx - nx * half_t, cy - ny * half_t, half_z))
+        rings.append((v0, v1, v2, v3))
+    for i in range(len(rings) - 1):
+        a, b = rings[i], rings[i + 1]
+        for k in range(4):
+            nk = (k + 1) % 4
+            bm.faces.new((a[k], a[nk], b[nk], b[k]))
+    bm.faces.new(rings[0][::-1])
+    bm.faces.new(rings[-1])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return kit._finish_mesh(name, bm, pal, parent, c)
+
+
 def build_carry_shoulder_bag(root, c):
     w, ln, t = TOTE
     hx, hy = w / 2.0, ln / 2.0
     tbox("Tote_Body", (-hx, -hy, 0.0), (hx, hy, t), "gold", root, c, bevel=0.02)
     tbox("Tote_Band", (-hx - 0.004, -hy + 0.03, 0.01), (hx + 0.004, -hy + 0.07, t - 0.01), "coffee", root, c)
     tbox("Tote_Patch", (-0.08, -0.02, t), (0.08, 0.08, t + 0.006), "cream", root, c)
-    # The strap: strips from the top edge (stretched by the game) and the bar over them.
-    reach = reach_group("Strap_Reach", "carry_shoulder_bag", root, c)
     for side, x in (("L", -TOTE_STRAP_X), ("R", TOTE_STRAP_X)):
-        tbox("Strap_Strip_" + side, (x - 0.016, -REACH_BUILT, -0.01), (x + 0.016, 0.0, 0.01), "coffee", reach, c)
+        tbox(
+            "Tote_Anchor_" + side,
+            (x - 0.012, -hy - 0.002, TOTE_STRAP_Z - 0.015),
+            (x + 0.012, -hy + 0.025, TOTE_STRAP_Z + 0.015),
+            "coffee",
+            root,
+            c,
+        )
+    # Converging strap ribbons from tote top rim (stretched by game) to a snug shoulder arch.
+    reach = reach_group("Strap_Reach", "carry_shoulder_bag", root, c)
+    for side, sign in (("L", -1.0), ("R", 1.0)):
+        samples = []
+        for i in range(9):
+            t_param = i / 8.0
+            s = 1.0 - (1.0 - t_param) ** 2
+            cx = sign * (TOTE_STRAP_X + (TOTE_ARCH_X - TOTE_STRAP_X) * s)
+            cy = -REACH_BUILT * t_param
+            samples.append((cx, cy, 1.0, 0.0, 0.005))
+        _ribbon_mesh("Strap_Strip_" + side, samples, 0.011, "coffee", reach, c)
     top = reach_group("Strap_Top", "carry_shoulder_bag", root, c)
-    tbox("Strap_Bar", (-TOTE_STRAP_X - 0.016, -0.02, -0.01), (TOTE_STRAP_X + 0.016, 0.0, 0.01), "coffee", top, c)
-    tbox("Strap_Pad", (-0.05, -0.024, -0.012), (0.05, -0.004, 0.012), "dark", top, c)
+    arch_h = 0.021
+    bar_samples = []
+    for i in range(11):
+        theta = math.pi * (i / 10.0)
+        cx = -TOTE_ARCH_X * math.cos(theta)
+        cy = -arch_h * math.sin(theta)
+        nx, ny = -arch_h * math.cos(theta), -TOTE_ARCH_X * math.sin(theta)
+        nlen = math.hypot(nx, ny)
+        bar_samples.append((cx, cy, nx / nlen, ny / nlen, 0.005))
+    _ribbon_mesh("Strap_Bar", bar_samples, 0.011, "coffee", top, c)
+    pad_samples = []
+    for i in range(7):
+        theta = math.pi * (0.18 + 0.64 * (i / 6.0))
+        cx = -TOTE_ARCH_X * math.cos(theta)
+        cy = -arch_h * math.sin(theta)
+        nx, ny = -arch_h * math.cos(theta), -TOTE_ARCH_X * math.sin(theta)
+        nlen = math.hypot(nx, ny)
+        pad_samples.append((cx, cy, nx / nlen, ny / nlen, 0.007))
+    _ribbon_mesh("Strap_Pad", pad_samples, 0.014, "dark", top, c)
 
 
 def build_carry_roller(root, c):
@@ -166,7 +223,7 @@ def build_carry_roller(root, c):
 # piece -> (builder, footprint, expected Blender bounds lo/hi).
 PIECES = {
     "carry_backpack": (build_carry_backpack, None, (-0.124, -0.235, 0.0), (0.124, 0.21, 0.177)),
-    "carry_shoulder_bag": (build_carry_shoulder_bag, None, (-0.194, -0.184, -0.0), (0.194, 0.14, 0.106)),
+    "carry_shoulder_bag": (build_carry_shoulder_bag, None, (-0.194, -0.188, -0.0), (0.194, 0.14, 0.106)),
     "carry_roller": (build_carry_roller, None, (-0.164, -0.274, 0.0), (0.164, 0.22, 0.225)),
 }
 

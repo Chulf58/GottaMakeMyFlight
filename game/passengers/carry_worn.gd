@@ -129,15 +129,12 @@ const ON_HIPS_M: Array[Vector4] = [
 
 
 ## A shoulder bag hung on the shoulder of `side` (0 right, 1 left) of a body
-## turned to `yaw` at `centre`, whose Arm bone is at `joint`: its inner face to
-## the hip, its strap's root CarryOnProps.STRAP_M under a point STRAP_OUT_M out
-## from the centre line and STRAP_OVER_ARM_M over the joint, the strap running
-## from there to its bar, which is that high and moved in by as far as the
-## stoop drew the joint in (`shift`, stoop_shift(); none when the body is not
-## stooping, at any pose of its own): upright then, tilted about the strap's
-## root with its bottom out when the joint leans in. Kept STRAP_OUT_M out, the
-## bar was 0.23 m off a joint the stoop drew 0.11 m in (board item a-shoulder-
-## tote-floats-0-39-m-from-the-hand-at-the-end-of-a). `strap_base` is
+## turned to `yaw` at `centre`, whose Arm bone is at `joint`: its strap bar
+## tracks `joint` directly (STRAP_SHOULDER_OUT_M out and STRAP_OVER_ARM_M up),
+## while the bag's top rim hangs STRAP_M below outside the hip (using the
+## upright shoulder's offset `joint - shift` plus STRAP_HIP_CLEAR_M, at least
+## STRAP_OUT_M), tilting the bottom slightly outward when the shoulder is
+## narrower or stoops inward (`shift`, stoop_shift()). `strap_base` is
 ## Strap_Reach's position in the bag. Returns [transform, the strap length in
 ## the bag's units].
 static func shoulder(
@@ -152,10 +149,17 @@ static func shoulder(
 	var turn := Basis(Vector3.UP, yaw)
 	var out := turn * (Vector3.LEFT if side == 0 else Vector3.RIGHT)
 	var forward := turn * Vector3.BACK
-	var hang := centre + out * CarryOnProps.STRAP_OUT_M + forward * (joint - centre).dot(forward)
-	hang.y = joint.y + CarryOnProps.STRAP_OVER_ARM_M
+	var bar := (
+		joint + out * CarryOnProps.STRAP_SHOULDER_OUT_M + Vector3.UP * CarryOnProps.STRAP_OVER_ARM_M
+	)
+	var upright_rel := joint - shift - centre
+	var hip_out := (
+		maxf(upright_rel.dot(out) + CarryOnProps.STRAP_HIP_CLEAR_M, CarryOnProps.STRAP_OUT_M)
+		+ maxf(shift.dot(out), 0.0)
+	)
+	var hang := centre + out * hip_out + forward * (joint - centre).dot(forward)
+	hang.y = bar.y
 	var root := hang - Vector3.UP * CarryOnProps.STRAP_M
-	var bar := hang + out * minf(shift.dot(out), 0.0)
 	var upright := Basis(out.cross(Vector3.UP), out, Vector3.UP)
 	var along := (bar - root).normalized()
 	var basis := (Basis(Quaternion(Vector3.UP, along)) * upright).scaled(Vector3.ONE * scale_by)

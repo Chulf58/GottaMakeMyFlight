@@ -235,6 +235,7 @@ func _ready() -> void:
 	_checked_bags = CheckedSuitcaseViews.new()
 	_checked_bags.name = "CheckedSuitcaseViews"
 	add_child(_checked_bags)
+	_props.checked_bags = _checked_bags
 	_badge_root = Node3D.new()
 	_badge_root.name = NeedCluster.ROOT
 	add_child(_badge_root)
@@ -562,7 +563,7 @@ func draw() -> void:
 	_sync_stall_doors(alpha)
 	_sync_security_views(alpha)
 	if _checked_bags != null:
-		_checked_bags.draw(_nodes, _turns, alpha)
+		_checked_bags.draw(_nodes, _turns, alpha, sim, _props, now)
 
 
 func _sync_fidget_frames(now: float) -> void:

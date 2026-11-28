@@ -29,12 +29,12 @@ func before_test() -> void:
 	add_child(_props)
 
 
-## main's worn_shoulder (f56da8a): the bar STRAP_OUT_M out from the centre line,
-## STRAP_OVER_ARM_M over the joint, the bag upright STRAP_M under it.
-static func _main_hang(joint: Vector3, side: int, strap_base: Vector3) -> Transform3D:
+## Old fixed hang prior to board 722abedf: bar hardcoded at STRAP_OUT_M = 0.32 m
+## regardless of shoulder bone X (causing narrow female skeletons and stoops to float).
+static func _old_fixed_hang(joint: Vector3, side: int, strap_base: Vector3) -> Transform3D:
 	var out := Vector3.LEFT if side == 0 else Vector3.RIGHT
-	var bar := out * CarryOnProps.STRAP_OUT_M + Vector3.BACK * joint.z
-	bar.y = joint.y + CarryOnProps.STRAP_OVER_ARM_M
+	var bar := out * 0.32 + Vector3.BACK * joint.z
+	bar.y = joint.y + 0.06
 	var basis := Basis(out.cross(Vector3.UP), out, Vector3.UP)
 	return Transform3D(basis, bar - basis * (strap_base + Vector3(0.0, 0.0, CarryOnProps.STRAP_M)))
 
@@ -87,8 +87,15 @@ func test_a_worn_tote_hangs_as_on_main_upright_and_on_the_shoulder_stooping() ->
 				await get_tree().process_frame
 				await get_tree().process_frame
 				var drawn := _placed(body, tote)
-				var main_xf := _main_hang(drawn[2], 1, base)
-				assert_bool((drawn[0] as Transform3D).is_equal_approx(main_xf)).is_true()
+				var joint_upright: Vector3 = drawn[2]
+				var top_upright: Vector3 = drawn[1]
+				assert_float(top_upright.distance_to(joint_upright)).is_less_equal(0.09)
+				var old_top := (
+					_old_fixed_hang(joint_upright, 1, base)
+					* (base + Vector3(0.0, 0.0, CarryOnProps.STRAP_M))
+				)
+				if path.contains("female"):
+					assert_float(old_top.distance_to(joint_upright)).is_greater(0.10)
 				upright += 1
 				if n > 0:
 					continue
@@ -105,12 +112,13 @@ func test_a_worn_tote_hangs_as_on_main_upright_and_on_the_shoulder_stooping() ->
 				var joint: Vector3 = leant[2]
 				var gap := maxf(0.0, (leant[1] as Vector3).distance_to(joint) - WORN_M)
 				var main_top := (
-					_main_hang(joint, 1, base) * (base + Vector3(0.0, 0.0, CarryOnProps.STRAP_M))
+					_old_fixed_hang(joint, 1, base)
+					* (base + Vector3(0.0, 0.0, CarryOnProps.STRAP_M))
 				)
 				var main_gap := maxf(0.0, main_top.distance_to(joint) - WORN_M)
 				print(
 					(
-						"%s %s stoop %.2f: left joint %.3f out, worn gap %.3f (main's placement %.3f)"
+						"%s %s stoop %.2f: left joint %.3f out, worn gap %.3f (old 0.32m placement %.3f)"
 						% [path.get_file(), clip, stoop.drawn, joint.x, gap, main_gap]
 					)
 				)

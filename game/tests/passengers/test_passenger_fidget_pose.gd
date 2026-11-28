@@ -1120,3 +1120,68 @@ func test_fidget_survives_3x_frame_hitch_and_non_integer_frame_steps() -> void:
 	assert_bool(saw_repack).is_true()
 	assert_float(max_w).is_greater(0.1)
 	assert_float(max_jump).is_less_equal(0.25)
+
+
+func test_arm_freedom_uses_bag_kind_for_and_locks_checked_suitcase_hand() -> void:
+	var world := _track_world(PassengerTestWorld.reference_world(17))
+	BagRoomKit.connect_reference_desk2(world.grid)
+	var bags := BaggageSim.new()
+	auto_free(bags)
+	bags.bind(world.clock, world.flights, world.grid, world.sim)
+	var views := _track_views(world)
+
+	var zero_id := world.sim.spawn_now(PassengerTestWorld.FLIGHT, 0)
+	var p0 := world.passenger(zero_id)
+	p0.carry_on = 0
+
+	var shoulder_id := 0
+	var coerced_id := 0
+	for _try in 80:
+		var cand := world.sim.spawn_now(PassengerTestWorld.FLIGHT, 0)
+		var pc := world.passenger(cand)
+		if shoulder_id == 0:
+			pc.carry_on = 1
+			if SecurityLooks.bag_kind(pc, 0) == SecurityLooks.Kind.SHOULDER:
+				shoulder_id = cand
+				continue
+		if coerced_id == 0:
+			pc.carry_on = 2
+			if (
+				SecurityLooks.bag_kind(pc, 0) == SecurityLooks.Kind.SHOULDER
+				and SecurityLooks.bag_kind(pc, 1) == SecurityLooks.Kind.CASE
+			):
+				coerced_id = cand
+				continue
+		if shoulder_id != 0 and coerced_id != 0:
+			break
+	assert_int(shoulder_id).is_greater(0)
+	assert_int(coerced_id).is_greater(0)
+
+	world.step()
+	views.draw()
+	await get_tree().process_frame
+
+	var ch0 := SecurityLooks.checked_hand(world.sim, p0)
+	assert_int(ch0).is_equal(0)
+	var free0 := PassengerFidgetPose.arm_freedom(world.sim, null, p0, null, float(world.clock.tick))
+	assert_bool(free0["arms"][ch0]).is_false()
+	assert_bool(free0["arms"][1 - ch0]).is_true()
+
+	var p_sh := world.passenger(shoulder_id)
+	var ch_sh := SecurityLooks.checked_hand(world.sim, p_sh)
+	assert_int(ch_sh).is_equal(1)
+	var free_sh := PassengerFidgetPose.arm_freedom(
+		world.sim, null, p_sh, null, float(world.clock.tick)
+	)
+	assert_bool(free_sh["arms"][0]).is_false()
+	assert_bool(free_sh["arms"][1]).is_false()
+
+	var p_co := world.passenger(coerced_id)
+	assert_int(SecurityLooks.carry_of_for(world.sim, p_co, 0)).is_equal(SecurityLooks.Carry.BACK)
+	assert_int(SecurityLooks.carry_of(p_co, 0)).is_equal(SecurityLooks.Carry.SHOULDER)
+	var free_co := PassengerFidgetPose.arm_freedom(
+		world.sim, null, p_co, null, float(world.clock.tick)
+	)
+	assert_int(SecurityLooks.checked_hand(world.sim, p_co)).is_equal(0)
+	assert_bool(free_co["arms"][0]).is_false()
+	assert_bool(free_co["arms"][1]).is_false()
