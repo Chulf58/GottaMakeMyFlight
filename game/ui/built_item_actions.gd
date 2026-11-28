@@ -19,6 +19,10 @@ extends VBoxContainer
 ## tr() of the literal, because the POT extractor reads only literals.
 const MOVE := "Move"
 const MOVE_ROOM := "Move room"
+const COPY_ROOM := "Copy room"
+const COPY_TOOLTIP := "Place a copy of this room elsewhere"
+const COPY_UNCOPIABLE := TemplatePaste.CLONE_UNCOPIABLE_TYPE
+const COPY_PIECES_UNCOPIABLE := TemplatePaste.CLONE_UNCOPIABLE_PIECES
 const DELETE := "Delete"
 const DELETE_ROOM := "Delete room"
 const NO_LOOSE_PIECE := "Single pieces outside a room can't be moved yet"
@@ -34,11 +38,13 @@ var card: BuiltItemCard
 var session: BuildSession
 
 var _move_button := Button.new()
+var _copy_button := Button.new()
 var _delete_button := Button.new()
 var _reason := Label.new()
-## What Move and Delete can do for the selection: "ok", "label", "reason", and
-## when ok, for Move "room", "type" and "tool", for Delete "edit".
+## What Move, Copy and Delete can do for the selection: "ok", "label", "reason",
+## and when ok, for Move "room", "type" and "tool", for Copy "room", for Delete "edit".
 var _move := {}
+var _copy := {}
 var _delete := {}
 var _note := ""
 var _key := ""
@@ -50,13 +56,21 @@ func _init() -> void:
 	name = "BuiltItemActions"
 	visible = false
 	add_theme_constant_override("separation", 2)
-	var row := HBoxContainer.new()
+	var row := HFlowContainer.new()
+	row.add_theme_constant_override("h_separation", 4)
+	row.add_theme_constant_override("v_separation", 4)
 	add_child(row)
 	_move_button.name = "MoveButton"
 	_move_button.focus_mode = Control.FOCUS_NONE
 	_move_button.theme_type_variation = &"HudButtonTeal"
 	_move_button.pressed.connect(press_move)
 	row.add_child(_move_button)
+	_copy_button.name = "CopyButton"
+	_copy_button.focus_mode = Control.FOCUS_NONE
+	_copy_button.theme_type_variation = &"HudButtonTeal"
+	_copy_button.visible = false
+	_copy_button.pressed.connect(press_copy)
+	row.add_child(_copy_button)
 	_delete_button.name = "DeleteButton"
 	_delete_button.focus_mode = Control.FOCUS_NONE
 	_delete_button.theme_type_variation = &"HudButtonCoral"
@@ -80,9 +94,10 @@ func refresh() -> void:
 		visible = false
 		return
 	_watch()
-	var key := card.selection.key()
+	var key := "%s:%d" % [card.selection.key(), card.build_mode.tool]
 	if key != _key or _stale:
 		_move = _move_state()
+		_copy = _copy_state()
 		_delete = _delete_state()
 		_key = key
 		_stale = false
@@ -93,10 +108,16 @@ func refresh() -> void:
 	_move_button.text = _move["label"]
 	_move_button.disabled = not _move["ok"]
 	_move_button.tooltip_text = (tr("Pick it up and set it down elsewhere") if _move["ok"] else "")
+	_copy_button.visible = bool(_copy.get("visible", false))
+	_copy_button.text = _copy["label"]
+	_copy_button.disabled = not _copy["ok"]
+	_copy_button.tooltip_text = (
+		tr("Place a copy of this room elsewhere") if _copy["ok"] else String(_copy["reason"])
+	)
 	_delete_button.text = _delete["label"]
 	_delete_button.disabled = not _delete["ok"]
 	var lines := PackedStringArray()
-	for text in [_move["reason"], _delete["reason"], _note]:
+	for text in [_move["reason"], _copy["reason"], _delete["reason"], _note]:
 		if text != "":
 			lines.append(text)
 	_reason.text = "\n".join(lines)
@@ -118,6 +139,27 @@ func press_move() -> bool:
 		return true
 	mode.set_tool(BuildMode.Tool.NONE)
 	return false
+
+
+## Arms TemplatePaste with an ephemeral copy of the selected room without adding
+## it to the saved library, and clears the current built selection.
+func press_copy() -> bool:
+	if card == null or card.build_mode == null or not _copy.get("ok", false):
+		return false
+	var mode := card.build_mode
+	var grid := card.sim.grid if card.sim != null and card.sim.grid != null else mode.grid
+	if not mode.templates.arm_clone(grid, int(_copy["room"])):
+		return false
+	if card.selection != null:
+		card.selection.clear()
+	card.refresh()
+	refresh()
+	return true
+
+
+## Alias for press_copy().
+func copy_room() -> bool:
+	return press_copy()
 
 
 ## Removes the selected item or room directly as one refunded undo step, without
@@ -150,6 +192,22 @@ func move_text() -> String:
 
 func move_disabled() -> bool:
 	return _move_button.disabled
+
+
+func copy_text() -> String:
+	return _copy_button.text
+
+
+func copy_disabled() -> bool:
+	return _copy_button.disabled
+
+
+func copy_visible() -> bool:
+	return _copy_button.visible
+
+
+func copy_button() -> Button:
+	return _copy_button
 
 
 func delete_text() -> String:
@@ -243,6 +301,30 @@ func _delete_state() -> Dictionary:
 			var edit := BuildEdit.remove_room(card.selection.id)
 			return {"ok": true, "label": tr("Delete room"), "reason": "", "edit": edit}
 	return _off(tr("Delete"), tr("Take car parks and curbs back with the Remove tool"))
+
+
+func _copy_state() -> Dictionary:
+	if (
+		card.selection.kind != BuiltSelection.Kind.ROOM
+		or card.build_mode.tool != BuildMode.Tool.NONE
+	):
+		return {"ok": false, "visible": false, "label": tr("Copy room"), "reason": ""}
+	var grid := (
+		card.sim.grid if card.sim != null and card.sim.grid != null else card.build_mode.grid
+	)
+	var room_id: int = card.selection.id
+	var refusal := TemplatePaste.clone_refusal(grid, room_id)
+	if refusal != "":
+		var localized := refusal
+		match refusal:
+			TemplatePaste.CLONE_GONE:
+				localized = tr("It is no longer there")
+			TemplatePaste.CLONE_UNCOPIABLE_TYPE:
+				localized = tr("This kind of room can't be copied")
+			TemplatePaste.CLONE_UNCOPIABLE_PIECES:
+				localized = tr("This room's pieces can't be copied")
+		return {"ok": false, "visible": true, "label": tr("Copy room"), "reason": localized}
+	return {"ok": true, "visible": true, "label": tr("Copy room"), "reason": "", "room": room_id}
 
 
 ## Why a check-in desk, scanner or lane part cannot move: what RoomMove refuses

@@ -32,6 +32,9 @@ const SAVE_ROOM := "Click to save %s as a template"
 const SAVED := "Saved template %s"
 const PLACED := "Placed %s for %d"
 const PLACE_HINT := "%s: click to place"
+const CLONE_GONE := "It is no longer there"
+const CLONE_UNCOPIABLE_TYPE := "This kind of room can't be copied"
+const CLONE_UNCOPIABLE_PIECES := "This room's pieces can't be copied"
 
 var library := RoomTemplates.new()
 ## The template a click pastes, or -1.
@@ -42,6 +45,8 @@ var capturing := false
 var turns := 0
 
 var _mode: BuildMode
+var _clone: RoomTemplate = null
+var _clone_auto_walls := false
 var _ghost := Node3D.new()
 var _status := ""
 var _revision := 0
@@ -97,8 +102,8 @@ func _process(_delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_active():
 		return
-	if event.is_action_pressed("build_rotate") and armed >= 0:
-		rotate_turns()
+	if event.is_action_pressed("build_rotate") and active_template() != null:
+		rotate_cw()
 		get_viewport().set_input_as_handled()
 	elif (
 		event.is_action_pressed("build_apply")
@@ -110,10 +115,54 @@ func _unhandled_input(event: InputEvent) -> void:
 		if cell != null:
 			click(cell)
 		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("build_tool_none"):
+		disarm()
+		get_viewport().set_input_as_handled()
 
 
 func is_active() -> bool:
-	return armed >= 0 or capturing
+	return active_template() != null or capturing
+
+
+## The armed template (library slot or ephemeral clone), or null when inactive.
+func active_template() -> RoomTemplate:
+	if _clone != null:
+		return _clone
+	if armed >= 0 and armed < library.size():
+		return library.get_template(armed)
+	return null
+
+
+## Why room `room_id` on `grid` cannot be copied as an ephemeral clone, or "" when allowed.
+static func clone_refusal(grid: BuildGrid, room_id: int) -> String:
+	if grid == null:
+		return CLONE_GONE
+	var room := grid.get_room(room_id)
+	if room.is_empty():
+		return CLONE_GONE
+	if RoomTypes.get_type(StringName(room["type"])) == null:
+		return CLONE_UNCOPIABLE_TYPE
+	var template := RoomTemplate.capture(grid, room_id)
+	if template == null:
+		return CLONE_GONE
+	if template.pieces.is_empty() and _has_unkept_interior_pieces(grid, room["rect"]):
+		return CLONE_UNCOPIABLE_PIECES
+	return ""
+
+
+static func _has_unkept_interior_pieces(grid: BuildGrid, rect: Rect2i) -> bool:
+	for object_id in grid.object_ids():
+		var record := grid.get_object(object_id)
+		var def_id := StringName(record["def"])
+		if BuildCatalog.is_any_door(def_id):
+			continue
+		var def := BuildCatalog.get_def(def_id)
+		if def == null:
+			continue
+		for cell in def.footprint(record["anchor"], record["facing"]):
+			if rect.has_point(cell):
+				return true
+	return false
 
 
 ## Why template `index` cannot be armed or pasted right now, or "" when unlocked.
@@ -137,7 +186,10 @@ func try_arm(index: int) -> bool:
 	var locked := lock_text(index)
 	if locked != "":
 		armed = -1
+		_clone = null
+		_clone_auto_walls = false
 		capturing = false
+		_note = ""
 		_clear_ghost()
 		_invalidate_cache()
 		_status = locked
@@ -155,17 +207,56 @@ func arm(index: int) -> void:
 		push_error("TemplatePaste.arm: no template %d" % index)
 		return
 	armed = index
+	_clone = null
+	_clone_auto_walls = false
 	capturing = false
 	turns = 0
+	_note = ""
 	_invalidate_cache()
 	_set_status(PLACE_HINT % library.get_template(index).name)
 	armed_changed.emit()
 
 
+## Arms an ephemeral copy of room `room_id` on `grid` without mutating `library`.
+func arm_clone(grid: BuildGrid, room_id: int) -> bool:
+	if clone_refusal(grid, room_id) != "":
+		return false
+	return arm_clone_template(RoomTemplate.capture(grid, room_id), true)
+
+
+## Arms an ephemeral `RoomTemplate` copy without adding it to `library`.
+func arm_clone_template(tpl: RoomTemplate, auto_walls := true) -> bool:
+	if tpl == null:
+		return false
+	if _mode != null:
+		if _mode.starter_kit != null and _mode.starter_kit.is_active():
+			_mode.starter_kit.disarm()
+		if _mode.room_mover != null and _mode.room_mover.active:
+			_mode.room_mover.cancel()
+		if _mode.object_mover != null and _mode.object_mover.active:
+			_mode.object_mover.cancel()
+		if _mode.tool != BuildMode.Tool.NONE:
+			_mode.set_tool(BuildMode.Tool.NONE)
+	armed = -1
+	_clone = tpl
+	_clone_auto_walls = auto_walls
+	capturing = false
+	turns = 0
+	_note = ""
+	_clear_ghost()
+	_invalidate_cache()
+	_set_status(PLACE_HINT % tpl.name)
+	armed_changed.emit()
+	return true
+
+
 ## Arms saving: the next click on a room saves it.
 func arm_capture() -> void:
 	armed = -1
+	_clone = null
+	_clone_auto_walls = false
 	capturing = true
+	_note = ""
 	_invalidate_cache()
 	_set_status(PICK_ROOM)
 	armed_changed.emit()
@@ -175,7 +266,10 @@ func disarm() -> void:
 	if not is_active():
 		return
 	armed = -1
+	_clone = null
+	_clone_auto_walls = false
 	capturing = false
+	_note = ""
 	_clear_ghost()
 	_invalidate_cache()
 	_set_status(_mode.status_text())
@@ -186,6 +280,10 @@ func rotate_turns() -> void:
 	turns = (turns + 1) % 4
 	_invalidate_cache()
 	armed_changed.emit()
+
+
+func rotate_cw() -> void:
+	rotate_turns()
 
 
 ## A click on `cell`: saves the room there or pastes the armed template.
@@ -232,11 +330,43 @@ func check_at(cell: Vector2i) -> BuildResult:
 	return plan_at(cell)["result"]
 
 
+func _plan_edits(template: RoomTemplate, cell: Vector2i, grid: BuildGrid) -> Array[BuildEdit]:
+	var base := template.plan(cell, turns, grid)
+	if not _clone_auto_walls:
+		return base
+	var edits: Array[BuildEdit] = []
+	for edit in base:
+		if edit.kind == BuildEdit.Kind.PAINT_FLOOR:
+			edits.append(edit)
+	var rect := template.rect_at(cell, turns)
+	if (
+		rect.size.x > 0
+		and rect.size.y > 0
+		and grid != null
+		and grid.in_bounds(rect.position)
+		and grid.in_bounds(rect.end - Vector2i.ONE)
+	):
+		for edge in RoomTool.perimeter_edges(rect):
+			var edge_cell: Vector2i = edge[0]
+			var side: int = edge[1]
+			if grid.wall_kind(edge_cell, side) != BuildGrid.WallKind.NONE:
+				continue
+			if DoorPlacement.on_a_way_out(grid, edge_cell, side):
+				continue
+			edits.append(BuildEdit.place_wall(edge_cell, side, BuildGrid.WallKind.PLAIN))
+	for edit in base:
+		if edit.kind != BuildEdit.Kind.PAINT_FLOOR:
+			edits.append(edit)
+	return edits
+
+
 ## Pastes the armed template centred on `cell`, all or nothing, as one undo
 ## step, and reshapes the belts it touches. Returns the result; a refusal
 ## changes nothing.
 func paste_at(cell: Vector2i) -> BuildResult:
-	var template := library.get_template(armed)
+	var template := active_template()
+	if template == null:
+		return BuildResult.refused(BuildResult.Reason.UNKNOWN_ROOM_TYPE)
 	var planned := plan_at(cell)
 	var result: BuildResult = planned["result"]
 	if not result.ok:
@@ -246,14 +376,19 @@ func paste_at(cell: Vector2i) -> BuildResult:
 		_mode.notify_refusal(msg)
 		return result
 	# Fresh edits for the live grid: the check applied its own to the copy.
-	var edits := template.plan(cell, turns, _mode.grid)
+	var edits := _plan_edits(template, cell, _mode.grid)
 	for edit in planned["edits"]:
 		if edit.kind == BuildEdit.Kind.RESHAPE_BELT:
 			edits.append(edit)
 	var history := _mode.undo_history()
 	var before := _balance()
 	history.begin_action()
-	result = BuildTransaction.commit_plan(_mode.grid, edits, _mode.wallet())
+	if _clone_auto_walls:
+		result = BuildTransaction.commit_composite(
+			_mode.grid, edits, _mode.wallet(), _mode.unlocks, _mode.require_unlocks
+		)
+	else:
+		result = BuildTransaction.commit_plan(_mode.grid, edits, _mode.wallet())
 	history.end_action()
 	if not result.ok:
 		push_error("TemplatePaste.paste_at: the grid refused a paste its copy accepted")
@@ -282,14 +417,14 @@ func paste_at(cell: Vector2i) -> BuildResult:
 ## (what it costs, what the wallet must hold), or zero when nothing is armed or
 ## the pointer is off the grid.
 func preview_price() -> Vector2i:
-	var cell: Variant = _pointer_cell() if armed >= 0 else null
+	var cell: Variant = _pointer_cell() if active_template() != null else null
 	if cell == null:
 		return Vector2i.ZERO
 	return preview_price_at(cell)
 
 
 func preview_price_at(cell: Vector2i) -> Vector2i:
-	if armed < 0 or armed >= library.size() or _mode == null or _mode.grid == null:
+	if active_template() == null or _mode == null or _mode.grid == null:
 		return Vector2i.ZERO
 	var needed := int(_preview_at(cell)["needed"])
 	return Vector2i(needed, needed)
@@ -321,33 +456,37 @@ func _pointer_cell() -> Variant:
 ## the balance changed.
 func _hover(cell: Variant) -> void:
 	if cell == null:
-		var empty_key := "null:%d:%s:%d:%d" % [armed, capturing, turns, _revision]
+		var empty_tpl := active_template()
+		var empty_tpl_id := empty_tpl.get_instance_id() if empty_tpl != null else 0
+		var empty_key := "null:%d:%d:%s:%d:%d" % [armed, empty_tpl_id, capturing, turns, _revision]
 		if empty_key == _key:
 			return
 		_key = empty_key
 		_clear_ghost()
 		return
 	if capturing:
-		var capture_key := "%s:capture:%d" % [cell, _revision]
-		if capture_key == _key:
-			return
-		_key = capture_key
-		_clear_ghost()
-		_ghost_builds += 1
-		var room := _mode.grid.get_room(_mode.grid.room_at(cell))
-		if room.is_empty():
-			_set_status(PICK_ROOM)
-			return
-		_ghost_slab(room["rect"], _valid_material)
-		_set_status(SAVE_ROOM % RoomTemplate.capture(_mode.grid, _mode.grid.room_at(cell)).name)
+		_hover_capture(cell)
 		return
-	var template := library.get_template(armed)
+	var template := active_template()
+	if template == null:
+		return
 	var cached := _preview_at(cell)
 	var checked := _result_for_wallet(cached)
 	var note_flag := 1 if (_note != "" and cell == _note_cell) else 0
 	var key := (
-		"%s:%d:%d:%d:%s:%d:%s:%d"
-		% [cell, armed, turns, _revision, checked.ok, checked.reason, checked.detail, note_flag]
+		"%s:%d:%d:%s:%d:%d:%s:%d:%s:%d"
+		% [
+			cell,
+			armed,
+			template.get_instance_id(),
+			_clone_auto_walls,
+			turns,
+			_revision,
+			checked.ok,
+			checked.reason,
+			checked.detail,
+			note_flag,
+		]
 	)
 	if not checked.ok:
 		key += ":" + str(checked.detail_args)
@@ -365,6 +504,8 @@ func _hover(cell: Variant) -> void:
 	for edit in cached["edits"]:
 		if edit.kind == BuildEdit.Kind.PLACE_ROOM:
 			_ghost_slab(Rect2i(edit.cell, edit.room_size), material)
+		elif edit.kind == BuildEdit.Kind.PLACE_WALL:
+			_ghost_wall(edit.cell, edit.side, edit.wall_kind, material)
 		elif edit.kind == BuildEdit.Kind.PLACE_OBJECT:
 			_ghost_piece(shaped.get(edit.cell, edit), material)
 	var text := PLACE_HINT % template.name
@@ -382,6 +523,21 @@ func _hover(cell: Variant) -> void:
 		_mode.refusal_shown.emit(text)
 
 
+func _hover_capture(cell: Vector2i) -> void:
+	var capture_key := "%s:capture:%d" % [cell, _revision]
+	if capture_key == _key:
+		return
+	_key = capture_key
+	_clear_ghost()
+	_ghost_builds += 1
+	var room := _mode.grid.get_room(_mode.grid.room_at(cell))
+	if room.is_empty():
+		_set_status(PICK_ROOM)
+		return
+	_ghost_slab(room["rect"], _valid_material)
+	_set_status(SAVE_ROOM % RoomTemplate.capture(_mode.grid, _mode.grid.room_at(cell)).name)
+
+
 func _ghost_slab(area: Rect2i, material: Material) -> void:
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(area.size.x - 0.04, 0.08, area.size.y - 0.04)
@@ -394,6 +550,24 @@ func _ghost_slab(area: Rect2i, material: Material) -> void:
 		+ Vector3((area.size.x - 1) / 2.0, 0.06, (area.size.y - 1) / 2.0)
 	)
 	_ghost.add_child(slab)
+
+
+func _ghost_wall(cell: Vector2i, side: int, wall_kind: int, material: Material) -> void:
+	var extent := Vector3(
+		1.0,
+		BuildView.WALL_HEIGHT * (0.55 if wall_kind == BuildGrid.WallKind.DOOR else 1.0),
+		BuildView.WALL_THICKNESS * 1.5
+	)
+	var mesh := BoxMesh.new()
+	mesh.size = extent
+	var wall_node := MeshInstance3D.new()
+	wall_node.name = "DoorWall" if wall_kind == BuildGrid.WallKind.DOOR else "Wall"
+	wall_node.mesh = mesh
+	wall_node.material_override = material
+	wall_node.transform = BuildView.wall_transform(_mode.grid, cell, side).translated_local(
+		Vector3(0.0, extent.y / 2.0, 0.0)
+	)
+	_ghost.add_child(wall_node)
 
 
 func _ghost_piece(edit: BuildEdit, material: Material) -> void:
@@ -446,7 +620,7 @@ func _set_status(text: String) -> void:
 func _on_library_changed() -> void:
 	_revision += 1
 	_invalidate_cache()
-	if armed >= library.size():
+	if _clone == null and armed >= library.size():
 		disarm()
 
 
@@ -473,7 +647,7 @@ func _on_grid_changed() -> void:
 
 func _preview_key_for(cell: Vector2i) -> Array:
 	var grid_id := _mode.grid.get_instance_id() if _mode.grid != null else 0
-	var template := library.get_template(armed)
+	var template := active_template()
 	var template_id := template.get_instance_id() if template != null else 0
 	var unlocks := _mode.unlocks
 	var unlocks_id := unlocks.get_instance_id() if unlocks != null else 0
@@ -490,6 +664,7 @@ func _preview_key_for(cell: Vector2i) -> Array:
 	return [
 		cell,
 		armed,
+		_clone_auto_walls,
 		turns,
 		_revision,
 		library.get_instance_id(),
@@ -512,8 +687,8 @@ func _preview_at(cell: Vector2i) -> Dictionary:
 		return _cached_preview
 	_plan_builds += 1
 	var grid := _mode.grid
-	var template := library.get_template(armed)
-	var edits := template.plan(cell, turns, grid)
+	var template := active_template()
+	var edits := _plan_edits(template, cell, grid)
 	var needed := BuildTransaction.needed(grid, edits)
 	var result := _compute_preview_result(grid, template, cell, edits)
 	_preview_key = key
@@ -542,7 +717,10 @@ func _compute_preview_result(
 		refusal.detail_args = locked
 		return refusal
 	var scratch := BuildUndo.trial_copy_of(grid)
-	var result := scratch.apply_sequence(edits, BeltShaper.crossing_problem)
+	var rule := (
+		BuildTransaction.composite_rule if _clone_auto_walls else BeltShaper.crossing_problem
+	)
+	var result := scratch.apply_sequence(edits, rule)
 	if not result.ok:
 		return result
 	var near := BeltShaper.around(_cells(template.rect_at(cell, turns)))

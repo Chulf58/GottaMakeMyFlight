@@ -44,7 +44,7 @@ static func preview_price(menu: BuildMenu) -> Vector2i:
 	var mode := menu.build_mode
 	if (
 		mode.room_mover.active
-		or mode.templates.armed >= 0
+		or mode.templates.active_template() != null
 		or (mode.starter_kit != null and mode.starter_kit.is_active())
 	):
 		return held_price(menu)

@@ -29,7 +29,7 @@ static func applies(mode: BuildMode) -> bool:
 	return (
 		BuildMode.tool_object(mode.tool) != &""
 		or mode.tool == BuildMode.Tool.SECURITY_LANE
-		or mode.templates.armed >= 0
+		or mode.templates.active_template() != null
 		or mode.room_mover.active
 		or mode.object_mover.active
 		or (mode.starter_kit != null and mode.starter_kit.is_active())

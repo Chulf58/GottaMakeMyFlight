@@ -1480,6 +1480,22 @@ msgid "Delete room"
 msgstr ""
 
 #: ui/built_item_actions.gd
+msgid "Copy room"
+msgstr ""
+
+#: ui/built_item_actions.gd
+msgid "Place a copy of this room elsewhere"
+msgstr ""
+
+#: ui/built_item_actions.gd
+msgid "This kind of room can't be copied"
+msgstr ""
+
+#: ui/built_item_actions.gd
+msgid "This room's pieces can't be copied"
+msgstr ""
+
+#: ui/built_item_actions.gd
 msgid "Take car parks and curbs back with the Remove tool"
 msgstr ""
 
