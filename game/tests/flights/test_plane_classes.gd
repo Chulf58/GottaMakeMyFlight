@@ -122,7 +122,7 @@ func test_the_starter_contract_fits_its_class() -> void:
 
 func test_a_saved_offer_at_the_class_limits_loads() -> void:
 	var cases: Array = [
-		["small", 4, "Gotta Air"],
+		["small", OfferBoard.STARTER_SIZES["small"][0], "Gotta Air"],
 		["small", 8, "Gotta Air"],
 		["medium", 24, "Gotta Air"],
 		["medium", 48, "Gotta Air"],

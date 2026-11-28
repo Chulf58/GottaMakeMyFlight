@@ -77,12 +77,16 @@ func test_a_saved_starter_with_20_small_passengers_is_refused_on_load() -> void:
 
 
 func test_the_offer_board_refuses_a_count_just_outside_its_size_range_on_load() -> void:
-	var small: Array = OfferBoard.STARTER_SIZES["small"]
-	for booked in [small[0] - 1, small[1] + 1]:
+	var class_small: Array = PlaneClasses.passenger_range("small")
+	for booked in [class_small[0] - 1, class_small[1] + 1]:
 		var offers := TestOfferBoard.day_records(0, [480, 540, 600])
 		offers[0]["booked_passengers"] = booked
 		var terms := OfferBoard.terms_of(offers[0])
 		assert_str(FlightContract.problem(terms, FlightContract.TERM_KEYS)).is_not_empty()
+	var small: Array = OfferBoard.STARTER_SIZES["small"]
+	for booked in [small[0] - 1, small[1] + 1]:
+		var offers := TestOfferBoard.day_records(0, [480, 540, 600])
+		offers[0]["booked_passengers"] = booked
 		var board := OfferBoard.new()
 		assert_bool(board.from_snapshot(TestOfferBoard.save_of(offers))).is_false()
 

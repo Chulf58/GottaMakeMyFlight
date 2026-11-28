@@ -11,10 +11,10 @@ extends GdUnitTestSuite
 ## x = 1 runs down to a hall at y 7-10 (floored at x 1 and at (0, 7) and
 ## (0, 8), bare at x 2-3), with the entrance at (1, 10). Beside the
 ## corridor, gate seat rows fill x = 0 from y = 0 to 5 and x = 3 from y = 1
-## to 6, a seat row fills x = 2 from y = 0 to 2 and two belt pieces fill
+## to 6, two belt pieces fill (2, 0) and (2, 1), and two belt pieces fill
 ## (2, 5) and (2, 6). Staff spots stay free (decision
 ## staff-spot-design-a-derived-staff-spot-behind-each-desk-and): the officer's
-## at (2, 3) with (2, 4) as its way to the corridor, and (0, 6), behind the
+## at (2, 2) with (2, 3)-(2, 4) as its way to the corridor, and (0, 6), behind the
 ## hall's first desk cells. A desk at (0, 7)-(1, 7) costs no floor and blocks
 ## the corridor, and then no scanner fits in the hall (and staff could no longer
 ## reach the officer's spot, so it is refused outright); a desk whose plan
@@ -45,9 +45,9 @@ func before_test() -> void:
 		assert_bool(grid.apply(BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, 1)).ok).is_true()
 	# Walls along the grid border close the floor in, floor the plan adds too.
 	EnclosureKit.wall_border(grid)
-	for anchor in [Vector2i(0, 0), Vector2i(0, 3), Vector2i(2, 0), Vector2i(3, 1), Vector2i(3, 4)]:
+	for anchor in [Vector2i(0, 0), Vector2i(0, 3), Vector2i(3, 1), Vector2i(3, 4)]:
 		PassengerTestWorld.place(grid, &"seat_row", anchor, 1)
-	for cell in [Vector2i(2, 5), Vector2i(2, 6)]:
+	for cell in [Vector2i(2, 0), Vector2i(2, 1), Vector2i(2, 5), Vector2i(2, 6)]:
 		PassengerTestWorld.place(grid, &"baggage_belt", cell, 1)
 	PassengerTestWorld.place(grid, &"security_scanner", Vector2i(1, 2), 0)
 	PassengerTestWorld.place(grid, &"exit_door", Vector2i(1, 0), 0)

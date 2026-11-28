@@ -14,7 +14,8 @@ extends GdUnitTestSuite
 ## is admitted must stand up when it is due, with the full outcome.
 
 const BASE_DOORS := 4000
-const BOARDING := 300
+const BOARDING := 410
+const TOILET_BOARDING := 200
 ## Slack offsets swept around zero.
 const OFFSETS: Array[int] = [-3, -2, -1, 0, 1, 2, 3]
 
@@ -66,10 +67,10 @@ func _snap_state() -> Dictionary:
 	}
 
 
-func _restore_state(snap: Dictionary, doors: int) -> void:
+func _restore_state(snap: Dictionary, doors: int, boarding := BOARDING) -> void:
 	assert_bool(_world.clock.from_snapshot(snap["clock"])).is_true()
 	var flights_data: Dictionary = snap["flights"].duplicate(true)
-	flights_data["flights"][0]["starts"] = PassengerTestWorld.starts_with(BOARDING, doors)
+	flights_data["flights"][0]["starts"] = PassengerTestWorld.starts_with(boarding, doors)
 	assert_bool(_world.flights.from_snapshot(flights_data)).is_true()
 	assert_bool(_world.sim.from_snapshot(snap["sim"])).is_true()
 	assert_bool(_world.sim.wallet.from_snapshot(snap["wallet"])).is_true()
@@ -129,7 +130,7 @@ func _stall_run(p: Passenger) -> int:
 func _toilet_ready(doors: int) -> Dictionary:
 	var grid := BuildGrid.new()
 	ToiletTestLayout.build(grid, 1)
-	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(BOARDING, doors))
+	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(TOILET_BOARDING, doors))
 	_world.run_to(10)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	ToiletTestLayout.calm(p)
@@ -145,7 +146,7 @@ func _toilet_ready(doors: int) -> Dictionary:
 
 
 func _toilet_commit(ready: Dictionary, doors: int) -> Dictionary:
-	_restore_state(ready["snap"], doors)
+	_restore_state(ready["snap"], doors, TOILET_BOARDING)
 	var p := _world.passenger(ready["id"])
 	_track(p)
 	var toilets := _world.sim.toilets

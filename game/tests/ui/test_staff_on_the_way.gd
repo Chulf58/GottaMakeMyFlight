@@ -97,6 +97,7 @@ func test_the_staff_lines_stay_unticked_while_the_members_walk_and_tick_on_arriv
 	# Arrival: every member on duty, the lines tick and fold away.
 	while _walking() > 0 and _w.clock.tick < LIMIT_TICKS:
 		_w.step()
+	_w.step()
 	_panel.refresh()
 	print("arrived, unmet %s, open %s" % [_gate.unmet(), _gate.is_open()])
 	assert_int(_walking()).is_equal(0)

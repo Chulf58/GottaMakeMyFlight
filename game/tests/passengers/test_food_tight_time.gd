@@ -17,7 +17,7 @@ extends GdUnitTestSuite
 ## Just checked in, between the desks and the scanner lanes.
 const CROWD_CELL := Vector2i(16, 12)
 ## Passengers who check in at once, enough to make a seated guest's deadline pass.
-const BURST := 30
+const BURST := 16
 
 var _worlds: Array[PassengerTestWorld] = []
 

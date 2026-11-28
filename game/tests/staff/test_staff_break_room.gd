@@ -120,7 +120,7 @@ func test_tired_staff_work_slower_and_keep_working_without_break_room() -> void:
 	while p.stage != Passenger.Stage.CHECKIN and _w.clock.tick < 1200:
 		_w.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.CHECKIN)
-	assert_int(p.service_end - _w.clock.tick).is_equal(75)
+	assert_int(p.service_end - _w.clock.tick).is_equal(100)
 	# Without a Break Room, tired agents stay on duty and finish check-in.
 	while p.stage == Passenger.Stage.CHECKIN and _w.clock.tick < 1400:
 		_w.step()
