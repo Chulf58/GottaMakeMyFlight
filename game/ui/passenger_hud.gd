@@ -67,6 +67,7 @@ const RESULT_KEY := &"flight_result"
 ## reads "Quiet stretch: fast-forwarding".
 const NIGHT_START_MINUTE := 20 * 60
 const NIGHT_END_MINUTE := GameCalendar.START_MINUTE
+const GOAL_TOAST_SECONDS := 5.0
 
 @export var clock: SimClock
 @export var flights: FlightSim
@@ -83,6 +84,7 @@ const NIGHT_END_MINUTE := GameCalendar.START_MINUTE
 @export var build_mode: BuildMode
 @export var staff: StaffSim
 @export var staff_views: StaffCharacters
+@export var goals: AirportGoals
 ## Where the departures board keeps its on/off choice; tests use their own.
 var departures_settings_path := DeparturesBoard.SETTINGS_PATH
 ## Where the alert cards keep their on/off choice; tests use their own.
@@ -110,6 +112,7 @@ var _planner := FlightPlanner.new()
 var _alerts := AlertStack.new()
 var _pa_ticker := PaTicker.new()
 var _hints := Hints.new()
+var _goals_card := AirportGoalsCard.new()
 ## The new-tier dialog and the "New" card marks (UnlockGuide); on in a normal
 ## launch only, like the hints.
 var _unlock_guide := UnlockGuide.new()
@@ -342,6 +345,20 @@ func _ready() -> void:
 	_wire_unlock_guide()
 	_wire_dialog_gates()
 	_wire_demo_end_card()
+	if goals == null:
+		goals = get_node_or_null("../AirportGoals") as AirportGoals
+	if goals == null and save_game != null:
+		goals = save_game.ensure_goals()
+	AirportGoalsCard.mount(
+		_goals_card,
+		self,
+		goals,
+		flights,
+		_departures_board,
+		build_mode,
+		_alerts,
+		GOAL_TOAST_SECONDS
+	)
 	_frame_start_view()
 	refresh()
 
@@ -679,6 +696,10 @@ func refresh() -> void:
 	if _departures_board.rating != rating:
 		_departures_board.rating = rating
 	_departures_board.refresh()
+	if _goals_card != null:
+		if _goals_card.staff_panel == null:
+			_goals_card.staff_panel = get_node_or_null("../StaffPanel") as StaffPanel
+		_goals_card.sync()
 	_follow_label.text = follow_text()
 	_inspect.refresh()
 	if staff == null:
@@ -1349,6 +1370,8 @@ func _on_save_loaded(ok: bool) -> void:
 		_alerts.reset()
 		_pa_ticker.clear_now()
 		_inspect.on_loaded(ok)
+		if _goals_card != null:
+			_goals_card.sync()
 		_frame_start_view()
 
 

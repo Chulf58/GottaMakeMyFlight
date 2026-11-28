@@ -184,8 +184,13 @@ static func room_below(top: float, layer: Vector2, bar_width: float) -> float:
 static func list_room(tree: SceneTree, layer: Vector2, bar_width: float) -> float:
 	var card_need := 0.0
 	for card in tree.get_nodes_in_group(CARD_GROUP):
-		if (card as Control).is_visible_in_tree():
+		var control := card as Control
+		if control == null or not control.is_visible_in_tree():
+			continue
+		if control.get_node_or_null("Checklist") != null:
 			card_need = maxf(card_need, CARD_RESERVE)
+		else:
+			card_need = maxf(card_need, control.get_combined_minimum_size().y)
 	var hint_need := 0.0
 	for card in tree.get_nodes_in_group(HINT_GROUP):
 		if (card as Control).is_visible_in_tree():
