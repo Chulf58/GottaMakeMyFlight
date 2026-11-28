@@ -13,8 +13,8 @@ const SITE := preload("res://build/terminal_site.tres")
 const SHELL_OFFSET := Vector2i(85, 110)
 ## Cells of the starter shell (ReferenceTerminal coordinates), moved onto the
 ## grid by SHELL_OFFSET so both west and east side stands clear the road.
-const WEST_CELL := Vector2i(10, 4)
-const EAST_CELL := Vector2i(21, 4)
+const WEST_CELL := Vector2i(ReferenceTerminal.FLOOR_MIN.x, 4)
+const EAST_CELL := Vector2i(ReferenceTerminal.FLOOR_MAX.x, 4)
 const SOUTH_CELL := Vector2i(12, 17)
 
 var _base: BuildGrid

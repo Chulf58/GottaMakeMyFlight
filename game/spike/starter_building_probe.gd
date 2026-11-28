@@ -195,7 +195,7 @@ func _shell_and_closed() -> bool:
 	var shell := _counts()
 	print("PROBE shell %s" % [shell])
 	if (
-		shell["floors"] != 12 * 16
+		shell["floors"] != 16 * 16
 		or shell["entrances"] != 1
 		or shell["exits"] != 1
 		or shell["desks"] != 0

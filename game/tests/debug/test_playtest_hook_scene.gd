@@ -203,8 +203,8 @@ func test_the_snapshot_reports_flight_passengers_grid_and_events() -> void:
 	assert_int(summary["total"]).is_equal(0)
 	assert_dict(summary["by_stage"]).is_empty()
 	var grid: Dictionary = _snapshot["grid"]
-	# The 12 x 16 starter terminal.
-	assert_int(grid["floor_cells"]).is_equal(12 * 16)
+	# The 16 x 16 starter terminal.
+	assert_int(grid["floor_cells"]).is_equal(16 * 16)
 	var objects := {
 		"checkin_desk": 2,
 		"security_scanner": 2,

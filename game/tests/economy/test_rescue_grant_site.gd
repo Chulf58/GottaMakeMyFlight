@@ -10,7 +10,13 @@ extends GdUnitTestSuite
 
 const SITE := preload("res://build/terminal_site.tres")
 ## The pocket's cells: a ring one cell wide round the landside hall.
-const POCKET := Rect2i(Vector2i(9, 9) + LandKit.FIRST_SITE, Vector2i(14, 10))
+const POCKET := Rect2i(
+	Vector2i(ReferenceTerminal.FLOOR_MIN.x - 1, ReferenceTerminal.DIVIDER_Y) + LandKit.FIRST_SITE,
+	Vector2i(
+		ReferenceTerminal.FLOOR_MAX.x - ReferenceTerminal.FLOOR_MIN.x + 3,
+		ReferenceTerminal.FLOOR_MAX.y - ReferenceTerminal.DIVIDER_Y + 2
+	)
+)
 
 var _world: PassengerTestWorld
 var _grant: RescueGrant

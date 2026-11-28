@@ -8,7 +8,7 @@ extends GdUnitTestSuite
 ## service is gone, and closes the wall again.
 
 ## A west wall of the reference terminal's landside hall.
-const TERMINAL_WALL := Vector2i(10, 12)
+const TERMINAL_WALL := Vector2i(ReferenceTerminal.FLOOR_MIN.x, 12)
 ## An east wall of the test layouts' floor east of the terminal (x 22-27),
 ## which openings in the terminal's east wall join to the terminal.
 const ANNEX_WALL := Vector2i(27, 5)

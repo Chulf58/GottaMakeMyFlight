@@ -144,14 +144,15 @@ func test_the_nearest_free_spot_wins_and_ties_go_to_the_lower_id() -> void:
 	spots.rebuild(_world.sim)
 	var per_row := StandingSpots.columns(_world.grid.size)
 	# Cell (10, 4)'s one lattice point (17, 7) sits on its centre. With it
-	# taken, (17, 6) in cell (10, 3) and (17, 8) in cell (10, 5) are both
-	# 0.6 m away; the lower id, the row above, comes first.
+	# taken, (17, 6) in cell (10, 3), (16, 7) in cell (9, 4) and (17, 8) in
+	# cell (10, 5) are all 0.6 m away; the lower id comes first.
 	var centre := 7 * per_row + 17
 	assert_int(spots.free_nearest(Vector2i(10, 4))[0]).is_equal(centre)
 	spots.claim(9001, centre)
 	var order := spots.free_nearest(Vector2i(10, 4))
 	assert_int(order[0]).is_equal(6 * per_row + 17)
-	assert_int(order[1]).is_equal(8 * per_row + 17)
+	assert_int(order[1]).is_equal(7 * per_row + 16)
+	assert_int(order[2]).is_equal(8 * per_row + 17)
 	spots.release(9001)
 	assert_int(spots.free_nearest(Vector2i(10, 4))[0]).is_equal(centre)
 

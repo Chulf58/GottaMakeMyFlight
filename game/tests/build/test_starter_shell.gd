@@ -2,12 +2,12 @@ class_name TestStarterShell
 extends GdUnitTestSuite
 ## The new-game starter shell (decision terminal-growth-and-starter-building-
 ## move-the-airside-north, points 2 to 4): floor, outer walls, one entrance and
-## one exit on ReferenceTerminal's 12x16 footprint and nothing inside; every
+## one exit on ReferenceTerminal's 16x16 footprint and nothing inside; every
 ## piece saved at its price so a demolition refunds half; the debug fill adds
 ## the reference interior. Built on the airport site's grid, no scene.
 
 const SITE := "res://build/terminal_site.tres"
-const FLOOR_CELLS := 12 * 16
+const FLOOR_CELLS := 16 * 16
 
 var _site: SiteDefinition
 
@@ -67,12 +67,19 @@ func test_the_shell_floors_the_reference_footprint_and_walls_it_in() -> void:
 	assert_int(_count_floor(grid)).is_equal(FLOOR_CELLS)
 	var low := ReferenceTerminal.FLOOR_MIN
 	var high := ReferenceTerminal.FLOOR_MAX
+	assert_that(high - low + Vector2i.ONE).is_equal(Vector2i(16, 16))
 	assert_int(grid.floor_at(low)).is_not_equal(BuildGrid.FLOOR_NONE)
 	assert_int(grid.floor_at(high)).is_not_equal(BuildGrid.FLOOR_NONE)
-	assert_bool(grid.has_wall(low, BuildGrid.Side.WEST)).is_true()
-	assert_bool(grid.has_wall(low, BuildGrid.Side.NORTH)).is_true()
-	assert_bool(grid.has_wall(high, BuildGrid.Side.EAST)).is_true()
-	assert_bool(grid.has_wall(high, BuildGrid.Side.SOUTH)).is_true()
+	for x in range(low.x, high.x + 1):
+		assert_bool(grid.has_wall(Vector2i(x, low.y), BuildGrid.Side.NORTH)).is_equal(
+			x != ReferenceTerminal.EXIT_CELL.x
+		)
+		assert_bool(grid.has_wall(Vector2i(x, high.y), BuildGrid.Side.SOUTH)).is_equal(
+			x != ReferenceTerminal.ENTRANCE_CELL.x
+		)
+	for y in range(low.y, high.y + 1):
+		assert_bool(grid.has_wall(Vector2i(low.x, y), BuildGrid.Side.WEST)).is_true()
+		assert_bool(grid.has_wall(Vector2i(high.x, y), BuildGrid.Side.EAST)).is_true()
 
 
 func test_the_shell_has_one_entrance_one_exit_and_no_desks() -> void:
@@ -112,7 +119,7 @@ func test_every_shell_piece_is_saved_at_its_price() -> void:
 
 
 func test_the_shell_costs_floor_walls_and_two_doors() -> void:
-	var walls := 2 * 12 - 2 + 2 * 16
+	var walls := 2 * 16 - 2 + 2 * 16
 	var expected := (
 		FLOOR_CELLS * PriceTable.price_of_floor()
 		+ walls * PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN)
@@ -169,7 +176,7 @@ func test_the_debug_fill_adds_the_interior_to_the_shell() -> void:
 	assert_int((kinds["seats"] as Array).size()).is_equal(4)
 	assert_int((kinds["entrances"] as Array).size()).is_equal(1)
 	assert_int((kinds["exits"] as Array).size()).is_equal(1)
-	assert_int(_count_divider(grid)).is_equal(12 - ReferenceTerminal.SCANNER_XS.size())
+	assert_int(_count_divider(grid)).is_equal(16 - ReferenceTerminal.SCANNER_XS.size())
 
 
 func test_the_shell_and_the_fill_make_the_reference_terminal() -> void:

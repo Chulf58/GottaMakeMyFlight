@@ -32,7 +32,7 @@ func test_an_empty_site_grid_frames_the_starter_terminal_floor() -> void:
 func test_the_starter_area_is_a_small_part_of_the_site() -> void:
 	var area := StartView.area_for(_site_grid())
 	assert_float(area.size.x).is_less(SITE.grid_size.x * 0.5)
-	assert_float(area.size.y).is_greater(area.size.x)
+	assert_float(area.size.y).is_greater_equal(area.size.x)
 
 
 func test_a_built_grid_frames_what_is_built_not_the_starter_terminal() -> void:

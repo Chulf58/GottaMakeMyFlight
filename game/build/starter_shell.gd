@@ -2,7 +2,7 @@ class_name StarterShell
 extends RefCounted
 ## The player-owned terminal shell a new game starts with (decision terminal-
 ## growth-and-starter-building-move-the-airside-north, point 2): floor, outer
-## walls, one entrance and one exit on ReferenceTerminal's 12x16 footprint, no
+## walls, one entrance and one exit on ReferenceTerminal's 16x16 footprint, no
 ## desks. BuildMode places it once, when it enters the tree for a new game;
 ## a load replaces the whole grid (BuildMode.load_snapshot), so a loaded game
 ## never gets a second shell. The player owns it: it costs nothing, but every

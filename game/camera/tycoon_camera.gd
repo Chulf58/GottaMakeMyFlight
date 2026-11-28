@@ -65,6 +65,9 @@ const MIN_RAY_DOWN := 0.05
 ## area clear of the bottom bar and left column across supported aspect ratios
 ## and UI scales while the camera stays at WHOLE_VIEW.
 @export var frame_margin := 1.45
+## Wider horizontal framing margin so the left HUD banner clears on 5:4
+## viewports while 16:9 remains height-governed.
+@export var frame_margin_x := 2.15
 ## The height the area's walls reach, in metres: a framed view keeps the wall
 ## tops inside the room too, since the far wall's top shows above its foot.
 @export var frame_height := 2.5
@@ -288,7 +291,9 @@ func go_home() -> void:
 ## with the focus at the middle of `free`, at the chosen angle. The distance is
 ## found by bisection.
 func framing_for(area: Rect2, free := WHOLE_VIEW) -> Dictionary:
-	var half := area.size * 0.5 * frame_margin
+	var half := Vector2(
+		area.size.x * 0.5 * maxf(frame_margin, frame_margin_x), area.size.y * 0.5 * frame_margin
+	)
 	var fit := max_distance
 	if _fits(half, min_distance, free):
 		fit = min_distance
