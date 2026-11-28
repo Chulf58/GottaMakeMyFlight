@@ -157,10 +157,15 @@ const HUNGER_RISE_BEATS := 16
 const HUNGRY_MOOD_BEATS := 5
 ## A refused hungry passenger tries again after this long.
 const HUNGER_RETRY_TICKS := 100
+## A refused browse retries sooner than a completed visit's cooldown so passing
+## a busy or landside venue does not block later airside or hunger visits.
+const BROWSE_RETRY_TICKS := 120
 ## Browsing: how near a cafe's order spot a walking passenger must pass, by
-## octile distance first and then by path; airside passengers browse more.
-const BROWSE_REACH_MM := 5000
-const AIRSIDE_BROWSE_REACH_MM := 8000
+## octile distance first and then by path; airside and arriving passengers
+## browse more.
+const BROWSE_REACH_MM := 5500
+const AIRSIDE_BROWSE_REACH_MM := 8500
+const ARRIVAL_BROWSE_REACH_MM := 15000
 ## A browser drops in only with this much spare beyond the margin. Boarding
 ## caps the spare: in the reference flight a passenger who reaches the gate
 ## early has about 220 ticks beyond the margin, whatever it does before.
@@ -329,9 +334,9 @@ func wants_browse(p: Passenger) -> bool:
 
 
 ## A wanted visit could not start: `p` waits HUNGER_RETRY_TICKS before trying
-## again, or BROWSE_COOLDOWN_TICKS after a browse.
+## again, or BROWSE_RETRY_TICKS after a refused browse.
 func refuse(p: Passenger, browsing := false) -> void:
-	p.cafe_cooldown = _sim.tick + (BROWSE_COOLDOWN_TICKS if browsing else HUNGER_RETRY_TICKS)
+	p.cafe_cooldown = _sim.tick + (BROWSE_RETRY_TICKS if browsing else HUNGER_RETRY_TICKS)
 
 
 ## A new passenger's starting hunger. The draw is always taken, so the random
@@ -986,6 +991,8 @@ func _may_start(p: Passenger) -> bool:
 
 
 func _reach_mm(p: Passenger) -> int:
+	if p.is_arriving():
+		return ARRIVAL_BROWSE_REACH_MM
 	return AIRSIDE_BROWSE_REACH_MM if p.cleared else BROWSE_REACH_MM
 
 

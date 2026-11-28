@@ -7200,6 +7200,11 @@ msgctxt "build menu"
 msgid "Starter Break Room"
 msgstr ""
 
+#: build/starter_room_kits.gd
+msgctxt "build menu"
+msgid "Starter Baggage claim"
+msgstr ""
+
 #: build/build_words.gd
 msgctxt "build status"
 msgid "{item} row of {count}, cost {cost}"

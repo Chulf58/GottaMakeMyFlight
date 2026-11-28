@@ -77,7 +77,11 @@ static func spawn(sim: PassengerSim, flight_id: String, variant: int) -> Passeng
 	p.at = sim.layout.door_cell(sim.grid, door)
 	p.clear_path()
 	var rng := sim.clock.rng if sim.clock != null else RandomNumberGenerator.new()
-	p.hunger = rng.randi_range(0, 45) if sim.cafes.hunger_enabled else 0
+	p.hunger = (
+		rng.randi_range(CafeSim.HUNGER_START_MIN, CafeSim.HUNGER_START_MAX + 10)
+		if sim.cafes.hunger_enabled
+		else 0
+	)
 	p.toilet_need = rng.randi_range(0, 65)
 	p.boredom = 0
 	CarryOnTraits.draw(rng, p)
