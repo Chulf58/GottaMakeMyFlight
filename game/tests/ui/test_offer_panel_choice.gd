@@ -66,11 +66,13 @@ func test_a_fitting_card_says_it_fits_now_in_the_good_look() -> void:
 		assert_str(_panel.fit_label(id).theme_type_variation).is_equal("HudGoodText")
 
 
-## Accepting 10:00 leaves 12:00 clashing at the one gate while a second gate
-## would take it; 20:00 still fits. The clashing card says it needs another gate
-## in the problem look, and its earnings stay on the card.
+## An existing 11:00 contract leaves 12:00 clashing at the one gate while a
+## second gate would take it; 21:00 still fits. The clashing card says it needs
+## another gate in the problem look, and its earnings stay on the card.
 func test_a_clashing_card_says_it_needs_another_gate() -> void:
-	_panel.accept_button("O0N1").pressed.emit()
+	_panel.close()
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("EXISTING", 660))).is_true()
+	_panel.open()
 	assert_str(OfferPanel.NEEDS_GATE_TEXT).is_equal("Needs another gate")
 	assert_str(_panel.fit_text("O0N2")).is_equal(OfferPanel.NEEDS_GATE_TEXT)
 	assert_str(_panel.fit_label("O0N2").theme_type_variation).is_equal("HudProblemText")
@@ -93,14 +95,12 @@ func test_the_fit_and_earnings_lines_follow_the_title() -> void:
 		assert_str(lines[after]).starts_with("Departs ")
 
 
-## The two share one row, so the sheet grows by one line a card, not two (the
-## HUD scale test keeps three cards inside the 720 px layout at UI scale 1.5).
+## The fit and earnings share the Verdict container right under the title.
 func test_the_fit_and_earnings_share_one_row() -> void:
 	for id in _panel.card_ids():
 		var fit := _panel.fit_label(id)
 		var earnings := _panel.earnings_label(id)
 		assert_object(fit.get_parent()).is_same(earnings.get_parent())
-		assert_bool(fit.get_parent() is HBoxContainer).is_true()
 		assert_bool(_panel.card(id).is_ancestor_of(fit)).is_true()
 
 

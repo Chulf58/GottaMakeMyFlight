@@ -17,9 +17,9 @@ extends RefCounted
 ## choices. ensure_day does it, being the call made at each day boundary.
 ##
 ## Given the FlightSim, ensure_day fits the new day's departures to it (decision
-## airline-offers-2-a-day-fit-the-free-gate-slots-1-needs-more): two offers at
-## slots the gates have room for, one where another gate is needed. The fitted
-## minute is the offer's saved departure, so a load never fits again.
+## airline-offers-pick-1-of-3-side-by-side-spin-away-discard): all 3 daily
+## offers depart at slots the gates/runway have room for when free slots allow.
+## The fitted minute is the offer's saved departure, so a load never fits again.
 ##
 ## Each offer carries the term "traits" (OfferTraits): two of a day's offers are
 ## paired with an upside and a downside, one is plain. The traits come from
@@ -200,10 +200,10 @@ const PEAK_OFFER_CHANCE := 0.65
 const PEAK_FARE_BONUS_PERCENT := 15
 const PEAK_WAVE_MORNING := "morning"
 const PEAK_WAVE_EVENING := "evening"
-## With flights to fit to, a day's first FIT_OFFERS offers depart at slots the
-## gates have room for and the others where another gate is needed (decision
-## airline-offers-2-a-day-fit-the-free-gate-slots-1-needs-more).
-const FIT_OFFERS := 2
+## With flights to fit to, a day's first FIT_OFFERS offers depart at distinct
+## slots the gates and runway have room for when free slots allow (decision
+## airline-offers-pick-1-of-3-side-by-side-spin-away-discard).
+const FIT_OFFERS := 3
 
 ## Offers in the order they were drawn.
 var _offers: Array[Dictionary] = []
@@ -617,7 +617,8 @@ func expire_charters(now: int, day: int) -> bool:
 
 ## Turns an open offer or charter into a contract in `sim`. False (with an error)
 ## for an unknown or settled offer, or when the sim refuses the terms; a refused
-## offer stays open.
+## offer stays open. Accepting a daily offer immediately closes out any other
+## open daily offers from the same day as DECLINED (1 pick per day).
 func accept(id: String, sim: FlightSim) -> bool:
 	var index := _index_of(id)
 	if index >= 0:
@@ -627,6 +628,10 @@ func accept(id: String, sim: FlightSim) -> bool:
 		if not sim.accept_contract(terms_of(_offers[index])):
 			return false
 		_offers[index]["status"] = ACCEPTED
+		var accepted_day: int = _offers[index]["day"]
+		for i in _offers.size():
+			if i != index and _offers[i]["day"] == accepted_day and _offers[i]["status"] == OPEN:
+				_offers[i]["status"] = DECLINED
 		QuitLog.note("offer_accepted")
 		changed.emit()
 		return true
@@ -640,6 +645,27 @@ func accept(id: String, sim: FlightSim) -> bool:
 	QuitLog.note("charter_accepted")
 	changed.emit()
 	return true
+
+
+## Declines every open daily offer (used by the "Pass" action). Leaves
+## one-off charters untouched. Returns true when at least one offer was open.
+func pass_open_offers() -> bool:
+	var any := false
+	for offer in _offers:
+		if offer["status"] == OPEN:
+			offer["status"] = DECLINED
+			any = true
+	if any:
+		changed.emit()
+	return any
+
+
+## True when a daily offer drawn for `day` has already been accepted.
+func has_accepted_on_day(day: int) -> bool:
+	for offer in _offers:
+		if offer["day"] == day and offer["status"] == ACCEPTED:
+			return true
+	return false
 
 
 ## Removes an open offer or charter from the open list. False (with an error)
@@ -919,84 +945,59 @@ static func _base_fee_before_peak(fee: int, departure_minute: int) -> int:
 
 
 ## Moves the departures of a day's freshly drawn `offers` (in draw order) onto
-## the slots `flights` has room for now (decision airline-offers-2-a-day-fit-
-## the-free-gate-slots-1-needs-more, points 1 to 3). Day 2+ (day >= 1) orders
-## candidate slots wave-aware (same wave -> other peak bank -> remaining slots);
-## Day 1 (day == 0) preserves uniform _pick ordering for gentle afternoon/evening
-## pacing (d97c94bd). Moving an offer across the peak/off-peak boundary always
-## updates its fee via _set_departure_minute.
+## distinct slots `flights` has room for now (decision
+## airline-offers-pick-1-of-3-side-by-side-spin-away-discard). Day 2+ (day >= 1)
+## orders candidate slots wave-aware (same wave -> other peak bank -> remaining
+## slots); Day 1 (day == 0) preserves uniform _pick ordering for gentle
+## afternoon/evening pacing. Any offer for which fewer than FIT_OFFERS distinct
+## fitting slots exist falls back to a push slot (needs another gate) or keeps
+## its drawn slot. Moving across the peak/off-peak boundary always updates fee.
 static func _fit(offers: Array[Dictionary], flights: FlightSim, min_minute := -1) -> void:
 	if offers.is_empty():
 		return
 	var wave_aware := int(offers[0].get("day", 0)) >= 1
-	var drawn: Array[Array] = []
-	for offer in offers:
-		var slots := slots_of(offer[FlightContract.TRAITS_KEY])
-		drawn.append([slots.find(int(offer["departure_minute"])), slots.size()])
 	var cache := {}
-	var first: Dictionary = offers[0]
-	var firsts := _slots_where(flights, first, cache, true, min_minute)
-	var first_ordered := (
-		_wave_ordered_slots(firsts, first)
-		if wave_aware
-		else _rotate_from(firsts, _pick(drawn[0], firsts.size()))
-	)
-	if offers.size() == 1:
-		if not first_ordered.is_empty():
-			_set_departure_minute(first, first_ordered[0])
-		return
-	var second: Dictionary = offers[1]
-	var seconds := _slots_where(flights, second, cache, true, min_minute)
-	var second_ordered := (
-		_wave_ordered_slots(seconds, second)
-		if wave_aware
-		else _rotate_from(seconds, _pick(drawn[1], seconds.size()))
-	)
-	var chosen_first := int(first["departure_minute"])
-	var chosen_second := int(second["departure_minute"])
-	var paired := false
-	if not first_ordered.is_empty():
-		chosen_first = first_ordered[0]
-		if not second_ordered.is_empty():
-			var first_key := _slot_key(first, min_minute)
-			var second_key := _slot_key(second, min_minute)
-			var first_cache: Dictionary = cache[first_key]
-			var second_cache: Dictionary = cache[second_key]
-			var free_cache := {}
-			var first_free := _free_gate_map(flights, first, first_ordered, free_cache)
-			var second_free := _free_gate_map(flights, second, second_ordered, free_cache)
-			for minute in first_ordered:
-				var first_stand: String = first_cache[minute].get(
-					"stand", first_cache[minute]["gate"]
-				)
-				var joined := _joined_ordered_slot(
-					flights,
-					_terms_at(first, minute),
-					first_stand,
-					first_free[minute],
-					second,
-					second_ordered,
-					second_cache,
-					second_free
-				)
-				if joined >= 0:
-					chosen_first = minute
-					chosen_second = joined
-					paired = true
-					break
-	if not paired and not second_ordered.is_empty():
-		chosen_second = second_ordered[0]
-	_set_departure_minute(first, chosen_first)
-	_set_departure_minute(second, chosen_second)
-	for index in range(FIT_OFFERS, offers.size()):
-		var pushes := _slots_where(flights, offers[index], cache, false, min_minute)
-		var ordered_pushes := (
-			_wave_ordered_slots(pushes, offers[index])
+	var used_minutes := {}
+	var chosen_terms: Array[Dictionary] = []
+	var fit_limit := mini(FIT_OFFERS, offers.size())
+	for index in fit_limit:
+		var offer: Dictionary = offers[index]
+		var slots := slots_of(offer[FlightContract.TRAITS_KEY])
+		var drawn := [maxi(slots.find(int(offer["departure_minute"])), 0), slots.size()]
+		var fitting := _slots_where(flights, offer, cache, true, min_minute)
+		var ordered := (
+			_wave_ordered_slots(fitting, offer)
 			if wave_aware
-			else _rotate_from(pushes, _pick(drawn[index], pushes.size()))
+			else _rotate_from(fitting, _pick(drawn, fitting.size()))
+		)
+		var minute := _pick_distinct_fit_minute(flights, offer, ordered, used_minutes, chosen_terms)
+		if minute >= 0:
+			_set_departure_minute(offer, minute)
+			used_minutes[minute] = true
+			chosen_terms.append(_terms_at(offer, minute))
+			continue
+		var pushes := _slots_where(flights, offer, cache, false, min_minute)
+		var ordered_pushes := (
+			_wave_ordered_slots(pushes, offer)
+			if wave_aware
+			else _rotate_from(pushes, _pick(drawn, pushes.size()))
+		)
+		var push_minute := _first_unused_minute(ordered_pushes, used_minutes)
+		if push_minute >= 0:
+			_set_departure_minute(offer, push_minute)
+			used_minutes[push_minute] = true
+	for index in range(fit_limit, offers.size()):
+		var offer: Dictionary = offers[index]
+		var slots := slots_of(offer[FlightContract.TRAITS_KEY])
+		var drawn := [maxi(slots.find(int(offer["departure_minute"])), 0), slots.size()]
+		var pushes := _slots_where(flights, offer, cache, false, min_minute)
+		var ordered_pushes := (
+			_wave_ordered_slots(pushes, offer)
+			if wave_aware
+			else _rotate_from(pushes, _pick(drawn, pushes.size()))
 		)
 		if not ordered_pushes.is_empty():
-			_set_departure_minute(offers[index], ordered_pushes[0])
+			_set_departure_minute(offer, ordered_pushes[0])
 
 
 static func _wave_ordered_slots(candidates: Array[int], offer: Dictionary) -> Array[int]:
@@ -1051,18 +1052,31 @@ static func _slot_key(offer: Dictionary, min_minute: int) -> String:
 	return "%s|%s|%d" % [offer["plane_size"], FlightContract.window(traits), min_minute]
 
 
-static func _free_gate_map(
-	flights: FlightSim, offer: Dictionary, minutes: Array[int], free_cache: Dictionary
-) -> Dictionary:
-	var size: String = offer["plane_size"]
-	var window := FlightContract.window(offer[FlightContract.TRAITS_KEY])
-	var out := {}
-	for minute in minutes:
-		var cache_key := "%s|%s|%d" % [size, window, minute]
-		if not free_cache.has(cache_key):
-			free_cache[cache_key] = flights.free_gates(_terms_at(offer, minute))
-		out[minute] = free_cache[cache_key]
-	return out
+static func _pick_distinct_fit_minute(
+	flights: FlightSim,
+	offer: Dictionary,
+	ordered: Array[int],
+	used_minutes: Dictionary,
+	chosen_terms: Array[Dictionary]
+) -> int:
+	var first_distinct := -1
+	for minute in ordered:
+		if used_minutes.has(minute):
+			continue
+		if first_distinct < 0:
+			first_distinct = minute
+		if chosen_terms.is_empty():
+			return minute
+		if FlightFit.fits(flights, _terms_at(offer, minute), chosen_terms):
+			return minute
+	return first_distinct
+
+
+static func _first_unused_minute(ordered: Array[int], used_minutes: Dictionary) -> int:
+	for minute in ordered:
+		if not used_minutes.has(minute):
+			return minute
+	return ordered[0] if not ordered.is_empty() else -1
 
 
 ## The departure minutes, earliest first, at which `offer` fits `flights` now
@@ -1099,30 +1113,6 @@ static func _slots_where(
 			if assessment["another_gate_helps"]:
 				out.append(minute)
 	return out
-
-
-## The first minute in `second_ordered` (already wave-ordered) at which `second`
-## and `first_terms` both fit, whichever is accepted first; -1 for none.
-static func _joined_ordered_slot(
-	flights: FlightSim,
-	first_terms: Dictionary,
-	first_gate: String,
-	first_free: Array[String],
-	second: Dictionary,
-	second_ordered: Array[int],
-	second_cache: Dictionary,
-	second_free: Dictionary
-) -> int:
-	for minute in second_ordered:
-		var second_terms := _terms_at(second, minute)
-		var second_gate: String = second_cache[minute].get("stand", second_cache[minute]["gate"])
-		if not flights.gates_pair_compatible(
-			first_terms, first_gate, first_free, second_terms, second_gate, second_free[minute]
-		):
-			continue
-		if flights.trial_pair_fits(first_terms, first_gate, second_terms, second_gate):
-			return minute
-	return -1
 
 
 ## The candidate of `count` that drawn slot `drawn` ([r, d]: index r of the d

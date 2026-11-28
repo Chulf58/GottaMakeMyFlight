@@ -41,11 +41,6 @@ var _day := -1
 var _bound: SimClock
 var _bound_gate: AirportGate
 var _was_open := false
-var _drawing := false
-var _refilling := false
-var _has_fitting_open := false
-var _next_stale_tick := -1
-var _no_slots_day := -1
 
 
 func _ready() -> void:
@@ -73,13 +68,8 @@ func bind_clock(sim_clock: SimClock) -> void:
 	clock = sim_clock
 	_day = GameCalendar.day_of(clock.tick, clock.epoch)
 	_connect_flights()
-	if not board.changed.is_connected(_on_board_changed):
-		board.changed.connect(_on_board_changed)
 	_was_open = flights != null and flights.opened_tick >= 0
-	_drawing = true
 	_draw(_day)
-	_drawing = false
-	_refresh_refill_watch()
 	clock.ticked.connect(on_tick)
 
 
@@ -98,11 +88,11 @@ func on_flight_state(flight_id: String, state: int) -> void:
 
 ## A new day first ends a contract the low rating has made due, then draws the
 ## day's offers, so they are fitted to the timetable as midnight leaves it
-## (decision airline-offers-2-a-day-fit-the-free-gate-slots-1-needs-more,
-## point 4). Ending a contract draws nothing from the RNG, so the order does
-## not change the draws. On the tick the airport opens, Day-1 offers are fitted
-## behind the starter contract; during a day, once open fitting offers pass
-## their issue lead, a mid-day refill is attempted.
+## (decision airline-offers-pick-1-of-3-side-by-side-spin-away-discard). Ending
+## a contract draws nothing from the RNG, so the order does not change the
+## draws. On the tick the airport opens, Day-1 offers are fitted behind the
+## starter contract; no automatic mid-day refills are drawn after the day's
+## pick or pass.
 func on_tick(tick: int) -> void:
 	if flights != null and flights.gate != null:
 		_connect_gate(flights.gate)
@@ -111,19 +101,11 @@ func on_tick(tick: int) -> void:
 	var day := GameCalendar.day_of(tick, clock.epoch)
 	if day != _day:
 		_day = day
-		_no_slots_day = -1
 		board.expire_charters(tick, day)
 		_end_contract_if_due()
-		_drawing = true
 		_draw(day)
-		_drawing = false
-		_refresh_refill_watch()
 		return
 	board.expire_charters(tick, day)
-	if _has_fitting_open and _next_stale_tick >= 0 and tick >= _next_stale_tick:
-		_refresh_refill_watch()
-		if not _has_fitting_open:
-			_try_refill()
 	if tick % CHARTER_CHECK_INTERVAL_TICKS == 0:
 		try_open_charter()
 
@@ -197,12 +179,8 @@ func _connect_flights() -> void:
 		flights.state_changed.connect(on_flight_state)
 	if not flights.snapshot_loaded.is_connected(_on_snapshot_loaded):
 		flights.snapshot_loaded.connect(_on_snapshot_loaded)
-	if not flights.contract_ended.is_connected(_on_contract_ended_for_slots):
-		flights.contract_ended.connect(_on_contract_ended_for_slots)
 	if not flights.ended_by_player.is_connected(_on_ended_by_player):
 		flights.ended_by_player.connect(_on_ended_by_player)
-	if not flights.planning_changed.is_connected(_on_planning_changed):
-		flights.planning_changed.connect(_on_planning_changed)
 	_connect_gate(flights.gate)
 
 
@@ -230,103 +208,16 @@ func _on_airport_opened(_opened_tick := -1) -> void:
 	_was_open = true
 	var day := GameCalendar.day_of(clock.tick, clock.epoch)
 	_day = day
-	_no_slots_day = -1
-	_drawing = true
 	if board.day_offer_count(day) > 0:
 		board.refit_day(day, flights, _min_minute(day))
 	else:
 		_draw(day)
-	_drawing = false
-	_refresh_refill_watch()
 
 
 func _on_snapshot_loaded() -> void:
 	_was_open = flights != null and flights.opened_tick >= 0
-	_no_slots_day = -1
 	if clock != null:
 		_day = GameCalendar.day_of(clock.tick, clock.epoch)
-	_refresh_refill_watch()
-
-
-func _on_board_changed() -> void:
-	if board.is_loading():
-		_refresh_refill_watch()
-		return
-	if not _can_refill():
-		return
-	_refresh_refill_watch()
-	if not _has_fitting_open:
-		_try_refill()
-
-
-func _on_contract_ended_for_slots(_contract_id: String) -> void:
-	_on_planning_changed()
-
-
-func _on_planning_changed() -> void:
-	_no_slots_day = -1
-	if not _can_refill():
-		return
-	_refresh_refill_watch()
-	if not _has_fitting_open:
-		_try_refill()
-
-
-func _can_refill() -> bool:
-	return (
-		not _drawing
-		and not _refilling
-		and clock != null
-		and flights != null
-		and flights.opened_tick >= 0
-		and _runway_source() != null
-	)
-
-
-func _refresh_refill_watch() -> void:
-	_has_fitting_open = false
-	_next_stale_tick = -1
-	if clock == null or flights == null or flights.opened_tick < 0:
-		return
-	var min_minute := _min_minute(_day)
-	for offer in board.open_offers():
-		if offer["day"] != _day:
-			continue
-		var minute := int(offer["departure_minute"])
-		if minute < min_minute:
-			continue
-		if FlightFit.fits(flights, OfferBoard.terms_of(offer)):
-			_has_fitting_open = true
-			var stale_tick := (
-				GameCalendar.tick_at(_day, minute, clock.epoch) - FlightTimetable.issue_lead() + 1
-			)
-			_next_stale_tick = (
-				stale_tick if _next_stale_tick < 0 else mini(_next_stale_tick, stale_tick)
-			)
-
-
-func _try_refill() -> void:
-	if not _can_refill() or _no_slots_day == _day:
-		return
-	if board.day_offer_count(_day) == 0:
-		return
-	@warning_ignore("integer_division")
-	var refills := maxi(0, board.day_offer_count(_day) / OfferBoard.OFFERS_PER_DAY - 1)
-	if refills >= OfferBoard.MAX_REFILLS_PER_DAY:
-		return
-	var source := _runway_source()
-	var tier := _tier()
-	var min_minute := _min_minute(_day)
-	var stars := rating.stars() if rating != null else RatingFormula.STARTING_STARS
-	_refilling = true
-	var added := board.refill_day(
-		_day, clock.rng.seed, tier, source.size, flights, live_needs(), min_minute, stars
-	)
-	_refilling = false
-	if added.is_empty():
-		_no_slots_day = _day
-		return
-	_refresh_refill_watch()
 
 
 func _min_minute(day: int) -> int:

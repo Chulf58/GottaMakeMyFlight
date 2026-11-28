@@ -36,8 +36,8 @@ func _open_panel(minutes: Array) -> void:
 
 
 func test_a_clash_with_a_contract_names_it_by_time_airline_and_destination() -> void:
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("EXISTING", 600))).is_true()
 	_open_panel([600, 660, 1200])
-	_panel.accept_button("O0N1").pressed.emit()
 	_panel.accept_button("O0N2").pressed.emit()
 	var text := _panel.refusal_text("O0N2")
 	print("clash text: %s" % text)
@@ -48,8 +48,8 @@ func test_a_clash_with_a_contract_names_it_by_time_airline_and_destination() -> 
 
 
 func test_a_refusal_sits_on_its_own_card_and_a_later_one_replaces_it() -> void:
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("EXISTING", 600))).is_true()
 	_open_panel([600, 600, 600])
-	_panel.accept_button("O0N1").pressed.emit()
 	_panel.accept_button("O0N2").pressed.emit()
 	assert_str(_panel.refusal_text("O0N2")).contains("clashes")
 	assert_str(_panel.refusal_text("O0N3")).is_empty()

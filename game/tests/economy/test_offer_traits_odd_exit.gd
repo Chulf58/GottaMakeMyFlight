@@ -149,6 +149,7 @@ func test_a_fitted_odd_hours_offer_is_accepted_and_loads() -> void:
 			loaded.gate_source = sim.gate_source
 			assert_bool(loaded.from_snapshot(data)).is_true()
 			assert_dict(loaded.contract_of(offer["id"])).is_equal(sim.contract_of(offer["id"]))
+			break
 		if found >= 3:
 			break
 	assert_int(found).is_greater_equal(3)

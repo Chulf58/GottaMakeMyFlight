@@ -58,16 +58,22 @@ static func row_left(layer_width: float) -> float:
 
 
 ## The sheet's left edge and width in a layer `layer_width` wide: from the row's
-## left edge, SHEET_W wide, moved left (never past `min_left`) so it ends a
-## GAP before the clock panel. In a layout too narrow to leave a sheet any room
-## (the rail starts left of `min_left`) the width is 0 and the sheet is as
-## wide as its content.
-static func sheet_extent(layer_width: float, min_left := SHEET_MIN_LEFT) -> Vector2:
+## left edge (or centred for sheets wider than SHEET_W), `wanted_w` wide, moved
+## left (never past `min_left`) so it ends a GAP before the clock panel. In a
+## layout too narrow to leave a sheet any room (the rail starts left of
+## `min_left`) the width is 0 and the sheet is as wide as its content.
+static func sheet_extent(
+	layer_width: float, min_left := SHEET_MIN_LEFT, wanted_w := SHEET_W
+) -> Vector2:
 	var right := _span_right(layer_width)
 	if right <= min_left:
 		return Vector2(min_left, 0.0)
-	var left := clampf(minf(row_left(layer_width), right - SHEET_W), min_left, right)
-	return Vector2(left, minf(SHEET_W, right - left))
+	var width := minf(wanted_w, right - min_left)
+	var preferred_left := (
+		(layer_width - width) / 2.0 if wanted_w > SHEET_W else row_left(layer_width)
+	)
+	var left := clampf(minf(preferred_left, right - width), min_left, right)
+	return Vector2(left, minf(width, right - left))
 
 
 ## The left-most x a top-row sheet may start: SHEET_MIN_LEFT or, when the
@@ -96,9 +102,9 @@ static func place_in_slot(control: Control, slot: int, host: Node) -> void:
 
 
 ## Puts `sheet` under the row (see sheet_extent). Its height is its content's.
-static func place_sheet(sheet: Control, host: Node) -> void:
+static func place_sheet(sheet: Control, host: Node, wanted_w := SHEET_W) -> void:
 	var min_left := sheet_min_left(host.get_tree()) if host.is_inside_tree() else SHEET_MIN_LEFT
-	var extent := sheet_extent(_layer_width(host), min_left)
+	var extent := sheet_extent(_layer_width(host), min_left, wanted_w)
 	_anchor_top_left(sheet, extent.x, SHEET_TOP, Vector2(extent.y, 0.0))
 
 

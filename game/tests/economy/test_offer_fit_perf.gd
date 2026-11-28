@@ -69,7 +69,7 @@ func test_offer_board_tight_gap_bounds_trial_assignment_calls() -> void:
 	assert_int(refill_calls).is_less_equal(240)
 
 
-func test_offer_desk_try_refill_does_not_double_check_has_fitting_slot() -> void:
+func test_offer_board_refill_day_bounds_trial_calls() -> void:
 	var clock := auto_free(SimClock.new()) as SimClock
 	clock.seed_rng(42)
 	var sim := auto_free(CountingFlightSim.new()) as CountingFlightSim
@@ -81,14 +81,14 @@ func test_offer_desk_try_refill_does_not_double_check_has_fitting_slot() -> void
 	desk.runway = Runway.new(PlaneClasses.LARGE)
 	desk.flights = sim
 	desk.bind_clock(clock)
-	# Invoke _try_refill() directly after the initial day draw so the refill path runs once.
 	sim.trial_calls = 0
 	var t0 := Time.get_ticks_usec()
-	desk._try_refill()
+	desk.board.refill_day(0, clock.rng.seed, 0, PlaneClasses.LARGE, sim, {}, 420)
 	var ms := (Time.get_ticks_usec() - t0) / 1000.0
-	print("PERF _try_refill: %d calls (%.1f ms)" % [sim.trial_calls, ms])
+	print("PERF refill_day: %d calls (%.1f ms)" % [sim.trial_calls, ms])
 	assert_int(desk.board.day_offer_count(0)).is_equal(2 * OfferBoard.OFFERS_PER_DAY)
-	assert_int(sim.trial_calls).is_less_equal(170)
+	# With FIT_OFFERS := 3, the 3rd offer also checks distinct co-fit (~175 calls).
+	assert_int(sim.trial_calls).is_less_equal(200)
 
 
 func test_speed_change_in_build_mode_across_quiet_night_rollover_stays_under_budget() -> void:

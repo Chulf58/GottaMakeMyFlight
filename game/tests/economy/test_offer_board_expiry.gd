@@ -30,13 +30,22 @@ func test_a_new_day_expires_the_open_offers_of_the_day_before() -> void:
 
 func test_only_open_offers_expire() -> void:
 	var day0 := _board.ensure_day(0, _rng)
-	var sim := auto_free(FlightSim.new()) as FlightSim
 	_board.decline(day0[0])
-	assert_bool(_board.accept(day0[1], sim)).is_true()
 	_board.ensure_day(1, _rng)
 	assert_str(_board.offer_of(day0[0])["status"]).is_equal(OfferBoard.DECLINED)
-	assert_str(_board.offer_of(day0[1])["status"]).is_equal(OfferBoard.ACCEPTED)
+	assert_str(_board.offer_of(day0[1])["status"]).is_equal(OfferBoard.EXPIRED)
 	assert_str(_board.offer_of(day0[2])["status"]).is_equal(OfferBoard.EXPIRED)
+
+	var board2 := OfferBoard.new()
+	var rng2 := RandomNumberGenerator.new()
+	rng2.seed = 99
+	var day0_b := board2.ensure_day(0, rng2)
+	var sim := auto_free(FlightSim.new()) as FlightSim
+	assert_bool(board2.accept(day0_b[1], sim)).is_true()
+	board2.ensure_day(1, rng2)
+	assert_str(board2.offer_of(day0_b[1])["status"]).is_equal(OfferBoard.ACCEPTED)
+	assert_str(board2.offer_of(day0_b[0])["status"]).is_equal(OfferBoard.DECLINED)
+	assert_str(board2.offer_of(day0_b[2])["status"]).is_equal(OfferBoard.DECLINED)
 
 
 func test_the_same_day_expires_nothing() -> void:

@@ -212,7 +212,11 @@ func test_the_sheets_open_under_their_buttons_in_one_560_family() -> void:
 			var button := _layout(pair[1])
 			var sheet := _layout(owner_node.sheet())
 			owner_node.close()
-			assert_float(sheet.size.x).is_equal_approx(float(HudLayout.SHEET_W), 0.5)
+			if owner_node == runway:
+				assert_float(sheet.size.x).is_equal_approx(float(HudLayout.SHEET_W), 0.5)
+			else:
+				assert_float(sheet.size.x).is_greater_equal(float(HudLayout.SHEET_W) - 0.5)
+				assert_float(sheet.size.x).is_less_equal(OfferPanel.WIDE_SHEET_W + 0.5)
 			assert_float(sheet.position.y).is_greater_equal(button.end.y)
 			assert_bool(sheet.position.x <= button.position.x + 0.5).is_true()
 			assert_bool(sheet.end.x >= button.end.x - 0.5).is_true()

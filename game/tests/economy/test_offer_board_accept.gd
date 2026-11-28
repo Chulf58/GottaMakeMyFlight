@@ -42,37 +42,74 @@ func test_the_contract_starts_in_the_first_occurrence_still_ahead() -> void:
 	# 07:00 would begin its preparation at 05:22, before the 06:00 start.
 	_load([420, 900, 1200])
 	assert_bool(_board.accept("O0N1", _sim)).is_true()
-	assert_bool(_board.accept("O0N2", _sim)).is_true()
 	assert_int(_sim.contract_of("O0N1")["first_day"]).is_equal(1)
-	assert_int(_sim.contract_of("O0N2")["first_day"]).is_equal(0)
+
+	var board2 := OfferBoard.new()
+	var sim2 := auto_free(FlightSim.new()) as FlightSim
+	(
+		assert_bool(
+			board2.from_snapshot(
+				TestOfferBoard.save_of(TestOfferBoard.day_records(0, [420, 900, 1200]))
+			)
+		)
+		. is_true()
+	)
+	assert_bool(board2.accept("O0N2", sim2)).is_true()
+	assert_int(sim2.contract_of("O0N2")["first_day"]).is_equal(0)
 
 
-func test_an_accepted_offer_leaves_the_open_list_and_cannot_be_taken_twice() -> void:
+func test_an_accepted_offer_closes_the_day_and_prevents_a_second_pick() -> void:
+	_sim.open_airport()
 	_load([600, 720, 840])
+	var cid := _board.ensure_charter_for_gap(
+		0, OfferDesk.CHARTER_CHECK_INTERVAL_TICKS, 0, 77, PlaneClasses.LARGE, _sim
+	)
+	assert_str(cid).is_not_empty()
 	assert_bool(_board.accept("O0N1", _sim)).is_true()
 	assert_str(_board.offer_of("O0N1")["status"]).is_equal(OfferBoard.ACCEPTED)
-	assert_array(_board.open_offers()).has_size(2)
+	assert_str(_board.offer_of("O0N2")["status"]).is_equal(OfferBoard.DECLINED)
+	assert_str(_board.offer_of("O0N3")["status"]).is_equal(OfferBoard.DECLINED)
+	assert_array(_board.open_offers()).is_empty()
+	assert_str(_board.charter_of(cid)["status"]).is_equal(OfferBoard.OPEN)
+	assert_array(_board.open_charters()).has_size(1)
 	assert_bool(_board.accept("O0N1", _sim)).is_false()
+	assert_bool(_board.accept("O0N2", _sim)).is_false()
 	assert_array(_sim.contract_ids()).is_equal(["O0N1"])
+
+
+func test_pass_open_offers_declines_all_daily_offers_only() -> void:
+	_sim.open_airport()
+	_load([600, 720, 840])
+	var cid := _board.ensure_charter_for_gap(
+		0, OfferDesk.CHARTER_CHECK_INTERVAL_TICKS, 0, 77, PlaneClasses.LARGE, _sim
+	)
+	assert_str(cid).is_not_empty()
+	assert_bool(_board.pass_open_offers()).is_true()
+	assert_array(_board.open_offers()).is_empty()
+	for id in ["O0N1", "O0N2", "O0N3"]:
+		assert_str(_board.offer_of(id)["status"]).is_equal(OfferBoard.DECLINED)
+	assert_str(_board.charter_of(cid)["status"]).is_equal(OfferBoard.OPEN)
+	assert_array(_board.open_charters()).has_size(1)
+	assert_bool(_board.pass_open_offers()).is_false()
 
 
 func test_a_gate_clash_refuses_the_offer_and_leaves_it_open() -> void:
 	# 10:00 and 11:00 both want gate C (131 minutes small-plane gate hold).
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("EXISTING", 600))).is_true()
 	_load([600, 660, 1200])
-	assert_bool(_board.accept("O0N1", _sim)).is_true()
 	assert_bool(_board.accept("O0N2", _sim)).is_false()
 	assert_str(_board.offer_of("O0N2")["status"]).is_equal(OfferBoard.OPEN)
-	assert_array(_board.open_offers()).has_size(2)
-	assert_array(_sim.contract_ids()).is_equal(["O0N1"])
+	assert_array(_board.open_offers()).has_size(3)
+	assert_array(_sim.contract_ids()).is_equal(["EXISTING"])
 
 
 func test_a_refused_offer_can_still_be_declined() -> void:
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("EXISTING", 600))).is_true()
 	_load([600, 660, 1200])
-	_board.accept("O0N1", _sim)
-	_board.accept("O0N2", _sim)
+	assert_bool(_board.accept("O0N2", _sim)).is_false()
 	assert_bool(_board.decline("O0N2")).is_true()
-	assert_array(_board.open_offers()).has_size(1)
-	assert_str(_board.open_offers()[0]["id"]).is_equal("O0N3")
+	assert_array(_board.open_offers()).has_size(2)
+	assert_str(_board.offer_of("O0N2")["status"]).is_equal(OfferBoard.DECLINED)
 
 
 func test_declined_and_unknown_offers_cannot_be_accepted() -> void:
@@ -104,4 +141,6 @@ func test_accepted_state_survives_a_save() -> void:
 	var loaded := OfferBoard.new()
 	assert_bool(loaded.from_snapshot(_board.to_snapshot())).is_true()
 	assert_str(loaded.offer_of("O0N1")["status"]).is_equal(OfferBoard.ACCEPTED)
-	assert_array(loaded.open_offers()).has_size(2)
+	assert_str(loaded.offer_of("O0N2")["status"]).is_equal(OfferBoard.DECLINED)
+	assert_str(loaded.offer_of("O0N3")["status"]).is_equal(OfferBoard.DECLINED)
+	assert_array(loaded.open_offers()).is_empty()

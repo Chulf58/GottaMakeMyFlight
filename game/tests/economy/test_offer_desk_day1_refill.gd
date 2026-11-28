@@ -1,7 +1,9 @@
 class_name TestOfferDeskDay1Refill
 extends GdUnitTestSuite
-## Day-1 post-opening offer fitting and mid-day offer refills (ruling d97c94bd,
-## preserving 6799c86c and clock.rng determinism).
+## Day-1 post-opening offer fitting and Pick-1-of-3 no-mid-day-refill behavior
+## (decision airline-offers-pick-1-of-3-side-by-side-spin-away-discard,
+## superseding d97c94bd mid-day refills while keeping Day-1 post-opening fit
+## and SimClock.rng determinism).
 
 const SEEDS := [1, 7, 42, 2024]
 
@@ -66,19 +68,18 @@ func test_post_opening_day1_offers_fit_behind_starter_in_same_day_afternoon_even
 		assert_int(flights.opened_tick).is_equal(100)
 		assert_array(flights.contract_ids()).is_equal([FlightSim.DEFAULT_ID])
 		var fitting := _fitting_same_day_offers(desk, flights, clock)
-		(
-			assert_int(fitting.size())
-			. override_failure_message("seed %d" % seed_value)
-			. is_greater_equal(1)
+		assert_int(fitting.size()).override_failure_message("seed %d" % seed_value).is_equal(
+			OfferBoard.OFFERS_PER_DAY
 		)
-		for offer in fitting:
-			var id: String = offer["id"]
-			assert_int(int(offer["departure_minute"])).is_greater_equal(_min_minute(clock, 0))
-			assert_bool(desk.board.accept(id, flights)).is_true()
-			assert_int(int(flights.contract_of(id)["first_day"])).is_equal(0)
+		var chosen: Dictionary = fitting[0]
+		var id: String = chosen["id"]
+		assert_int(int(chosen["departure_minute"])).is_greater_equal(_min_minute(clock, 0))
+		assert_bool(desk.board.accept(id, flights)).is_true()
+		assert_int(int(flights.contract_of(id)["first_day"])).is_equal(0)
+		assert_array(desk.board.open_offers()).is_empty()
 
 
-func test_accepting_fitting_offers_triggers_mid_day_refill_without_mutating_clock_rng() -> void:
+func test_accepting_or_passing_does_not_trigger_mid_day_refill() -> void:
 	var w := _world(42, 20)
 	var clock: SimClock = w["clock"]
 	var flights: FlightSim = w["flights"]
@@ -86,86 +87,44 @@ func test_accepting_fitting_offers_triggers_mid_day_refill_without_mutating_cloc
 	_step_to_open(w, 20)
 	var rng_state_before := clock.rng.state
 	var first_wave := _fitting_same_day_offers(desk, flights, clock)
-	assert_int(first_wave.size()).is_equal(2)
-	for offer in first_wave:
-		assert_bool(desk.board.accept(offer["id"], flights)).is_true()
-	# Still on Day 0, a refill wave arrived without touching clock.rng.
+	assert_int(first_wave.size()).is_equal(OfferBoard.OFFERS_PER_DAY)
+	assert_bool(desk.board.accept(first_wave[0]["id"], flights)).is_true()
+	# No mid-day refill batch spawns after the day's 1 pick; clock.rng stays untouched.
 	assert_int(clock.rng.state).is_equal(rng_state_before)
-	assert_int(desk.board.day_offer_count(0)).is_equal(2 * OfferBoard.OFFERS_PER_DAY)
-	var second_wave := _fitting_same_day_offers(desk, flights, clock)
-	assert_array(second_wave).is_not_empty()
-	for offer in second_wave:
-		assert_bool(desk.board.accept(offer["id"], flights)).is_true()
-		assert_int(int(flights.contract_of(offer["id"])["first_day"])).is_equal(0)
-	assert_int(clock.rng.state).is_equal(rng_state_before)
+	assert_int(desk.board.day_offer_count(0)).is_equal(OfferBoard.OFFERS_PER_DAY)
+	assert_array(desk.board.open_offers()).is_empty()
+
+	# Stepping through the rest of Day 1 never spawns another daily offer batch.
+	clock.tick = GameCalendar.day_start(1, clock.epoch) - 10
+	clock.ticked.emit(clock.tick)
+	assert_int(desk.board.day_offer_count(0)).is_equal(OfferBoard.OFFERS_PER_DAY)
+	assert_array(desk.board.open_offers()).is_empty()
+
+	# Passing all 3 open offers on Day 2 also never triggers a mid-day refill.
+	var midnight := GameCalendar.day_start(1, clock.epoch)
+	clock.tick = midnight
+	clock.ticked.emit(midnight)
+	assert_array(desk.board.open_offers()).has_size(OfferBoard.OFFERS_PER_DAY)
+	assert_bool(desk.board.pass_open_offers()).is_true()
+	assert_array(desk.board.open_offers()).is_empty()
+	assert_int(desk.board.day_offer_count(1)).is_equal(OfferBoard.OFFERS_PER_DAY)
 
 
-func test_mid_day_refills_stop_when_no_same_day_slot_remains_and_at_cap() -> void:
-	var w := _world(7, 20)
-	var clock: SimClock = w["clock"]
-	var flights: FlightSim = w["flights"]
-	var desk: OfferDesk = w["desk"]
-	_step_to_open(w, 20)
-	# Drain open waves until no same-day fitting offer remains (gate full or cap hit).
-	var safety := 0
-	while safety < 10:
-		safety += 1
-		var fitting := _fitting_same_day_offers(desk, flights, clock)
-		if fitting.is_empty():
-			if (
-				not OfferBoard.has_fitting_slot(
-					flights, 0, PlaneClasses.LARGE, _min_minute(clock, 0)
-				)
-				or desk.board.day_offer_count(0) >= OfferBoard.MAX_DAY_OFFERS
-			):
-				break
-			var open := desk.board.open_offers()
-			if open.is_empty():
-				break
-			desk.board.decline(open[0]["id"])
-			continue
-		for offer in fitting:
-			if flights.accept_problem(OfferBoard.terms_of(offer)) == "":
-				assert_bool(desk.board.accept(offer["id"], flights)).is_true()
-	var count_after_fill := desk.board.day_offer_count(0)
-	assert_int(count_after_fill).is_greater(OfferBoard.OFFERS_PER_DAY)
-	assert_int(count_after_fill).is_less_equal(OfferBoard.MAX_DAY_OFFERS)
-	# Declining any leftover push offer once no same-day slot remains does not spam refills.
-	for offer in desk.board.open_offers():
-		desk.board.decline(offer["id"])
-	assert_int(desk.board.day_offer_count(0)).is_equal(count_after_fill)
-	# Direct refill_day respects MAX_REFILLS_PER_DAY on a wide open multi-gate airport.
-	var wide := auto_free(FlightSim.new()) as FlightSim
-	wide.gate_source = func() -> Array[String]: return ["A", "B", "C", "D"] as Array[String]
-	wide.open_airport()
-	var board := OfferBoard.new()
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 99
-	board.ensure_day(0, rng, 0, PlaneClasses.LARGE, wide)
-	for wave in OfferBoard.MAX_REFILLS_PER_DAY:
-		assert_array(board.refill_day(0, rng.seed, 0, PlaneClasses.LARGE, wide)).has_size(
-			OfferBoard.OFFERS_PER_DAY
-		)
-	assert_array(board.refill_day(0, rng.seed, 0, PlaneClasses.LARGE, wide)).is_empty()
-	assert_int(board.day_offer_count(0)).is_equal(OfferBoard.MAX_DAY_OFFERS)
-
-
-func test_midnight_rollover_after_mid_day_refills_matches_uninterrupted_rng_draw() -> void:
-	var with_refill := _world(42, 20)
-	var without_refill := _world(42, 20)
-	_step_to_open(with_refill, 20)
-	_step_to_open(without_refill, 20)
-	var desk_a: OfferDesk = with_refill["desk"]
-	var flights_a: FlightSim = with_refill["flights"]
-	var clock_a: SimClock = with_refill["clock"]
-	for offer in _fitting_same_day_offers(desk_a, flights_a, clock_a):
-		assert_bool(desk_a.board.accept(offer["id"], flights_a)).is_true()
-	assert_int(desk_a.board.day_offer_count(0)).is_equal(2 * OfferBoard.OFFERS_PER_DAY)
+func test_midnight_rollover_after_pick_draws_next_day_without_rng_drift() -> void:
+	var with_pick := _world(42, 20)
+	var without_pick := _world(42, 20)
+	_step_to_open(with_pick, 20)
+	_step_to_open(without_pick, 20)
+	var desk_a: OfferDesk = with_pick["desk"]
+	var flights_a: FlightSim = with_pick["flights"]
+	var clock_a: SimClock = with_pick["clock"]
+	var first: Dictionary = _fitting_same_day_offers(desk_a, flights_a, clock_a)[0]
+	assert_bool(desk_a.board.accept(first["id"], flights_a)).is_true()
+	assert_int(desk_a.board.day_offer_count(0)).is_equal(OfferBoard.OFFERS_PER_DAY)
 	var midnight := GameCalendar.day_start(1, clock_a.epoch)
 	clock_a.tick = midnight
 	clock_a.ticked.emit(midnight)
-	var clock_b: SimClock = without_refill["clock"]
-	var desk_b: OfferDesk = without_refill["desk"]
+	var clock_b: SimClock = without_pick["clock"]
 	clock_b.tick = midnight
 	clock_b.ticked.emit(midnight)
 	assert_int(clock_a.rng.state).is_equal(clock_b.rng.state)
@@ -174,15 +133,15 @@ func test_midnight_rollover_after_mid_day_refills_matches_uninterrupted_rng_draw
 		assert_int(offer["day"]).is_equal(1)
 
 
-func test_save_and_load_preserves_refilled_offers_without_refitting() -> void:
+func test_save_and_load_preserves_picked_day_without_refitting_or_refilling() -> void:
 	var w := _world(42, 20)
 	var clock: SimClock = w["clock"]
 	var flights: FlightSim = w["flights"]
 	var desk: OfferDesk = w["desk"]
 	_step_to_open(w, 20)
-	for offer in _fitting_same_day_offers(desk, flights, clock):
-		assert_bool(desk.board.accept(offer["id"], flights)).is_true()
-	assert_int(desk.board.day_offer_count(0)).is_equal(2 * OfferBoard.OFFERS_PER_DAY)
+	var first: Dictionary = _fitting_same_day_offers(desk, flights, clock)[0]
+	assert_bool(desk.board.accept(first["id"], flights)).is_true()
+	assert_int(desk.board.day_offer_count(0)).is_equal(OfferBoard.OFFERS_PER_DAY)
 	var saved_board: Dictionary = JSON.parse_string(JSON.stringify(desk.board.to_snapshot()))
 	var saved_flights: Dictionary = JSON.parse_string(JSON.stringify(flights.to_snapshot()))
 	var saved_clock: Dictionary = JSON.parse_string(JSON.stringify(clock.to_snapshot()))
@@ -227,15 +186,8 @@ func test_refill_snapshot_validation_accepts_superseded_expired_and_refuses_bad_
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 55
 	board.ensure_day(0, rng, 0, PlaneClasses.LARGE, flights)
-	var fitting := []
-	for offer in board.open_offers():
-		if flights.accept_problem(OfferBoard.terms_of(offer)) == "":
-			fitting.append(offer["id"])
-			if fitting.size() == 2:
-				break
-	for id: String in fitting:
-		assert_bool(board.accept(id, flights)).is_true()
-	# O0N3 (leftover from batch 1) was expired when batch 2 arrived.
+	var first := board.open_offers()[0]
+	assert_bool(board.accept(first["id"], flights)).is_true()
 	var batch2 := board.refill_day(0, rng.seed, 0, PlaneClasses.LARGE, flights)
 	assert_array(batch2).has_size(OfferBoard.OFFERS_PER_DAY)
 	var valid_snap := board.to_snapshot()
