@@ -187,7 +187,7 @@ func test_a_landside_visit_starts_after_check_in_and_resumes_to_security() -> vo
 
 
 func test_a_seated_gate_passenger_stands_up_first_and_frees_its_gate_seat() -> void:
-	_make()
+	_make(false, true)
 	var p := _spawn_to(Passenger.Stage.SEATED)
 	var gate_seat := p.seat_object
 	assert_int(gate_seat).is_not_equal(0)
@@ -219,13 +219,25 @@ func test_guests_are_served_in_the_order_they_joined_the_queue() -> void:
 
 func test_each_guest_reserves_its_own_seat_and_a_full_cafe_refuses() -> void:
 	_make(false, true)
-	var guests := _visit_from_gate(2)
+	var waiting: Array[Passenger] = [_spawn(), _spawn(), _spawn()]
+	var guests: Array[Passenger] = []
+	var c: Passenger = null
+	while not waiting.is_empty() and _world.clock.tick < 900:
+		_world.step()
+		for p in waiting.duplicate():
+			if p.stage == Passenger.Stage.TO_GATE:
+				waiting.erase(p)
+				if guests.size() < 2:
+					if _cafes().try_visit(p):
+						guests.append(p)
+				else:
+					c = p
 	assert_int(guests.size()).is_equal(2)
 	var a: Passenger = guests[0]
 	var b: Passenger = guests[1]
 	assert_str(_cafes().visit_of(a.id).seat_key).is_not_equal(_cafes().visit_of(b.id).seat_key)
 	# Two seats in the airside cafe, and the landside one cannot be reached.
-	var c := _spawn_to(Passenger.Stage.TO_GATE)
+	assert_object(c).is_not_null()
 	assert_bool(_cafes().visit_of(a.id) != null and _cafes().visit_of(b.id) != null).is_true()
 	assert_bool(_cafes().try_visit(c)).is_false()
 	assert_object(_cafes().visit_of(c.id)).is_null()

@@ -93,8 +93,8 @@ func test_every_offer_panel_button_is_focus_none() -> void:
 	port.add_child(panel)
 	panel.open()
 	var buttons := _buttons_of(panel)
-	# The toggle plus Accept and Decline on each of the three cards.
-	assert_int(buttons.size()).is_equal(7)
+	# The toggle, Pass today's offers, and Accept on each of the three cards.
+	assert_int(buttons.size()).is_equal(5)
 	for button in buttons:
 		assert_int(button.focus_mode).is_equal(Control.FOCUS_NONE)
 	port.free()

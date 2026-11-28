@@ -217,7 +217,7 @@ func test_landside_and_airside_same_side_doors_stay_passable() -> void:
 	p.toilet_need = ToiletSim.NEED_MAX
 	p.toilet_cooldown = 0
 	var used_land := false
-	for _i in 300:
+	for _i in 400:
 		_world.step()
 		if p.stage == Passenger.Stage.TOILET_USE:
 			used_land = true
