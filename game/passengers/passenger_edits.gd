@@ -28,6 +28,10 @@ static func replan(sim: PassengerSim, p: Passenger) -> void:
 		return
 	var target := p.path_end()
 	if p.stage == Passenger.Stage.TO_AIRSIDE_EXIT:
+		if _is_valid_reverse_passage(sim, p):
+			return
+		if not _is_open_passenger_cell(sim.grid, p.at):
+			_recover_from(sim, p, p.at, p.path[p.path_index + 1])
 		p.clear_path()
 		PassengerArrivals.advance(sim, p)
 		return
@@ -88,10 +92,40 @@ static func recover_stranded(sim: PassengerSim) -> void:
 		if (
 			p.is_moving()
 			and not p.needs_replan
-			and _is_recovery_target(sim.grid, p.path[p.path_index + 1])
+			and (
+				_is_recovery_target(sim.grid, p.path[p.path_index + 1])
+				or _is_valid_reverse_passage(sim, p)
+			)
 		):
 			continue
 		replan(sim, p)
+
+
+static func _is_valid_reverse_passage(sim: PassengerSim, p: Passenger) -> bool:
+	if (
+		p.stage != Passenger.Stage.TO_AIRSIDE_EXIT
+		or not p.is_moving()
+		or sim.layout == null
+		or not sim.grid.is_passenger_cell(p.at)
+	):
+		return false
+	for station: int in sim.layout.scanners:
+		var passage: Array = sim.layout.passages.get(station, [])
+		var idx := passage.find(p.at)
+		if passage.size() < 2 or idx <= 0 or p.path.size() - p.path_index != idx + 1:
+			continue
+		var matches := true
+		for step_idx in idx + 1:
+			var cell: Vector2i = passage[idx - step_idx]
+			if p.path[p.path_index + step_idx] != cell or not sim.grid.is_passenger_cell(cell):
+				matches = false
+				break
+			if step_idx > 0 and not sim.grid.can_step(passage[idx - step_idx + 1], cell):
+				matches = false
+				break
+		if matches:
+			return true
+	return false
 
 
 static func _is_recoverable(p: Passenger) -> bool:
