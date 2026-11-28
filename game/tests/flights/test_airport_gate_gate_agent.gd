@@ -113,3 +113,75 @@ func test_unlinked_gate_desk_never_emits_no_gate_agent() -> void:
 	assert_bool(_gate.unmet().has(AirportGate.Blocker.NO_GATE)).is_true()
 	_w.sim.layout.by_gate = false
 	assert_bool(_gate.unmet().has(AirportGate.Blocker.NO_GATE_AGENT)).is_false()
+
+
+func test_starter_exit_without_gate_desk_does_not_emit_no_path_or_place_exit() -> void:
+	_make(false)
+	StaffTestKit.staff_all(_w.staff, [CHECKIN, SECURITY])
+	assert_int(_w.sim.layout.exits.size()).is_equal(1)
+	assert_array(_gate.unmet()).contains_exactly([AirportGate.Blocker.NO_GATE])
+	assert_bool(_gate.ready_to_open()).is_false()
+	assert_bool(_gate.is_open()).is_false()
+	var hint := _panel.hint_text()
+	assert_str(hint).is_equal(Checklist.GATE)
+	assert_str(hint.to_lower()).not_contains("exit")
+
+
+func test_blocking_wall_before_gate_desk_still_reports_no_path_and_open_floor() -> void:
+	_make(false)
+	StaffTestKit.staff_all(_w.staff, [CHECKIN, SECURITY])
+	var shift := SITE.starter_offset
+	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
+		var edit := BuildEdit.place_wall(Vector2i(x, 4) + shift, BuildGrid.Side.NORTH)
+		assert_bool(_w.grid.apply(edit).ok).is_true()
+	assert_array(_gate.unmet()).contains_exactly(
+		[AirportGate.Blocker.NO_GATE, AirportGate.Blocker.NO_PATH]
+	)
+	var rows := Array(_panel.checklist().row_texts())
+	assert_array(rows).contains(["Connect entrance, check-in, security and exit with open floor"])
+	assert_str(_panel.hint_text().to_lower()).not_contains("place an exit")
+
+
+func test_deleted_starter_exit_prompts_exit_to_the_plane() -> void:
+	_make(false)
+	var exit_cell := ReferenceTerminal.EXIT_CELL + SITE.starter_offset
+	var exit_id := _w.grid.object_at(exit_cell)
+	assert_bool(_w.grid.apply(BuildEdit.remove_object(exit_id)).ok).is_true()
+	assert_bool(_w.grid.apply(BuildEdit.place_wall(exit_cell, BuildGrid.Side.NORTH)).ok).is_true()
+	StaffTestKit.staff_all(_w.staff, [CHECKIN, SECURITY])
+	assert_int(_w.sim.layout.exits.size()).is_equal(0)
+	assert_array(_gate.unmet()).contains_exactly(
+		[AirportGate.Blocker.NO_GATE, AirportGate.Blocker.NO_PATH]
+	)
+	var rows := Array(_panel.checklist().row_texts())
+	assert_array(rows).contains(["Place an Exit to the plane"])
+	assert_str(_panel.hint_text().to_lower()).not_contains("airside exit")
+
+
+func test_placed_gate_desk_with_blocked_exit_outside_prompts_gate_exit_connection() -> void:
+	_make(true)
+	StaffTestKit.staff_all(_w.staff, [CHECKIN, SECURITY, GATE])
+	var exit_cell := ReferenceTerminal.EXIT_CELL + SITE.starter_offset
+	var outside := exit_cell + _w.sim.layout.door_outward(_w.grid, _w.sim.layout.exits[0])
+	(
+		assert_bool(
+			(
+				_w
+				. grid
+				. apply(
+					BuildEdit.paint_floor(outside, BuildGrid.FLOOR_TILE, BuildMode.TERMINAL_ZONE)
+				)
+				. ok
+			)
+		)
+		. is_true()
+	)
+	assert_int(_w.sim.layout.exits.size()).is_equal(1)
+	assert_int(_w.sim.layout.open_exits(_w.grid).size()).is_equal(0)
+	assert_bool(_w.flights.gate_ids().is_empty()).is_false()
+	assert_array(_gate.unmet()).contains_exactly([AirportGate.Blocker.NO_PATH])
+	assert_bool(_gate.ready_to_open()).is_false()
+	assert_bool(_gate.is_open()).is_false()
+	var rows := Array(_panel.checklist().row_texts())
+	assert_array(rows).contains(["Connect Gate Desk to an Exit to the plane with a clear path"])
+	assert_str(_panel.hint_text().to_lower()).not_contains("airside exit")

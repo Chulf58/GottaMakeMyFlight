@@ -177,12 +177,14 @@ var _partial := false
 ## passengers may use (PassengerSim spawns there). With `staffed` false, a
 ## desk or scanner staff can never work still counts, so AirportGate can tell
 ## a missing way from a staff spot problem.
-static func has_working_path(grid: BuildGrid, layout: TerminalLayout, staffed := true) -> bool:
+static func has_working_path(
+	grid: BuildGrid, layout: TerminalLayout, staffed := true, linked_exits := true
+) -> bool:
 	if layout.passenger_entrances.is_empty():
 		return false
 	var door := layout.door_cell(grid, layout.passenger_entrances[0])
 	var staffing := Staffing.STAFFABLE if staffed else Staffing.ANY
-	return can_finish(grid, layout, [door] as Array[Vector2i], Leg.DESK, staffing)
+	return can_finish(grid, layout, [door] as Array[Vector2i], Leg.DESK, staffing, linked_exits)
 
 
 ## Whether a walker standing on one of `starts` can still use, in journey
@@ -192,11 +194,12 @@ static func can_finish(
 	layout: TerminalLayout,
 	starts: Array[Vector2i],
 	leg: int,
-	staffing := Staffing.STAFFABLE
+	staffing := Staffing.STAFFABLE,
+	linked_exits := true
 ) -> bool:
 	var here := starts
 	for next_leg in range(leg, Leg.size()):
-		here = _next_cells(grid, layout, here, next_leg, staffing)
+		here = _next_cells(grid, layout, here, next_leg, staffing, linked_exits)
 		if here.is_empty():
 			return false
 	return true
@@ -391,10 +394,11 @@ static func _next_cells(
 	layout: TerminalLayout,
 	starts: Array[Vector2i],
 	leg: int,
-	staffing := Staffing.STAFFABLE
+	staffing := Staffing.STAFFABLE,
+	linked_exits := true
 ) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
-	for target in _targets(grid, layout, leg, staffing):
+	for target in _targets(grid, layout, leg, staffing, linked_exits):
 		for start in starts:
 			if start == target[0] or not grid.find_path(start, target[0]).is_empty():
 				out.append(target[1])
@@ -407,7 +411,11 @@ static func _next_cells(
 ## or out of staff's reach is left out as `staffing` says: StaffSim
 ## never staffs it, so no passenger gets through it.
 static func _targets(
-	grid: BuildGrid, layout: TerminalLayout, leg: int, staffing := Staffing.STAFFABLE
+	grid: BuildGrid,
+	layout: TerminalLayout,
+	leg: int,
+	staffing := Staffing.STAFFABLE,
+	linked_exits := true
 ) -> Array:
 	var out := []
 	match leg:
@@ -421,7 +429,8 @@ static func _targets(
 					var passage: Array = layout.passages[scanner]
 					out.append([layout.lanes[scanner][0], passage.back()])
 		Leg.EXIT:
-			for door in layout.open_exits(grid):
+			var doors := layout.open_exits(grid) if linked_exits else layout.physical_exits(grid)
+			for door in doors:
 				var cell := layout.door_cell(grid, door)
 				out.append([cell, cell])
 	return out

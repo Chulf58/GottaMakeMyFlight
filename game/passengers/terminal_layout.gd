@@ -213,13 +213,9 @@ func door_outward(grid: BuildGrid, door: int) -> Vector2i:
 	return -front_of(grid.get_object(door)["facing"])
 
 
-## An exit is open when its cell is a passenger cell (walled in) and nothing
-## closes its outward edge: no wall on it, and no floor beyond it (the door
-## must stand on the terminal's boundary). On a site it also needs its walk
-## out to the plane.
-func is_exit_open(grid: BuildGrid, door: int) -> bool:
-	if not _has_way_out(door):
-		return false
+## Whether exit `door` stands on a walled-in passenger cell with an open outward
+## boundary, regardless of whether a gate desk links it on a site.
+func is_exit_physically_open(grid: BuildGrid, door: int) -> bool:
 	var cell := door_cell(grid, door)
 	if cell == BuildObjectDef.NO_CELL or not grid.is_passenger_cell(cell):
 		return false
@@ -228,6 +224,22 @@ func is_exit_open(grid: BuildGrid, door: int) -> bool:
 		return false
 	var beyond := cell + out
 	return not grid.in_bounds(beyond) or grid.floor_at(beyond) == BuildGrid.FLOOR_NONE
+
+
+func physical_exits(grid: BuildGrid) -> Array[int]:
+	var open: Array[int] = []
+	for door in exits:
+		if is_exit_physically_open(grid, door):
+			open.append(door)
+	return open
+
+
+## An exit is open when its cell is a passenger cell (walled in) and nothing
+## closes its outward edge: no wall on it, and no floor beyond it (the door
+## must stand on the terminal's boundary). On a site it also needs its walk
+## out to the plane.
+func is_exit_open(grid: BuildGrid, door: int) -> bool:
+	return _has_way_out(door) and is_exit_physically_open(grid, door)
 
 
 func open_exits(grid: BuildGrid) -> Array[int]:
