@@ -10,10 +10,10 @@ extends GdUnitTestSuite
 
 const SITE := preload("res://build/terminal_site.tres")
 const SHELL_OFFSET := Vector2i(85, 110)
-## The shell's west and east walls (ReferenceTerminal floor x 10 and 21), in
+## The shell's west and east walls (ReferenceTerminal floor x 6 and 21), in
 ## its airside half (row 4 of the reference terminal).
-const WEST_CELL := Vector2i(10, 4)
-const EAST_CELL := Vector2i(21, 4)
+const WEST_CELL := Vector2i(ReferenceTerminal.FLOOR_MIN.x, 4)
+const EAST_CELL := Vector2i(ReferenceTerminal.FLOOR_MAX.x, 4)
 ## Grid row 148: two rows north of the road edge (z -60).
 const ROAD_ROW := 148
 

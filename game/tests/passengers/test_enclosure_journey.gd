@@ -7,7 +7,7 @@ extends GdUnitTestSuite
 ## eligibility, point 5).
 
 ## A west wall of the landside hall, away from every passenger's path.
-const GAP := Vector2i(10, 12)
+const GAP := Vector2i(ReferenceTerminal.FLOOR_MIN.x, 12)
 const SITE := preload("res://build/terminal_site.tres")
 
 var _world: PassengerTestWorld

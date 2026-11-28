@@ -114,7 +114,9 @@ func test_the_gap_of_a_removed_scanner_does_not_open_airside_to_a_desk() -> void
 
 
 func test_an_exit_on_the_landside_edge_does_not_open_airside_to_a_desk() -> void:
-	var exit := BuildEdit.place_object(&"exit_door", Vector2i(10, 17), 3)
+	var exit := BuildEdit.place_object(
+		&"exit_door", Vector2i(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.y), 3
+	)
 	assert_bool(DoorPlacement.check(_world.grid, exit).ok).is_true()
 	for step in DoorPlacement.edits_for(_world.grid, exit):
 		assert_bool(_world.grid.apply(step).ok).is_true()
@@ -151,12 +153,14 @@ func test_a_door_below_an_airside_pocket_does_not_open_it_to_a_desk() -> void:
 ## the exit's cell not marked airside the block would go to landside, and a
 ## desk there would cost no floor (the repair's floor count would be zero).
 func test_an_exit_with_a_floor_block_beside_it_does_not_open_it_to_a_desk() -> void:
-	var exit := BuildEdit.place_object(&"exit_door", Vector2i(10, 17), 3)
+	var exit := BuildEdit.place_object(
+		&"exit_door", Vector2i(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.y), 3
+	)
 	assert_bool(DoorPlacement.check(_world.grid, exit).ok).is_true()
 	for step in DoorPlacement.edits_for(_world.grid, exit):
 		assert_bool(_world.grid.apply(step).ok).is_true()
 	var keep: Array[Vector2i] = []
-	for x in range(10, 18):
+	for x in range(ReferenceTerminal.FLOOR_MIN.x, 18):
 		keep.append(Vector2i(x, 16))
 	for y in range(14, 16):
 		for x in range(10, 13):

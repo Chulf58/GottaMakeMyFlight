@@ -40,11 +40,11 @@ const TOOLS := {
 	&"exit_door": BuildMode.Tool.EXIT,
 }
 const TICKS_PER_FRAME := 10
-## The layout's counts: 12 x 16 floor, 64 walls (the outer ring less the two
+## The layout's counts: 16 x 16 floor, 76 walls (the outer ring less the two
 ## door gaps, and the divider less its two scanner gaps), the two door gaps
 ## as two gap runs before the doors.
-const EXPECT_FLOOR := 192
-const EXPECT_WALLS := 64
+const EXPECT_FLOOR := 256
+const EXPECT_WALLS := 76
 const EXPECT_OPEN_GAPS := 2
 const END_TICK := 9000
 const MARGIN_PX := 8.0

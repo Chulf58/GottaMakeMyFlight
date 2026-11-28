@@ -95,15 +95,18 @@ func _buy_plot_area(cell: Vector2i) -> void:
 
 func _expand_terminal_and_remote_stand() -> void:
 	var edits: Array[BuildEdit] = []
-	for x in range(-36, 10):
+	for x in range(-36, ReferenceTerminal.FLOOR_MIN.x):
 		for y in range(2, 18):
 			var c := _o + Vector2i(x, y)
 			_buy_plot_area(c)
 			edits.append(BuildEdit.paint_floor(c, BuildGrid.FLOOR_TILE, 1))
-	for y in range(3, 17):
-		if y != 9:
-			edits.append(BuildEdit.remove_wall(_o + Vector2i(10, y), BuildGrid.Side.WEST))
-	for x in range(-36, 10):
+	for y in range(2, 18):
+		edits.append(
+			BuildEdit.remove_wall(
+				_o + Vector2i(ReferenceTerminal.FLOOR_MIN.x, y), BuildGrid.Side.WEST
+			)
+		)
+	for x in range(-36, ReferenceTerminal.FLOOR_MIN.x):
 		if x != -20:
 			edits.append(BuildEdit.place_wall(_o + Vector2i(x, 2), BuildGrid.Side.NORTH))
 		edits.append(BuildEdit.place_wall(_o + Vector2i(x, 17), BuildGrid.Side.SOUTH))

@@ -11,15 +11,15 @@ const SITE := preload("res://build/terminal_site.tres")
 ## Fixed offset north of the road so a west gate on the shell keeps medium-plane
 ## swing clearance south of its sill.
 const SHELL_OFFSET := Vector2i(85, 110)
-const WEST_EXIT := Vector2i(10, 6)
-const WEST_DESK := Vector2i(12, 5)
+const WEST_EXIT := Vector2i(ReferenceTerminal.FLOOR_MIN.x, 6)
+const WEST_DESK := Vector2i(ReferenceTerminal.FLOOR_MIN.x + 2, 5)
 ## A grid cell on the west edge far south of every stand and way out: building
 ## it pushes the west spur out to the edge less the band (x -149.8), and no
 ## envelope of gate A's on either spur reaches it.
 const WING := Vector2i(0, 149)
 ## WING on the east edge, for an east gate.
 const WING_EAST := Vector2i(255, 149)
-const EAST_EXIT := Vector2i(21, 4)
+const EAST_EXIT := Vector2i(ReferenceTerminal.FLOOR_MAX.x, 4)
 ## Gate A's contracts depart at 12:00, so their first day is issued after the
 ## airport opens at tick 0 (06:00).
 const MINUTE := 12 * 60

@@ -16,11 +16,11 @@ extends GdUnitTestSuite
 const SITE := preload("res://build/terminal_site.tres")
 ## Low in the airside half of the west wall: its small swing square stays south
 ## of gate A's (north exit) private ground.
-const WEST_EXIT := Vector2i(10, 6)
+const WEST_EXIT := Vector2i(ReferenceTerminal.FLOOR_MIN.x, 6)
 ## Two rows from the north-east corner.
-const EAST_EXIT := Vector2i(21, 4)
+const EAST_EXIT := Vector2i(ReferenceTerminal.FLOOR_MAX.x, 4)
 const SOUTH_EXIT := Vector2i(12, 17)
-const WEST_DESK := Vector2i(12, 5)
+const WEST_DESK := Vector2i(ReferenceTerminal.FLOOR_MIN.x + 2, 5)
 ## 4 cells from the east exit, 6 from the north one.
 const EAST_DESK := Vector2i(19, 8)
 

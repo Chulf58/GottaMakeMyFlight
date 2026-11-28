@@ -12,8 +12,8 @@ extends GdUnitTestSuite
 ## grid's own edge columns, which land == null lets a test build on.
 
 const SITE := preload("res://build/terminal_site.tres")
-const WEST_EXIT := Vector2i(10, 6)
-const EAST_EXIT := Vector2i(21, 4)
+const WEST_EXIT := Vector2i(ReferenceTerminal.FLOOR_MIN.x, 6)
+const EAST_EXIT := Vector2i(ReferenceTerminal.FLOOR_MAX.x, 4)
 ## Grid cells (not shell ones) on the west and east edges, far south of the
 ## starter, so they meet no stand.
 const FAR_WEST := Vector2i(0, 149)

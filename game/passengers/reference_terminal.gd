@@ -1,8 +1,8 @@
 class_name ReferenceTerminal
 extends RefCounted
 ## The one terminal layout the tests, the boarding-window measurement and the
-## plate probe share, on the default 64x64 grid. Cells x 10-21, y 2-17 (world
-## x -22 to -10, z -30 to -14): a landside hall with two desks and the
+## plate probe share, on the default 64x64 grid. Cells x 6-21, y 2-17 (world
+## x -26 to -10, z -30 to -14): a landside hall with two desks and the
 ## entrance on the south edge, a wall across y = 9 with two scanners in it,
 ## and an airside gate with four seat rows and the exit on the north edge.
 ## Walls close it in on every side, the two door objects filling the gaps
@@ -15,7 +15,7 @@ extends RefCounted
 ## grid's own (offset_on()) when given none, so the debug starter button needs
 ## no offset of its own.
 
-const FLOOR_MIN := Vector2i(10, 2)
+const FLOOR_MIN := Vector2i(6, 2)
 const FLOOR_MAX := Vector2i(21, 17)
 ## The wall runs along the north edge of this row.
 const DIVIDER_Y := 9

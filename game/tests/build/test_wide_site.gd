@@ -121,7 +121,7 @@ func test_the_starter_keeps_its_world_place() -> void:
 		low = low.min(at)
 		high = high.max(at)
 	print("starter cells' north-west corners from %s to %s" % [low, high])
-	assert_that(low).is_equal(Vector2(-33, -84))
+	assert_that(low).is_equal(Vector2(-37, -84))
 	assert_that(high.x).is_less(-20.0)
 	assert_that(high.y).is_less(-67.0)
 
