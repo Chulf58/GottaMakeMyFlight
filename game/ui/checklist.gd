@@ -86,8 +86,8 @@ static func line(text: String, done: bool, why := "", action := {}) -> Dictionar
 
 
 ## The opening lines while the airport is closed. `unmet` is AirportGate.unmet().
-## `counts` has "entrances", "desks", "scanners", "exits", "seats" and
-## "checkin_staying", "security_staying", "gate_staying".
+## `counts` has "entrances", "desks", "scanners", "exits", "exit_doors", "seats"
+## and "checkin_staying", "security_staying", "gate_staying".
 static func opening_lines(unmet: Array, counts: Dictionary) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	out.append(_path_line(unmet, counts))
@@ -230,12 +230,25 @@ static func _path_line(unmet: Array, counts: Dictionary) -> Dictionary:
 			TranslationServer.translate("Clears passengers and bags for the gate."),
 			{"kind": "tool", "tool": BuildMode.Tool.SCANNER}
 		)
-	if int(counts.get("exits", 0)) == 0:
+	var open_exits := int(counts.get("exits", 0))
+	var exit_doors := int(counts.get("exit_doors", open_exits))
+	if exit_doors == 0:
 		return line(
-			TranslationServer.translate("Place an airside exit door"),
+			TranslationServer.translate("Place an Exit to the plane"),
 			false,
-			TranslationServer.translate("Passengers board planes through an airside exit."),
+			TranslationServer.translate("Passengers board planes through an Exit door."),
 			{"kind": "tool", "tool": BuildMode.Tool.EXIT}
+		)
+	if open_exits == 0 and not unmet.has(BLOCKER.NO_GATE):
+		return line(
+			TranslationServer.translate(
+				"Connect Gate Desk to an Exit to the plane with a clear path"
+			),
+			false,
+			TranslationServer.translate(
+				"Place the Gate Desk near an unobstructed Exit to the plane."
+			),
+			{"kind": "tool", "tool": BuildMode.Tool.GATE_DESK}
 		)
 	return line(
 		TranslationServer.translate(

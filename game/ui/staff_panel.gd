@@ -476,6 +476,7 @@ func _opening_counts() -> Dictionary:
 		"desks": layout.desks.size(),
 		"scanners": layout.scanners.size(),
 		"exits": layout.open_exits(grid).size(),
+		"exit_doors": layout.exits.size(),
 		"seats": layout.seats.size(),
 		"checkin_staying": _staying(StaffMember.Role.CHECKIN),
 		"security_staying": _staying(StaffMember.Role.SECURITY),

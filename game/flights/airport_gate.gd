@@ -70,6 +70,7 @@ var _path_ok := false
 ## Whether passengers would have a working path if every station were staffed.
 var _route_ok := false
 var _path_dirty := true
+var _path_linked := true
 ## Whether open() has said that no starter slot is free, so it says it once.
 var _no_slot_said := false
 
@@ -116,9 +117,10 @@ func unmet() -> Array[Blocker]:
 	var out: Array[Blocker] = []
 	if is_open():
 		return out
-	if flights.gate_ids().is_empty():
+	var no_gate := flights.gate_ids().is_empty()
+	if no_gate:
 		out.append(Blocker.NO_GATE)
-	var path := _path_blocker()
+	var path := _path_blocker(no_gate)
 	if path != Blocker.NONE:
 		out.append(path)
 	var desks := staff.sim.layout.desks
@@ -138,11 +140,18 @@ func unmet() -> Array[Blocker]:
 
 
 ## NO_PATH, STAFF_SPOT or NONE, from the path answers kept until the grid
-## changes.
-func _path_blocker() -> Blocker:
-	if _path_dirty:
-		_path_ok = RepairPlan.has_working_path(staff.sim.grid, staff.sim.layout)
-		_route_ok = _path_ok or RepairPlan.has_working_path(staff.sim.grid, staff.sim.layout, false)
+## changes. When by_gate is on and no gate is linked yet (NO_GATE), check
+## physical reachability to placed exit doors so an unlinked starter exit
+## does not emit a false NO_PATH.
+func _path_blocker(no_gate := false) -> Blocker:
+	var linked_exits := not (no_gate and staff.sim.layout.by_gate)
+	if _path_dirty or _path_linked != linked_exits:
+		_path_linked = linked_exits
+		_path_ok = RepairPlan.has_working_path(staff.sim.grid, staff.sim.layout, true, linked_exits)
+		_route_ok = (
+			_path_ok
+			or RepairPlan.has_working_path(staff.sim.grid, staff.sim.layout, false, linked_exits)
+		)
 		_path_dirty = false
 	if not _route_ok:
 		return Blocker.NO_PATH

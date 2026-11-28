@@ -166,6 +166,70 @@ func test_checklist_diagnoses_missing_leg_and_selects_matching_tool() -> void:
 	assert_str(no_scanner[0]["text"]).is_equal("Place a security scanner")
 	assert_int(int(no_scanner[0]["action"]["tool"])).is_equal(BuildMode.Tool.SCANNER)
 
+	var no_exit := (
+		Checklist
+		. opening_lines(
+			[AirportGate.Blocker.NO_PATH],
+			{
+				"entrances": 1,
+				"desks": 1,
+				"scanners": 1,
+				"exits": 0,
+				"exit_doors": 0,
+				"seats": 1,
+				"checkin_staying": 1,
+				"security_staying": 1,
+			}
+		)
+	)
+	assert_str(no_exit[0]["text"]).is_equal("Place an Exit to the plane")
+	assert_str(no_exit[0]["why"]).is_equal("Passengers board planes through an Exit door.")
+	assert_str(no_exit[0]["text"].to_lower()).not_contains("airside exit")
+	assert_int(int(no_exit[0]["action"]["tool"])).is_equal(BuildMode.Tool.EXIT)
+
+	var unlinked_exit := (
+		Checklist
+		. opening_lines(
+			[AirportGate.Blocker.NO_PATH],
+			{
+				"entrances": 1,
+				"desks": 1,
+				"scanners": 1,
+				"exits": 0,
+				"exit_doors": 1,
+				"seats": 1,
+				"checkin_staying": 1,
+				"security_staying": 1,
+			}
+		)
+	)
+	assert_str(unlinked_exit[0]["text"]).is_equal(
+		"Connect Gate Desk to an Exit to the plane with a clear path"
+	)
+	assert_str(unlinked_exit[0]["text"].to_lower()).not_contains("airside exit")
+	assert_int(int(unlinked_exit[0]["action"]["tool"])).is_equal(BuildMode.Tool.GATE_DESK)
+
+	var blocked_before_gate := (
+		Checklist
+		. opening_lines(
+			[AirportGate.Blocker.NO_GATE, AirportGate.Blocker.NO_PATH],
+			{
+				"entrances": 1,
+				"desks": 1,
+				"scanners": 1,
+				"exits": 0,
+				"exit_doors": 1,
+				"seats": 1,
+				"checkin_staying": 1,
+				"security_staying": 1,
+			}
+		)
+	)
+	assert_str(blocked_before_gate[0]["text"]).is_equal(
+		"Connect entrance, check-in, security and exit with open floor"
+	)
+	assert_int(int(blocked_before_gate[0]["action"]["tool"])).is_equal(BuildMode.Tool.FLOOR)
+
 	# Real grid with entrance + desk + scanner but NO exit: clicking row 0 pulses Tool.EXIT.
 	var grid_no_exit := BuildGrid.new()
 	ReferenceTerminal.build(grid_no_exit)
@@ -184,7 +248,8 @@ func test_checklist_diagnoses_missing_leg_and_selects_matching_tool() -> void:
 	_setup_hud(PassengerTestWorld.make(grid_no_exit, FlightSim.schedule_starts(0)))
 	await _settle()
 	var rows_no_exit := _panel.checklist().row_texts()
-	assert_str(rows_no_exit[0]).is_equal("Place an airside exit door")
+	assert_str(rows_no_exit[0]).is_equal("Place an Exit to the plane")
+	assert_str(rows_no_exit[0].to_lower()).not_contains("airside exit")
 	assert_bool(_panel.checklist().press_row(0)).is_true()
 	assert_int(_menu.pulsed_tool()).is_equal(BuildMode.Tool.EXIT)
 	assert_int(_menu.pulsed_tool()).is_not_equal(BuildMode.Tool.ENTRANCE)
