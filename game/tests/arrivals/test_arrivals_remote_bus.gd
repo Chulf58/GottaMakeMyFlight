@@ -5,6 +5,8 @@ extends GdUnitTestSuite
 ## TO_AIRSIDE_EXIT -> full terminal exit, outbound BOARDING handoff, pose_at symmetry,
 ## BuiltItemCard inbound labels, ON_BUS isolation, and SaveGame v49 / SaveLinks checks).
 
+const ARCH_XS: Array[int] = [-28, -22, -16, -10, -4, 2]
+const DESK_XS: Array[int] = [-33, -30, -27, -24, -21, -18, -15, -12, -9, -6, -3, 0, 3]
 const SEED := 7_204_409
 const SITE := preload("res://build/terminal_site.tres")
 
@@ -55,7 +57,7 @@ func before() -> void:
 	for _i in 1800:
 		SaveTestKit.step(_main)
 		if (
-			_staff.on_duty_count(StaffMember.Role.CHECKIN) >= 12
+			_staff.on_duty_count(StaffMember.Role.CHECKIN) >= 13
 			and _staff.on_duty_count(StaffMember.Role.SECURITY) >= 12
 			and _staff.on_duty_count(StaffMember.Role.GATE) >= 2
 		):
@@ -106,12 +108,28 @@ func _expand_terminal_and_remote_stand() -> void:
 				_o + Vector2i(ReferenceTerminal.FLOOR_MIN.x, y), BuildGrid.Side.WEST
 			)
 		)
+	var lane_gaps := {}
+	for ax in ARCH_XS:
+		for dx in [-1, 0, 1]:
+			lane_gaps[ax + dx] = true
 	for x in range(-36, ReferenceTerminal.FLOOR_MIN.x):
 		if x != -20:
 			edits.append(BuildEdit.place_wall(_o + Vector2i(x, 2), BuildGrid.Side.NORTH))
 		edits.append(BuildEdit.place_wall(_o + Vector2i(x, 17), BuildGrid.Side.SOUTH))
-		if not [-22, -19, -16, -13, -10, -7, -4, -1, 2, 5].has(x):
+		if not lane_gaps.has(x):
 			edits.append(BuildEdit.place_wall(_o + Vector2i(x, 9), BuildGrid.Side.NORTH))
+	for ax in ARCH_XS:
+		edits.append(BuildEdit.place_wall(_o + Vector2i(ax - 1, 7), BuildGrid.Side.WEST))
+		edits.append(BuildEdit.place_wall(_o + Vector2i(ax - 1, 6), BuildGrid.Side.WEST))
+		edits.append(BuildEdit.place_wall(_o + Vector2i(ax - 1, 6), BuildGrid.Side.NORTH))
+		edits.append(BuildEdit.place_wall(_o + Vector2i(ax - 1, 6), BuildGrid.Side.EAST))
+		edits.append(BuildEdit.place_wall(_o + Vector2i(ax - 1, 8), BuildGrid.Side.EAST))
+		edits.append(
+			BuildEdit.place_wall(
+				_o + Vector2i(ax - 1, 7), BuildGrid.Side.EAST, BuildGrid.WallKind.DOOR
+			)
+		)
+		edits.append(BuildEdit.place_wall(_o + Vector2i(ax + 2, 7), BuildGrid.Side.WEST))
 	for y in range(2, 18):
 		edits.append(BuildEdit.place_wall(_o + Vector2i(-36, y), BuildGrid.Side.WEST))
 	assert_bool(_mode.grid.apply_sequence(edits, Callable()).ok).is_true()
@@ -136,7 +154,7 @@ func _expand_terminal_and_remote_stand() -> void:
 	for edit: BuildEdit in DoorPlacement.edits_for(_mode.grid, place_air_exit):
 		assert_bool(_mode.grid.apply(edit).ok).is_true()
 
-	for dx in [-24, -21, -18, -15, -12, -9, -6, -3, 0, 3]:
+	for dx in DESK_XS:
 		(
 			assert_bool(
 				(
@@ -148,18 +166,18 @@ func _expand_terminal_and_remote_stand() -> void:
 			)
 			. is_true()
 		)
-	for sx in [-22, -19, -16, -13, -10, -7, -4, -1, 2, 5]:
-		(
-			assert_bool(
-				(
-					_mode
-					. grid
-					. apply(BuildEdit.place_object(&"security_scanner", _o + Vector2i(sx, 8), 0))
-					. ok
-				)
-			)
-			. is_true()
-		)
+	for ax in ARCH_XS:
+		var arch_cell := _o + Vector2i(ax, 8)
+		var lane := SecurityLanes.geometry(arch_cell, 0, SecurityLanes.RIGHT)
+		var arch_res := _mode.grid.apply(BuildEdit.place_object(SecurityLanes.ARCH, arch_cell, 0))
+		assert_bool(arch_res.ok).is_true()
+		for part in [
+			SecurityLanes.TRAY_TABLE,
+			SecurityLanes.XRAY_BELT,
+			SecurityLanes.PICKUP_TABLE,
+		]:
+			assert_bool(_mode.grid.apply(BuildEdit.place_object(part, lane[part], 0)).ok).is_true()
+		assert_bool(_mode.grid.recognised_lanes().is_complete(arch_res.object_id)).is_true()
 
 	var exit_res := _mode.grid.apply(BuildEdit.place_object(&"exit_door", _o + Vector2i(-20, 2), 0))
 	assert_bool(exit_res.ok).is_true()
@@ -178,8 +196,9 @@ func _expand_terminal_and_remote_stand() -> void:
 
 
 func _hire_extra_staff() -> void:
-	for _i in 12:
+	for _i in 13:
 		_staff.hire(StaffMember.Role.CHECKIN)
+	for _i in 12:
 		_staff.hire(StaffMember.Role.SECURITY)
 	_staff.hire(StaffMember.Role.GATE)
 
@@ -424,9 +443,16 @@ func test_save_game_v50_round_trip_mid_inbound_driving_back_and_validation() -> 
 	var a_max := String(_flights.gate_grounds().get("A", {}).get("max_class", ""))
 	if a_max == PlaneClasses.LARGE:
 		_accept_offer(0, 720, PlaneClasses.MEDIUM, 24, "Gotta Air", 25)
-	var contract := _accept_offer(
-		1 if a_max == PlaneClasses.LARGE else 0, 765, PlaneClasses.LARGE, 48, "Polar Jet", 30
-	)
+		var desk := _main.get_node("OfferDesk") as OfferDesk
+		var clock := _main.get_node("SimClock") as SimClock
+		var day_now := GameCalendar.day_of(clock.tick, clock.epoch)
+		(
+			assert_array(
+				desk.board.refill_day(day_now, clock.rng.seed, 0, _flights.runway.size, _flights)
+			)
+			. is_not_empty()
+		)
+	var contract := _accept_offer(0, 765, PlaneClasses.LARGE, 48, "Polar Jet", 30)
 	assert_bool(contract.is_empty()).is_false()
 	var cid := String(contract["id"])
 	var day := int(contract["first_day"])
