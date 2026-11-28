@@ -18,7 +18,7 @@ extends GdUnitTestSuite
 ## of their takings (MIXED_TAKINGS_MIN to MIXED_TAKINGS_MAX). Nobody misses
 ## the flight.
 
-const SEEDS: Array[int] = [11, 22, 33]
+const SEEDS: Array[int] = [11, 22, 33, 55]
 const FIRST_STATE := 1360
 const CONFIGS: Array[String] = ["none", "shops", "screens", "mixed"]
 ## The gate's two screens: on the airside row south of the seat rows, facing

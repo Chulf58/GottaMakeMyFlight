@@ -36,6 +36,8 @@ func before() -> void:
 	var flights: FlightSim = _main.get_node("FlightSim")
 	var hud: PassengerHud = _main.get_node("PassengerHud")
 	var panel: StaffPanel = _main.get_node("StaffPanel")
+	var finances: Finances = _main.get_node("Finances")
+	var menu: BuildMenu = _main.get_node("BuildMenu")
 	_boot = {
 		"contracts": flights.contract_ids(),
 		"flights": flights.flight_ids(),
@@ -45,6 +47,8 @@ func before() -> void:
 		(hud.find_child("DeparturesBoard", true, false) as DeparturesBoard).is_shown(),
 		"clock": (hud.find_child("Clock", true, false) as Label).text,
 		"hint": panel.hint_text(),
+		"balance": finances.wallet.balance,
+		"money_label": menu.money_label().text,
 	}
 	_open(clock, flights, hud, panel)
 	_opened["panel_texts"] = _panel_texts(hud)
@@ -108,10 +112,8 @@ func _open(clock: SimClock, flights: FlightSim, hud: PassengerHud, panel: StaffP
 
 
 func test_the_wallet_holds_the_starting_budget() -> void:
-	var finances: Finances = _main.get_node("Finances")
-	var menu: BuildMenu = _main.get_node("BuildMenu")
-	assert_int(finances.wallet.balance).is_equal(PriceTable.STARTING_BUDGET)
-	assert_str(menu.money_label().text).is_equal(str(PriceTable.STARTING_BUDGET))
+	assert_int(int(_boot["balance"])).is_equal(PriceTable.STARTING_BUDGET)
+	assert_str(String(_boot["money_label"])).is_equal(str(PriceTable.STARTING_BUDGET))
 
 
 func test_a_new_game_is_closed_with_no_contract_and_no_flight() -> void:

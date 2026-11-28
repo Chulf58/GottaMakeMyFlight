@@ -36,7 +36,7 @@ func after_test() -> void:
 func _cafe_world() -> PassengerTestWorld:
 	var grid := BuildGrid.new()
 	_ids = CafeTestLayout.build(grid, true)
-	return PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(700, 1700), 4242)
+	return PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(1500, 3000), 4242)
 
 
 func _save(world: PassengerTestWorld) -> String:
@@ -58,7 +58,7 @@ func _load(text: String) -> PassengerTestWorld:
 	var data: Dictionary = JSON.parse_string(text)
 	var grid := BuildGrid.new()
 	assert_bool(grid.from_snapshot(data["grid"])).is_true()
-	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(700, 1700), 99)
+	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(1500, 3000), 99)
 	assert_bool(world.clock.from_snapshot(data["clock"])).is_true()
 	assert_bool(world.flights.from_snapshot(data["flights"])).is_true()
 	assert_bool(world.sim.from_snapshot(data["passengers"])).is_true()
