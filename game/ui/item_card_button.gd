@@ -7,11 +7,10 @@ extends Button
 ## mode (Click/Drag), upkeep/needs chips, and [about, how it works, needs] from
 ## ItemInfo.
 ##
-## The card is a tooltip popup, as MoneySlot's is. It is placed above the item
-## card at its left edge from get_screen_transform() of the card's local origin
-## (decision a-new-game-starts-with-no-build-tool-selected-refusal-status), not
-## from get_global_rect(), which would carry the card's own offset twice. It keeps
-## inside the window sideways.
+## The card is a tooltip popup, as MoneySlot's is. It docks in the lower-right
+## corner of the viewport via BottomDocks.right_corner_position(), clearing the
+## bottom build bar/tray and stacking cleanly above visible bottom-right inspect
+## cards while staying clamped inside the viewport.
 
 const HUD_THEME := preload("res://ui/hud_theme.tres")
 ## The headings of the card's second and third parts.
@@ -177,18 +176,40 @@ func _make_custom_tooltip(_for_text: String) -> Object:
 	return _card
 
 
-## Where the popup's top-left goes: above the item card at its left edge, kept
-## inside the window sideways. `card_size` is the popup's size. The card's
-## screen position is the screen transform of its local origin; the popup's own
-## height and the gap are screen units already, so the UI scale is not applied to
-## them again.
+## Where the popup's top-left goes: lower-right corner of the viewport, clearing
+## the build bar/tray and stacking above any visible bottom-right inspect card,
+## clamped inside the viewport.
 func card_screen_position(card_size: Vector2) -> Vector2i:
-	var top := get_screen_transform() * Vector2.ZERO
-	var room := get_viewport().get_visible_rect().size.x - card_size.x
-	var at := Vector2(
-		clampf(top.x, 0.0, maxf(room, 0.0)), maxf(top.y - card_size.y - CARD_GAP, 0.0)
+	var viewport := get_viewport()
+	var layer := viewport.get_visible_rect().size if viewport != null else card_size
+	var menu := _find_build_menu()
+	var has_menu := is_instance_valid(menu) and menu.is_node_ready()
+	var menu_scale := menu.scale if has_menu else Vector2.ONE
+	var bar_w := 0.0 if not has_menu else menu.bar().get_combined_minimum_size().x * menu_scale.x
+	var tray_open := has_menu and (menu.is_tray_open() or menu.staff_open)
+	var stack_top := _menu_stack_top(menu, layer, menu_scale) if has_menu else 0.0
+	var at := BottomDocks.right_corner_position(
+		get_tree(), layer, card_size, bar_w, tray_open, stack_top
 	)
 	return Vector2i(at.round())
+
+
+func _find_build_menu() -> BuildMenu:
+	var node := get_parent()
+	while node != null:
+		var menu := node as BuildMenu
+		if menu != null:
+			return menu
+		node = node.get_parent()
+	return null
+
+
+static func _menu_stack_top(menu: BuildMenu, layer: Vector2, menu_scale: Vector2) -> float:
+	var unscaled_top := menu.stack_top()
+	if menu_scale.is_equal_approx(Vector2.ONE):
+		return unscaled_top
+	var screen_y := (layer.y - unscaled_top) * menu_scale.y
+	return maxf(0.0, layer.y - screen_y)
 
 
 func _place_card() -> void:

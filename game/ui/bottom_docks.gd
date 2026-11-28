@@ -151,3 +151,29 @@ static func right_floor_bottom(
 		if rect.has_area() and rect.end.x > card_left and rect.position.x < layer.x:
 			bottom_y = maxf(bottom_y, layer.y - rect.position.y + float(HudLayout.GAP))
 	return bottom_y
+
+
+## Top-left viewport position for a lower-right corner card of `card_size`:
+## right-aligned at HudLayout.MARGIN from the right edge and bottom-aligned via
+## right_floor_bottom() (clearing CategoryBar, BuildTray, StaffCard, and visible
+## RIGHT_FLOOR_GROUP cards such as DebugCorner/PassengerInspect/StaffInspect),
+## clamped inside `layer`.
+static func right_corner_position(
+	tree: SceneTree,
+	layer: Vector2,
+	card_size: Vector2,
+	bar_width: float,
+	tray_open: bool,
+	stack_top: float,
+	ignore: Control = null
+) -> Vector2:
+	var bottom_y := right_floor_bottom(
+		tree, layer, card_size.x, bar_width, tray_open, stack_top, ignore
+	)
+	var max_x := maxf(layer.x - card_size.x, 0.0)
+	var min_x := minf(float(HudLayout.MARGIN), max_x)
+	var x := clampf(layer.x - float(HudLayout.MARGIN) - card_size.x, min_x, max_x)
+	var max_y := maxf(layer.y - card_size.y, 0.0)
+	var min_y := minf(float(HudLayout.MARGIN), max_y)
+	var y := clampf(layer.y - bottom_y - card_size.y, min_y, max_y)
+	return Vector2(x, y)

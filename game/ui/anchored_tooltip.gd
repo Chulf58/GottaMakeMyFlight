@@ -32,21 +32,56 @@ func text() -> String:
 
 ## Shows `words` beside `anchor` (screen px), off every rect in `avoid`.
 func show_at(words: String, anchor: Rect2, avoid: Array[Rect2]) -> void:
-	if _label.text != words:
-		_label.text = words
-		_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-		_label.custom_minimum_size.x = 0.0
-		if _label.get_minimum_size().x > MAX_W:
-			_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			_label.custom_minimum_size.x = MAX_W
-	size = get_combined_minimum_size()
+	_apply_words(words)
 	var screen := get_viewport_rect() if is_inside_tree() else Rect2(Vector2.ZERO, size)
 	position = place(anchor, size, screen, avoid)
 	visible = true
 
 
+## Shows `words` in the lower-right corner of the viewport, clearing BottomDocks
+## (CategoryBar, BuildTray, and visible RIGHT_FLOOR_GROUP inspect cards).
+func show_bottom_right(
+	words: String, bar_width := 0.0, tray_open := false, stack_top := 0.0, ignore: Control = null
+) -> void:
+	_apply_words(words)
+	var screen := get_viewport_rect() if is_inside_tree() else Rect2(Vector2.ZERO, size)
+	position = BottomDocks.right_corner_position(
+		get_tree(), screen.size, size, bar_width, tray_open, stack_top, ignore
+	)
+	visible = true
+
+
+func _apply_words(words: String) -> void:
+	if _label.text != words:
+		_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		_label.custom_minimum_size = Vector2.ZERO
+		_label.text = words
+		if _label.get_minimum_size().x > MAX_W:
+			var style := get_theme_stylebox(&"panel")
+			var pad := style.get_minimum_size() if style != null else Vector2.ZERO
+			size = Vector2(MAX_W + pad.x, 0.0)
+			_label.custom_minimum_size = Vector2(MAX_W, 0.0)
+			_label.size = Vector2(MAX_W, 0.0)
+			_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	size = get_combined_minimum_size()
+
+
 func hide_tip() -> void:
 	visible = false
+
+
+## Where a card of `card` size goes in the lower-right corner of `screen`,
+## `bottom_offset` px above the bottom edge and clamped inside `screen`.
+static func place_bottom_right(
+	card: Vector2, screen: Rect2, bottom_offset := float(HudLayout.MARGIN)
+) -> Vector2:
+	var max_x := maxf(screen.end.x - card.x, screen.position.x)
+	var min_x := minf(screen.position.x + float(HudLayout.MARGIN), max_x)
+	var x := clampf(screen.end.x - float(HudLayout.MARGIN) - card.x, min_x, max_x)
+	var max_y := maxf(screen.end.y - card.y, screen.position.y)
+	var min_y := minf(screen.position.y + float(HudLayout.MARGIN), max_y)
+	var y := clampf(screen.end.y - bottom_offset - card.y, min_y, max_y)
+	return Vector2(x, y)
 
 
 ## Where a card of `card` size goes beside `anchor`: the first side (right, left,

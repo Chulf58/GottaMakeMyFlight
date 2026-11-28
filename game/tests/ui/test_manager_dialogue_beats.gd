@@ -415,7 +415,7 @@ func test_unlock_guide_opening_call_and_incident_panel_wire_chips_and_actions() 
 	assert_bool(guide.is_open()).is_false()
 	assert_bool(offer_panel.is_open()).is_true()
 
-	# IncidentPanel splits offer reward/failure into scannable chips.
+	# IncidentPanel splits offer reward/failure into scannable chips with full tooltips.
 	var parts := (
 		IncidentPanel
 		. parts_for(
@@ -430,8 +430,10 @@ func test_unlock_guide_opening_call_and_incident_panel_wire_chips_and_actions() 
 	)
 	assert_array(parts["beats"]).is_equal(["VIP arrives today."])
 	assert_int((parts["chips"] as Array).size()).is_equal(2)
-	assert_str((parts["chips"][0] as Dictionary)["label"]).is_equal("Reward: 500 money.")
-	assert_str((parts["chips"][1] as Dictionary)["label"]).is_equal("If it fails: -1 star.")
+	assert_str((parts["chips"][0] as Dictionary)["label"]).is_equal("Reward: +500 money")
+	assert_str((parts["chips"][1] as Dictionary)["label"]).is_equal("Risk: -1 star")
+	assert_str((parts["chips"][0] as Dictionary)["tooltip"]).is_equal("Reward: 500 money.")
+	assert_str((parts["chips"][1] as Dictionary)["tooltip"]).is_equal("If it fails: -1 star.")
 
 
 func _chip_buttons(dialog: IntroDialogue) -> Array[Button]:

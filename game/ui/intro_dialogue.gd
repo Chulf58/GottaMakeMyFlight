@@ -108,6 +108,7 @@ var _chips_row := HFlowContainer.new()
 var _chip_tip := PanelContainer.new()
 var _chip_tip_label := Label.new()
 var _active_chip: Button
+var _fitting := false
 var _footer := Label.new()
 var _continue := Button.new()
 var _action_btn: Button
@@ -349,6 +350,10 @@ func chips_row() -> Control:
 	return _chips_row
 
 
+func chip_tip() -> PanelContainer:
+	return _chip_tip
+
+
 func chip_texts() -> PackedStringArray:
 	var out := PackedStringArray()
 	for child in _chips_row.get_children():
@@ -494,6 +499,7 @@ func _build_chips_row() -> void:
 	for entry in _chips:
 		_chips_row.add_child(_make_chip(entry))
 	_chips_row.visible = not _chips.is_empty()
+	_chips_row.minimum_size_changed.connect(_on_chips_min_size_changed)
 
 
 func _make_chip(entry: Dictionary) -> Button:
@@ -505,6 +511,7 @@ func _make_chip(entry: Dictionary) -> Button:
 	pill.text = ""
 	pill.toggle_mode = true
 	pill.focus_mode = Control.FOCUS_NONE
+	pill.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	pill.mouse_filter = Control.MOUSE_FILTER_STOP
 	pill.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	pill.tooltip_text = tip_text
@@ -539,7 +546,7 @@ func _make_chip(entry: Dictionary) -> Button:
 	lbl.theme = BuildMenu.HUD_THEME
 	lbl.theme_type_variation = &"HudSmall"
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var max_w := BOX_SIZE.x - TEXT_LEFT - BODY_RIGHT - 72.0
+	var max_w := BOX_SIZE.x - TEXT_LEFT - BODY_RIGHT - 88.0
 	var font := BuildMenu.HUD_THEME.get_font(&"font", &"HudSmall")
 	var fsize := BuildMenu.HUD_THEME.get_font_size(&"font_size", &"HudSmall")
 	if font != null and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize).x > max_w:
@@ -660,7 +667,7 @@ func _build_footer() -> void:
 	_footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_footer.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	_footer.offset_left = TEXT_LEFT
-	_footer.offset_right = -544.0
+	_footer.offset_right = -544.0 if (_offer or _action_label != "") else -276.0
 	_footer.offset_top = -62.0
 	_footer.offset_bottom = -20.0
 	_box.add_child(_footer)
@@ -808,29 +815,98 @@ func _intro_body() -> String:
 ## Sizes the box to its body text and optional chips row: never below the
 ## caller's height, never above the cap from _max_box_height.
 func _fit_box() -> void:
+	if _fitting:
+		return
+	_fitting = true
 	var chip_area_w := BOX_SIZE.x - TEXT_LEFT - BODY_RIGHT
+	var footer_w := maxf(80.0, BOX_SIZE.x - TEXT_LEFT + _footer.offset_right)
+	var footer_h := 42.0
+	if _footer.visible:
+		footer_h = maxf(42.0, _wrapped_label_height(_footer, footer_w))
+	var bottom_row_top := 20.0 + footer_h
+	_footer.offset_top = -bottom_row_top
+	_footer.offset_bottom = -20.0
+	var content_bottom := bottom_row_top + 10.0
 	var tip_h := 0.0
 	if _chip_tip.visible:
-		_chip_tip.size.x = chip_area_w
-		_chip_tip_label.custom_minimum_size.x = maxf(80.0, chip_area_w - 24.0)
-		_chip_tip_label.size.x = _chip_tip_label.custom_minimum_size.x
-		var tip_min_h := maxf(28.0, _chip_tip_label.get_minimum_size().y + 12.0)
-		_chip_tip.offset_bottom = -BODY_BOTTOM - 4.0
-		_chip_tip.offset_top = -BODY_BOTTOM - 4.0 - tip_min_h
-		_chip_tip.size = Vector2(chip_area_w, tip_min_h)
+		_chip_tip.offset_left = TEXT_LEFT
+		_chip_tip.offset_right = -BODY_RIGHT
+		var tip_text_w := maxf(80.0, chip_area_w - 28.0)
+		_chip_tip_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		_chip_tip_label.custom_minimum_size = Vector2(tip_text_w, 0.0)
+		_chip_tip_label.size = Vector2(tip_text_w, 0.0)
+		_chip_tip_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var tip_text_h := maxf(
+			_chip_tip_label.get_combined_minimum_size().y,
+			_wrapped_label_height(_chip_tip_label, tip_text_w)
+		)
+		var tip_min_h := maxf(28.0, tip_text_h + 16.0)
+		_chip_tip.offset_bottom = -content_bottom - 4.0
+		_chip_tip.offset_top = -content_bottom - 4.0 - tip_min_h
 		tip_h = tip_min_h + 8.0
 	var chips_h := 0.0
 	if not _chips.is_empty():
-		_chips_row.custom_minimum_size.x = chip_area_w
-		var min_h := maxf(30.0, _chips_row.get_combined_minimum_size().y)
+		_chips_row.offset_left = TEXT_LEFT
+		_chips_row.offset_right = -BODY_RIGHT
+		var min_h := maxf(
+			30.0,
+			maxf(_flow_height(_chips_row, chip_area_w), _chips_row.get_combined_minimum_size().y)
+		)
 		chips_h = min_h + 12.0
-		_chips_row.offset_bottom = -BODY_BOTTOM - 4.0 - tip_h
-		_chips_row.offset_top = -BODY_BOTTOM - 4.0 - tip_h - min_h
-	_body_scroll.offset_bottom = -(BODY_BOTTOM + chips_h + tip_h)
+		_chips_row.offset_bottom = -content_bottom - 4.0 - tip_h
+		_chips_row.offset_top = -content_bottom - 4.0 - tip_h - min_h
+	_body_scroll.offset_bottom = -(content_bottom + chips_h + tip_h)
 	_body.size.x = chip_area_w
-	var wanted := _body.get_minimum_size().y + BODY_TOP + BODY_BOTTOM + chips_h + tip_h
+	var wanted := _body.get_minimum_size().y + BODY_TOP + content_bottom + chips_h + tip_h
 	var cap := _max_box_height()
 	_set_box_height(clampf(wanted, minf(_box_height, cap), cap))
+	_fitting = false
+
+
+static func _wrapped_label_height(label: Label, width: float) -> float:
+	if label.text == "":
+		return 0.0
+	var font := label.get_theme_font(&"font")
+	var fsize := label.get_theme_font_size(&"font_size")
+	if font == null:
+		return label.get_combined_minimum_size().y
+	var para := TextParagraph.new()
+	para.break_flags = (
+		TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE
+	)
+	para.width = width
+	para.add_string(label.text, font, fsize)
+	return para.get_size().y
+
+
+func _on_chips_min_size_changed() -> void:
+	if is_inside_tree() and not _fitting:
+		_fit_box()
+		_place()
+
+
+static func _flow_height(flow: HFlowContainer, avail_w: float) -> float:
+	var h_sep := float(flow.get_theme_constant(&"h_separation"))
+	var v_sep := float(flow.get_theme_constant(&"v_separation"))
+	var x := 0.0
+	var row_h := 0.0
+	var total_h := 0.0
+	for child in flow.get_children():
+		var ctrl := child as Control
+		if ctrl == null or not ctrl.visible:
+			continue
+		var sz := ctrl.get_combined_minimum_size()
+		if x > 0.0 and x + sz.x > avail_w + 0.5:
+			total_h += row_h + v_sep
+			x = 0.0
+			row_h = 0.0
+		if x > 0.0:
+			x += h_sep
+		x += sz.x
+		row_h = maxf(row_h, sz.y)
+	if row_h > 0.0:
+		total_h += row_h
+	return total_h
 
 
 ## The tallest the box may be: MAX_BOX_H, or less where the viewport is short.

@@ -101,70 +101,101 @@ func close_for_modal() -> void:
 		dialog_changed.emit(false)
 
 
-## The concise 1-2 beat text, scannable Reward / Risk chips, and clock footer for
-## one major's copy.
+## The concise 1-2 beat text, scannable Reward / Risk chips with full-sentence
+## tooltips, and clock footer for one major's copy.
 static func parts_for(copy: Dictionary, offer: bool) -> Dictionary:
 	var raw_body := str(copy.get("body", ""))
 	var beats: Array[String] = []
 	var chips: Array[Dictionary] = []
+	var reward := ""
+	var failure := ""
 	if offer:
 		beats = _split_beats(raw_body)
-		var reward := str(copy.get("reward", ""))
-		var failure := str(copy.get("failure", ""))
-		if reward != "":
-			(
-				chips
-				. append(
-					{
-						"icon": ICON_COIN,
-						"label": reward,
-						"tint": Color(0.22, 0.58, 0.34, 1.0),
-					}
-				)
-			)
-		if failure != "":
-			(
-				chips
-				. append(
-					{
-						"icon": ICON_SERVICES,
-						"label": failure,
-						"tint": Color(0.76, 0.28, 0.24, 1.0),
-					}
-				)
-			)
+		reward = str(copy.get("reward", ""))
+		failure = str(copy.get("failure", ""))
 	else:
 		var lines := raw_body.split("\n", false)
 		if lines.size() == 3:
 			beats = _split_beats(lines[0])
-			(
-				chips
-				. append(
-					{
-						"icon": ICON_COIN,
-						"label": lines[1],
-						"tint": Color(0.22, 0.58, 0.34, 1.0),
-					}
-				)
-			)
-			(
-				chips
-				. append(
-					{
-						"icon": ICON_SERVICES,
-						"label": lines[2],
-						"tint": Color(0.76, 0.28, 0.24, 1.0),
-					}
-				)
-			)
+			reward = lines[1]
+			failure = lines[2]
 		else:
 			beats = _split_beats(raw_body)
+	if reward != "":
+		chips.append(_reward_chip(reward))
+	if failure != "":
+		chips.append(_failure_chip(failure))
 	var footer := (
 		_translator.tr("The clock stays paused until you choose.")
 		if offer
 		else _translator.tr("The clock goes on when you close this.")
 	)
 	return {"beats": beats, "chips": chips, "footer": footer}
+
+
+static func _reward_chip(reward: String) -> Dictionary:
+	return {
+		"icon": ICON_COIN,
+		"label": _short_reward_label(reward),
+		"tint": Color(0.22, 0.58, 0.34, 1.0),
+		"tooltip": reward,
+	}
+
+
+static func _failure_chip(failure: String) -> Dictionary:
+	return {
+		"icon": ICON_SERVICES,
+		"label": _short_failure_label(failure),
+		"tint": Color(0.76, 0.28, 0.24, 1.0),
+		"tooltip": failure,
+	}
+
+
+static func _short_reward_label(sentence: String) -> String:
+	var money_re := RegEx.create_from_string("(\\d[\\d,]*)\\s+money")
+	var money_match := money_re.search(sentence)
+	if money_match != null:
+		return _translator.tr("Reward: +{amount} money").format(
+			{"amount": money_match.get_string(1)}
+		)
+	var lower := sentence.to_lower()
+	if lower.find("usual fee") != -1 or lower.find("extra passenger") != -1:
+		return _translator.tr("Reward: Extra fees")
+	var body := _strip_prefix(sentence, "reward:")
+	return _translator.tr("Reward: {summary}").format({"summary": _head_words(body, 2)})
+
+
+static func _short_failure_label(sentence: String) -> String:
+	var lower := sentence.to_lower()
+	if lower.find("half a star") != -1:
+		return _translator.tr("Risk: -0.5 star")
+	var star_re := RegEx.create_from_string("(\\d+(?:\\.\\d+)?)\\s+(stars?)")
+	var star_match := star_re.search(sentence)
+	if star_match != null:
+		return _translator.tr("Risk: -{amount} {unit}").format(
+			{"amount": star_match.get_string(1), "unit": star_match.get_string(2)}
+		)
+	if lower.find("queues grow") != -1:
+		return _translator.tr("Risk: Longer queues")
+	if lower.find("check-in") != -1 or lower.find("extra passengers") != -1:
+		return _translator.tr("Risk: Extra queues")
+	var body := _strip_prefix(sentence, "if it fails:")
+	return _translator.tr("Risk: {summary}").format({"summary": _head_words(body, 2)})
+
+
+static func _strip_prefix(sentence: String, prefix_lower: String) -> String:
+	var clean := sentence.strip_edges()
+	if clean.to_lower().begins_with(prefix_lower):
+		clean = clean.substr(prefix_lower.length()).strip_edges()
+	return clean
+
+
+static func _head_words(text: String, max_words: int) -> String:
+	var words := text.strip_edges().split(" ", false)
+	var picked: Array[String] = []
+	for i in mini(max_words, words.size()):
+		picked.append(words[i].trim_suffix(".").trim_suffix(",").trim_suffix(";"))
+	return " ".join(PackedStringArray(picked))
 
 
 static func _word_count(text: String) -> int:
