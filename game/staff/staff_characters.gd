@@ -18,7 +18,7 @@ extends Node3D
 ## between the two with the clock's alpha, as PassengerViews does.
 ##
 ## StaffSim walks a member onto its station's staff spot (StaffSpots: behind
-## a desk's counter, beside a scanner's landside half) and puts it on duty
+## a desk's counter, beside a scanner's airside half) and puts it on duty
 ## there, so a member is always drawn where it stands: walking onto the spot
 ## and off it again is an ordinary walk, with no jump. On duty it faces its
 ## station's front, the passenger side; a security lane's officer faces its
@@ -324,8 +324,39 @@ func post_yaw(station: int, slot: StaffMember.Slot = StaffMember.Slot.PRIMARY) -
 		var work: Vector2i = lane["berth" if slot == StaffMember.Slot.HELPER else "xray_belt"]
 		var ahead := work - staff.spot_of(station, slot)
 		return atan2(ahead.x, ahead.y)
-	var front := TerminalLayout.front_of(staff.sim.grid.get_object(station)["facing"])
+	var obj := staff.sim.grid.get_object(station)
+	if StringName(obj.get("def", &"")) == &"security_scanner":
+		var ahead := staff.sim.grid.interaction_cell(station) - staff.spot_of(station, slot)
+		return atan2(ahead.x, ahead.y)
+	var front := TerminalLayout.front_of(obj["facing"])
 	return atan2(front.x, front.y)
+
+
+func _on_duty_yaw(m: StaffMember, member_pos: Vector3) -> float:
+	if (
+		m.role == StaffMember.Role.SECURITY
+		and staff.sim != null
+		and staff.sim.layout.security_lanes.lane(m.station).is_empty()
+	):
+		var rec := staff.sim.security.record_of(m.station)
+		var admitted: Array = rec.get("admitted", [])
+		if not admitted.is_empty():
+			var pax := staff.sim.get_passenger(int(admitted[0]))
+			if (
+				pax != null
+				and (
+					pax.security_phase == SecurityRuntime.Phase.BODY_CHECK
+					or pax.security_phase == SecurityRuntime.Phase.REPACK
+				)
+			):
+				var pax_pos := (
+					staff.sim.world_position(pax) + SecurityLooks.target_offset(staff.sim, pax)
+				)
+				var dx := pax_pos.x - member_pos.x
+				var dz := pax_pos.z - member_pos.z
+				if dx * dx + dz * dz > 0.0001:
+					return atan2(dx, dz)
+	return post_yaw(m.station, m.slot)
 
 
 ## The yaw a cleaner emptying the bin on `bin` from `spot` is drawn with:
@@ -861,7 +892,7 @@ func _pose(node: Node3D, m: StaffMember, moved: Vector3) -> void:
 		elif moved.length() > 0.001:
 			node.rotation.y = atan2(moved.x, moved.z)
 	elif m.state == StaffMember.State.ON_DUTY:
-		node.rotation.y = post_yaw(m.station, m.slot)
+		node.rotation.y = _on_duty_yaw(m, _cur.get(m.id, Vector3.ZERO) as Vector3)
 	elif m.is_moving():
 		clip = "walk"
 		base = (PassengerSim.WALK_MM * SimClock.TICK_RATE / 1000.0) / CLIP_WALK_MPS[m.role]

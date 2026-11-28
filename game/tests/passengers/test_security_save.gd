@@ -284,6 +284,37 @@ func test_unpack_work_above_its_maximum_is_refused_and_maximum_is_accepted() -> 
 	a.world.free_all()
 
 
+func test_gate_full_basic_scanner_body_check_saves_and_loads_cleanly() -> void:
+	var a := GateFullWorld.make()
+	var alarm_id := a.send()
+	var pax := a.world.passenger(alarm_id)
+	pax.alarm = true
+	var stop := a.world.clock.tick + 1000
+	while a.world.clock.tick < stop and pax.security_phase != SecurityRuntime.Phase.BODY_CHECK:
+		a.world.step()
+	assert_int(pax.security_phase).is_equal(SecurityRuntime.Phase.BODY_CHECK)
+	# Wall off the airside standing corridor mid-BODY_CHECK so _may_clear() stays false.
+	var wall := BuildEdit.place_wall(GateFullWorld.SCANNER_EXIT, BuildGrid.Side.NORTH)
+	assert_bool(a.world.grid.apply(wall).ok).is_true()
+	while a.world.clock.tick < stop and pax.security_work > 0:
+		a.world.step()
+	a.world.step()
+	assert_int(pax.security_phase).is_equal(SecurityRuntime.Phase.BODY_CHECK)
+	assert_int(pax.security_work).is_equal(0)
+	assert_bool(pax.body_resolved).is_false()
+
+	var snap := _json(a.world.sim.to_snapshot())
+	var b := GateFullWorld.make()
+	assert_bool(b.world.grid.apply(wall).ok).is_true()
+	b.world.clock.from_snapshot(_json(a.world.clock.to_snapshot()))
+	b.world.flights.from_snapshot(_json(a.world.flights.to_snapshot()))
+	assert_str(PassengerSnapshot.load(snap, b.world.grid).get("error", "")).is_equal("")
+	assert_bool(b.world.sim.from_snapshot(snap)).is_true()
+	assert_bool(b.world.passenger(alarm_id).body_resolved).is_false()
+	b.world.free_all()
+	a.world.free_all()
+
+
 ## A copy of `data` with passenger `id`'s remaining security work set.
 func _work(data: Dictionary, id: int, work: int) -> Dictionary:
 	return _changed(data, func(d: Dictionary) -> void: _record(d, id)["security_work"] = work)

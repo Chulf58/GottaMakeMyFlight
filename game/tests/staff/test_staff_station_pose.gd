@@ -141,7 +141,7 @@ func test_checkin_security_and_shop_poses_activate_and_zero_cleanly() -> void:
 	pax.cafe_cooldown = 1000000
 	pax.hunger = 0
 	pax.carry_on = 1
-	pax.liquids = false
+	pax.liquids = true
 	pax.alarm = true
 	var saw := {
 		"checkin": 0.0,
@@ -983,6 +983,117 @@ func test_variant_cycles_meet_at_neutral_boundary_and_submodes_crossfade_smoothl
 		)
 	)
 	assert_bool(rec.has("xfade_since")).is_false()
+
+
+func test_basic_scanner_alarm_covers_wand_patdown_and_both_modes() -> void:
+	var grid := BuildGrid.new()
+	ReferenceTerminal.build(grid)
+	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(3000, 6000), 17)
+	_world.auto_staff = false
+	StaffTestKit.staff_all(_world.staff, [StaffMember.Role.SECURITY])
+	_attach_views(_world)
+
+	var scanner: int = _world.sim.layout.scanners[0]
+	var officer_id := _world.staff.staff_at(scanner)
+	var officer := _world.staff.get_member(officer_id)
+	var officer_node := _views.node_for(officer_id)
+	var sk := _skeleton_of(officer_node)
+	assert_that(StaffSpots.spot_of(_world.grid, scanner)).is_equal(
+		_world.grid.get_object(scanner)["anchor"] + Vector2i(1, 0)
+	)
+
+	var by_kind := {}
+	var probe_i := 0
+	while by_kind.size() < 3 and probe_i < 9:
+		probe_i += 1
+		var pid := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+		var pax := _world.passenger(pid)
+		ToiletTestLayout.calm(pax)
+		pax.cafe_cooldown = 1000000
+		pax.carry_on = 0
+		pax.liquids = false
+		pax.alarm = true
+		pax.stage = Passenger.Stage.TO_SECURITY
+		pax.at = _world.grid.interaction_cell(scanner)
+		pax.clear_path()
+		var kind := StaffStationPose.alarm_inspect_kind(pid)
+		var first_half := {}
+		var second_half := {}
+		for _t in 350:
+			_world.step()
+			_views.draw()
+			if pax.security_phase == SecurityRuntime.Phase.BODY_CHECK:
+				var half := (
+					first_half
+					if pax.security_work * 2 > SecurityRuntime.BODY_CHECK_TICKS
+					else second_half
+				)
+				if (
+					half.is_empty()
+					and _views.station_pose_mode(officer_id) == StaffStationPose.Mode.SECURITY_SCAN
+					and _views.station_pose_weight(officer_id) >= 0.99
+				):
+					(officer_node.get_node("AnimationPlayer") as AnimationPlayer).speed_scale = 0.0
+					await _skeleton_tick(sk)
+					half["sub"] = _views.station_pose_sub_mode(officer_id)
+					half["prop"] = _views.hand_prop_of(officer_id)
+					half["arm_r"] = (
+						sk
+						. get_bone_global_pose(sk.find_bone("Arm.R"))
+						. basis
+						. get_rotation_quaternion()
+					)
+					half["arm_l"] = (
+						sk
+						. get_bone_global_pose(sk.find_bone("Arm.L"))
+						. basis
+						. get_rotation_quaternion()
+					)
+					var pax_pos := (
+						_world.sim.world_position(pax)
+						+ SecurityLooks.target_offset(_world.sim, pax)
+					)
+					var to_pax := (
+						Vector2(
+							pax_pos.x - officer_node.position.x, pax_pos.z - officer_node.position.z
+						)
+						. normalized()
+					)
+					var fwd := Vector2(sin(officer_node.rotation.y), cos(officer_node.rotation.y))
+					half["facing_dot"] = fwd.dot(to_pax)
+					(officer_node.get_node("AnimationPlayer") as AnimationPlayer).speed_scale = 1.0
+			if pax.stage == Passenger.Stage.TO_GATE:
+				break
+		if not by_kind.has(kind):
+			by_kind[kind] = {"first": first_half, "second": second_half}
+
+	assert_int(by_kind.size()).is_equal(3)
+	var wand_case: Dictionary = by_kind[StaffStationPose.SecurityInspectKind.WAND]
+	assert_int(wand_case["first"]["sub"]).is_equal(StaffStationPose.SubMode.SEC_ALARM)
+	assert_int(wand_case["first"]["prop"]).is_equal(StaffHandProps.PropKind.WAND)
+	assert_int(wand_case["second"]["sub"]).is_equal(StaffStationPose.SubMode.SEC_ALARM)
+	assert_int(wand_case["second"]["prop"]).is_equal(StaffHandProps.PropKind.WAND)
+	assert_float(wand_case["first"]["facing_dot"]).is_greater(0.85)
+
+	var pat_case: Dictionary = by_kind[StaffStationPose.SecurityInspectKind.PATDOWN]
+	assert_int(pat_case["first"]["sub"]).is_equal(StaffStationPose.SubMode.SEC_PATDOWN)
+	assert_int(pat_case["first"]["prop"]).is_equal(StaffHandProps.PropKind.NONE)
+	assert_int(pat_case["second"]["sub"]).is_equal(StaffStationPose.SubMode.SEC_PATDOWN)
+	assert_int(pat_case["second"]["prop"]).is_equal(StaffHandProps.PropKind.NONE)
+	assert_float(pat_case["first"]["facing_dot"]).is_greater(0.85)
+
+	var both_case: Dictionary = by_kind[StaffStationPose.SecurityInspectKind.BOTH]
+	assert_int(both_case["first"]["sub"]).is_equal(StaffStationPose.SubMode.SEC_ALARM)
+	assert_int(both_case["first"]["prop"]).is_equal(StaffHandProps.PropKind.WAND)
+	assert_int(both_case["second"]["sub"]).is_equal(StaffStationPose.SubMode.SEC_PATDOWN)
+	assert_int(both_case["second"]["prop"]).is_equal(StaffHandProps.PropKind.NONE)
+	(
+		assert_float(
+			(both_case["first"]["arm_l"] as Quaternion).angle_to(both_case["second"]["arm_l"])
+		)
+		. is_greater(0.15)
+	)
+	assert_int(officer.state).is_equal(StaffMember.State.ON_DUTY)
 
 
 func _snapshot_bones(sk: Skeleton3D, bones: Array[String]) -> Dictionary:

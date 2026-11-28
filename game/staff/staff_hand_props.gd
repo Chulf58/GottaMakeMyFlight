@@ -154,7 +154,11 @@ static func desired_prop(
 			return PropKind.CLIPBOARD
 	match mode:
 		StaffStationPose.Mode.SECURITY_SCAN:
-			return PropKind.WAND
+			if sub_mode != StaffStationPose.SubMode.SEC_PATDOWN:
+				return PropKind.WAND
+		StaffStationPose.Mode.SECURITY_REPACK:
+			if sub_mode == StaffStationPose.SubMode.SEC_ALARM:
+				return PropKind.WAND
 		StaffStationPose.Mode.GATE:
 			return PropKind.BOARDING_PASS
 		StaffStationPose.Mode.CHECKIN:

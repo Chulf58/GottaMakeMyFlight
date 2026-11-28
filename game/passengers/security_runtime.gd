@@ -8,9 +8,9 @@ extends RefCounted
 ##
 ## THE BASIC SCANNER serves one passenger at a time. SCAN: the passenger walks
 ## the passage while BASIC_SCAN_TICKS plus BASIC_BAG_TICKS per carry-on bag
-## run down. A passenger with liquids or an alarm then repacks in place
-## (REPACK), and the scanner stays held, so a repack blocks it. The passenger
-## is cleared at the passage end.
+## run down. On a body alarm, the passenger undergoes BODY_CHECK at the exit
+## (wand sweep, pat-down, or both). A passenger with liquids then repacks in
+## place (REPACK), and the scanner stays held until cleared at passage end.
 ##
 ## A SECURITY LANE (SecurityLanes geometry) overlaps passengers. UNPACK at the
 ## unpack cell, ARCH through the passage to the pickup cell, PICKUP, LEAVE to
@@ -57,12 +57,12 @@ extends RefCounted
 
 enum Phase { NONE, SCAN, UNPACK, ARCH, TO_BERTH, REPACK, RETURN, PICKUP, LEAVE, BODY_CHECK }
 
-## Basic scanner, zero bags: today's 40-tick service, the passage walk in it.
-const BASIC_SCAN_TICKS := 40
+## Basic scanner, zero bags: deliberately slower than the X-ray lane.
+const BASIC_SCAN_TICKS := 80
 ## Each bag is unpacked, X-rayed and packed again at the one scanner.
 const BASIC_BAG_TICKS := 15
-## Crisp wand pat-down at the arch on a body alarm (at rate 1; halved with helper).
-const BODY_CHECK_TICKS := 20
+## Secondary inspection at the arch on a body alarm (at rate 1; halved with helper).
+const BODY_CHECK_TICKS := 40
 ## Bag search / repacking after an X-ray bag flag, at either tier (at rate 1).
 const REPACK_TICKS := 80
 ## Maximum daily confiscated items stored per confiscation bin (newest kept).
@@ -85,7 +85,7 @@ const LANE_PICKUP_BAG_TICKS := 4
 const WORK_PHASES: Array[Phase] = [
 	Phase.SCAN, Phase.UNPACK, Phase.REPACK, Phase.PICKUP, Phase.BODY_CHECK
 ]
-const BASIC_PHASES: Array[Phase] = [Phase.SCAN, Phase.REPACK]
+const BASIC_PHASES: Array[Phase] = [Phase.SCAN, Phase.BODY_CHECK, Phase.REPACK]
 const LANE_PHASES: Array[Phase] = [
 	Phase.UNPACK,
 	Phase.ARCH,
@@ -486,7 +486,9 @@ func _advance_one(station: int, record: Dictionary, p: Passenger) -> void:
 		return
 	match phase:
 		Phase.SCAN:
-			if incident_open(p):
+			if body_pending(p):
+				_enter(p, Phase.BODY_CHECK)
+			elif bag_pending(p):
 				_enter(p, Phase.REPACK)
 			elif _may_clear(p):
 				_clear(station, record, p)
@@ -509,6 +511,14 @@ func _advance_one(station: int, record: Dictionary, p: Passenger) -> void:
 			else:
 				_enter(p, Phase.PICKUP)
 		Phase.BODY_CHECK:
+			if not on_lane:
+				if bag_pending(p):
+					p.body_resolved = true
+					_enter(p, Phase.REPACK)
+				elif _may_clear(p):
+					p.body_resolved = true
+					_clear(station, record, p)
+				return
 			if p.at != lane["pickup"]:
 				if _pickup_free(record, lane["pickup"], p.id):
 					var step: Array[Vector2i] = [p.at, lane["pickup"]]

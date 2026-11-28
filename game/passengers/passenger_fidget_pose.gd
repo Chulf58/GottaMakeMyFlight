@@ -254,7 +254,8 @@ static func _update_tick_state(
 		and p.security_phase in [SecurityRuntime.Phase.SCAN, SecurityRuntime.Phase.BODY_CHECK]
 	)
 	if in_scan_hold:
-		var rkey := &"alarm_scan" if SecurityRuntime.body_pending(p) else &"liquids_scan"
+		var prefix := "body_" if p.security_phase == SecurityRuntime.Phase.BODY_CHECK else "scan_"
+		var rkey := StringName(prefix + ("alarm" if SecurityRuntime.body_pending(p) else "liquids"))
 		if record.get("react_key", &"") != rkey:
 			record["react_key"] = rkey
 			record["react_since"] = now
@@ -435,10 +436,21 @@ static func _evaluate_security(p: Passenger, record: Dictionary, now: float) -> 
 			record.erase("react_key")
 			record.erase("react_since")
 			return {}
-		if now - since >= SCAN_REACTION_TICKS:
+		var elapsed := now - since
+		if p.security_phase == SecurityRuntime.Phase.BODY_CHECK:
+			var enter_w := smoothstep(0.0, 3.0, elapsed)
+			var exit_w := (
+				smoothstep(0.0, 4.0, float(p.security_work)) if p.security_work <= 4 else 1.0
+			)
+			return {
+				"mode": react_mode,
+				"weight": clampf(minf(enter_w, exit_w), 0.0, 1.0),
+				"phase_t": elapsed / float(SimClock.TICK_RATE),
+				"sub": 0,
+			}
+		if elapsed >= SCAN_REACTION_TICKS:
 			record.erase("react_since")
 			return {}
-		var elapsed := now - since
 		return {
 			"mode": react_mode,
 			"weight": _window_weight(elapsed, 0.0, SCAN_REACTION_TICKS, 3.0, 4.0),

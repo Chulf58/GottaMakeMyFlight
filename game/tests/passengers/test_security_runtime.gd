@@ -20,6 +20,8 @@ const MIXED := [
 	[2, false, false],
 ]
 
+const STARTER_SITE := preload("res://build/terminal_site.tres")
+
 var _worlds: Array[SecurityTestWorld] = []
 
 
@@ -309,3 +311,49 @@ func test_admit_front_refuses_and_drops_stale_non_queued_members() -> void:
 		. is_push_error("SecurityRuntime.admit_front: empty lane at station %d" % w.station)
 	)
 	assert_array(empty_res).is_equal([false])
+
+
+func test_basic_scanner_runs_body_check_then_repack_on_dual_incident() -> void:
+	var w := _make(false)
+	var id := w.send(1, true, true)
+	var p := w.world.passenger(id)
+	var phases: Array[int] = []
+	var stop := w.world.clock.tick + 600
+	while w.world.clock.tick < stop and not w.cleared.has(id):
+		w.world.step()
+		if p.security_phase != SecurityRuntime.Phase.NONE:
+			if phases.is_empty() or phases[-1] != p.security_phase:
+				phases.append(p.security_phase)
+	assert_bool(w.cleared.has(id)).is_true()
+	(
+		assert_array(phases)
+		. is_equal(
+			[
+				SecurityRuntime.Phase.SCAN,
+				SecurityRuntime.Phase.BODY_CHECK,
+				SecurityRuntime.Phase.REPACK,
+			]
+		)
+	)
+	assert_bool(p.body_resolved).is_true()
+	assert_bool(p.bag_resolved).is_true()
+
+
+func test_day1_starter_flight_boards_cleanly_with_slower_basic_scanners() -> void:
+	var grid := BuildGrid.new(STARTER_SITE.grid_size, STARTER_SITE.grid_origin)
+	assert_bool(ReferenceTerminal.build(grid, STARTER_SITE.starter_offset)).is_true()
+	var starts := FlightSim.schedule_starts(0)
+	var starter := PassengerTestWorld.make(grid, starts, 19)
+	starter.sim.site = STARTER_SITE
+	var count := 14
+	for i in count:
+		var pid := starter.sim.spawn_now(PassengerTestWorld.FLIGHT)
+		var p := starter.passenger(pid)
+		p.carry_on = 1 if i % 3 != 0 else 0
+		p.liquids = i % 6 == 2
+		p.alarm = i % 5 == 3
+		starter.run_to(starter.clock.tick + 15)
+	starter.run_to(starts[FlightSim.State.DOORS_CLOSED])
+	var made := starter.sim.made_count()
+	starter.free_all()
+	assert_int(made).is_equal(count)

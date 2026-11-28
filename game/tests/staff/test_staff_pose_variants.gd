@@ -357,3 +357,37 @@ func test_idle_fidget_interruption_preserves_clock_and_backward_look_clears() ->
 	)
 	assert_bool(rec.has("look_since")).is_false()
 	assert_bool(rec.has("look_from")).is_false()
+
+	# 4. Alarm inspect modes cycle WAND, PATDOWN, BOTH and hide wand during SEC_PATDOWN.
+	var kinds := {}
+	for pid in [1, 2, 3]:
+		kinds[StaffStationPose.alarm_inspect_kind(pid)] = true
+	assert_int(kinds.size()).is_equal(3)
+	(
+		assert_int(
+			StaffHandProps.desired_prop(
+				StaffStationPose.Mode.SECURITY_SCAN,
+				StaffStationPose.SubMode.SEC_PATDOWN,
+				1.0,
+				10.0,
+				1,
+				false,
+				false
+			)
+		)
+		. is_equal(StaffHandProps.PropKind.NONE)
+	)
+	(
+		assert_int(
+			StaffHandProps.desired_prop(
+				StaffStationPose.Mode.SECURITY_REPACK,
+				StaffStationPose.SubMode.SEC_ALARM,
+				1.0,
+				10.0,
+				1,
+				false,
+				false
+			)
+		)
+		. is_equal(StaffHandProps.PropKind.WAND)
+	)

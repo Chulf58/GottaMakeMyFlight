@@ -116,5 +116,10 @@ func test_skipped_ticks_change_no_forecast_at_the_lane() -> void:
 func test_skipped_ticks_change_no_forecast_at_the_basic_scanner() -> void:
 	_check_tier(
 		false,
-		[SecurityRuntime.Phase.NONE, SecurityRuntime.Phase.SCAN, SecurityRuntime.Phase.REPACK]
+		[
+			SecurityRuntime.Phase.NONE,
+			SecurityRuntime.Phase.SCAN,
+			SecurityRuntime.Phase.REPACK,
+			SecurityRuntime.Phase.BODY_CHECK,
+		]
 	)
