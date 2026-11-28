@@ -151,7 +151,7 @@ func hire(role: StaffMember.Role) -> int:
 	m.quirks = StaffNames.quirk_keys_for(m.id, name_seed)
 	if role == StaffMember.Role.CLEANER:
 		m.patrol_wait = CleanerJobs.PATROL_PAUSE_TICKS
-	if role != StaffMember.Role.RAMP and is_off_shift():
+	if is_off_shift():
 		m.state = StaffMember.State.OFF_SHIFT
 	_members.append(m)
 	_by_id[m.id] = m
@@ -1127,7 +1127,7 @@ func _recall_shift_if_due() -> void:
 		return
 	var next_tick := _next_activity_tick()
 	var due := (
-		sim.active_count() > 0
+		sim.present_count() > 0
 		or sim.flights.has_moving_flight()
 		or next_tick < 0
 		or next_tick - sim.tick <= RETURN_LEAD_TICKS
@@ -1157,13 +1157,15 @@ func _recall_leaving(m: StaffMember) -> void:
 func _leave_shift_if_quiet() -> void:
 	if not _can_shift():
 		return
-	if sim.active_count() > 0 or sim.flights.has_moving_flight():
+	if sim.present_count() > 0 or sim.flights.has_moving_flight():
 		return
 	var next_tick := _next_activity_tick()
 	if next_tick < 0 or next_tick - sim.tick <= SHIFT_GAP_TICKS:
 		return
 	for m in _members:
-		if m.role == StaffMember.Role.RAMP or m.leaving:
+		if m.leaving:
+			continue
+		if m.role == StaffMember.Role.RAMP and m.ramp_job != StaffMember.RampJob.NONE:
 			continue
 		if m.state == StaffMember.State.OFF_SHIFT or _walking_to_exit(m):
 			continue

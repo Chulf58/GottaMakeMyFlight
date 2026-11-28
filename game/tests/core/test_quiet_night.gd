@@ -9,6 +9,7 @@ extends GdUnitTestSuite
 ## The one-off flight's first state: far enough ahead that tick 0 is quiet.
 const FIRST := 20_000
 const FRAME := 1.0 / 60.0
+const SITE := preload("res://build/terminal_site.tres")
 
 var _world: PassengerTestWorld
 var _quiet: QuietNight
@@ -216,4 +217,106 @@ func test_fast_forward_crosses_issue_tick_and_stops_ahead_of_first_arrival() -> 
 	assert_int(world.clock.tick).is_greater(issue)
 	assert_int(world.clock.tick).is_equal(expected)
 	assert_int(world.sim.active_count()).is_equal(0)
+	world.free_all()
+
+
+func test_missed_passenger_walking_out_blocks_quiet_night_until_done() -> void:
+	var grid := SiteGrid.new(SITE)
+	var off := SITE.starter_offset
+	StarterShell.place(grid, off)
+	ReferenceTerminal.fill_interior(grid, off)
+	var evening: Array[int] = [0, 1, 2, 3, 1600, 1650, 1660, 1700, 1710, 1720, 1730, 1740]
+	var world := PassengerTestWorld.make(grid, evening)
+	world.sim.site = SITE
+	assert_bool(world.flights.add_flight("MORNING", FlightSim.schedule_starts(FIRST))).is_true()
+	assert_bool(world.flights.open_airport()).is_true()
+	var quiet := auto_free(QuietNight.new()) as QuietNight
+	quiet.bind(world.clock, world.flights, world.sim)
+
+	world.step()
+	var id := world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	assert_int(id).is_greater(0)
+	var p := world.passenger(id)
+	while p.stage != Passenger.Stage.SEATED and world.clock.tick < 1200:
+		world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.SEATED)
+	p.boarding_tick = 1_000_000
+	world.run_to(1740)
+	assert_bool(world.flights.has_moving_flight()).is_false()
+	assert_int(p.stage).is_equal(Passenger.Stage.MISSED)
+	assert_bool(p.is_done()).is_true()
+	assert_int(world.sim.active_count()).is_equal(0)
+	assert_int(world.sim.present_count()).is_equal(1)
+	assert_bool(quiet.is_quiet()).is_false()
+	assert_int(quiet.stop_tick()).is_equal(-1)
+
+	world.clock.set_speed(3)
+	var saw_inside_block := false
+	var saw_outside_block := false
+	var guard := 0
+	while world.passenger(id) != null and guard < 2000:
+		world.clock.advance(FRAME)
+		guard += 1
+		assert_bool(world.clock.is_fast_forwarding()).is_false()
+		var live := world.passenger(id)
+		if live != null:
+			assert_bool(quiet.is_quiet()).is_false()
+			if live.missed_phase == Passenger.MissedPhase.TO_ENTRANCE:
+				saw_inside_block = true
+			elif live.missed_phase == Passenger.MissedPhase.TO_ROAD:
+				saw_outside_block = true
+
+	assert_bool(saw_inside_block).is_true()
+	assert_bool(saw_outside_block).is_true()
+	assert_int(world.sim.present_count()).is_equal(0)
+	assert_bool(quiet.is_quiet()).is_true()
+	world.clock.advance(FRAME)
+	assert_bool(world.clock.is_fast_forwarding()).is_true()
+	world.free_all()
+
+
+func test_arriving_passenger_in_terminal_blocks_quiet_night_until_exit() -> void:
+	var grid := SiteGrid.new(SITE)
+	var off := SITE.starter_offset
+	StarterShell.place(grid, off)
+	ReferenceTerminal.fill_interior(grid, off)
+	var place_exit := BuildEdit.place_object(BuildCatalog.AIRSIDE_EXIT_ID, off + Vector2i(13, 8), 2)
+	for edit: BuildEdit in DoorPlacement.edits_for(grid, place_exit):
+		assert_bool(grid.apply(edit).ok).is_true()
+	var evening: Array[int] = [0, 1, 2, 3, 4, 5, 10, 20, 30, 40, 50, 60]
+	var world := PassengerTestWorld.make(grid, evening, 7)
+	world.sim.site = SITE
+	world.auto_staff = false
+	assert_bool(world.flights.add_flight("MORNING", FlightSim.schedule_starts(FIRST))).is_true()
+	assert_bool(world.flights.open_airport()).is_true()
+	var quiet := auto_free(QuietNight.new()) as QuietNight
+	quiet.bind(world.clock, world.flights, world.sim)
+
+	var arr := PassengerArrivals.spawn(world.sim, PassengerTestWorld.FLIGHT, 0)
+	assert_object(arr).is_not_null()
+	world.run_to(60)
+	assert_bool(world.flights.has_moving_flight()).is_false()
+	assert_object(world.passenger(arr.id)).is_not_null()
+	assert_bool(arr.arrival_done).is_false()
+	assert_int(world.sim.present_count()).is_equal(1)
+	assert_bool(quiet.is_quiet()).is_false()
+
+	world.clock.set_speed(3)
+	var saw_terminal_block := false
+	var guard := 0
+	while world.passenger(arr.id) != null and guard < 2500:
+		world.clock.advance(FRAME)
+		guard += 1
+		assert_bool(world.clock.is_fast_forwarding()).is_false()
+		var live := world.passenger(arr.id)
+		if live != null:
+			assert_bool(quiet.is_quiet()).is_false()
+			if live.stage in [Passenger.Stage.TO_AIRSIDE_EXIT, Passenger.Stage.TO_ROAD_EXIT]:
+				saw_terminal_block = true
+
+	assert_bool(saw_terminal_block).is_true()
+	assert_int(world.sim.present_count()).is_equal(0)
+	assert_bool(quiet.is_quiet()).is_true()
+	world.clock.advance(FRAME)
+	assert_bool(world.clock.is_fast_forwarding()).is_true()
 	world.free_all()

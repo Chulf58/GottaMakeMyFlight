@@ -62,7 +62,7 @@ func is_quiet() -> bool:
 	return (
 		not clock.paused
 		and flights.opened_tick >= 0
-		and passengers.active_count() == 0
+		and passengers.present_count() == 0
 		and not flights.has_moving_flight()
 	)
 
