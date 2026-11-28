@@ -9249,3 +9249,55 @@ msgstr ""
 msgctxt "passenger activity"
 msgid "Waiting at baggage claim"
 msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Foundation"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Floor + walls"
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Builds terminal floor with outer walls in one drag."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag to add floor + outer walls & open shared wall."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Land you own. Keeps room walls, glass walls, and standing doors intact."
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Move the entrance, exit, or bay door before expanding through it"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "{width} x {height} · Nothing to place"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "{width} x {height} · ${cost}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "{width} x {height} · +${cost}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "{width} x {height} · {reason}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "skipped {count}: {reason}"
+msgstr ""

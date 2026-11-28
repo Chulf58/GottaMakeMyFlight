@@ -130,6 +130,7 @@ enum Tool {
 	BAGGAGE_CLAIM,
 	CLAIM_CAROUSEL,
 	BAY_DOOR,
+	FOUNDATION,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They
@@ -229,6 +230,7 @@ const DRAG_TOOLS := [Tool.WALL, Tool.GLASS]
 ## Tools whose drag is applied on release: a rectangle, or the Belt's line.
 const AREA_TOOLS := [
 	Tool.FLOOR,
+	Tool.FOUNDATION,
 	Tool.REMOVE,
 	Tool.CAFE_ROOM,
 	Tool.BAG_ROOM,

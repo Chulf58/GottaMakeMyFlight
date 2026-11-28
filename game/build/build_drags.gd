@@ -204,6 +204,8 @@ static func finish_area(mode: BuildMode) -> AreaDrag.Outcome:
 	if BuildMode.TOOL_ROOMS.has(mode.tool):
 		finish_room(mode)
 		return null
+	if mode.tool == BuildMode.Tool.FOUNDATION:
+		return finish_foundation(mode)
 	var outcome: AreaDrag.Outcome
 	if mode.tool == BuildMode.Tool.REMOVE:
 		var touched := cells_a_clear_touches(mode, mode._area.rect())
@@ -228,6 +230,34 @@ static func finish_area(mode: BuildMode) -> AreaDrag.Outcome:
 	mode._status_note = outcome.message()
 	mode._note_cell = mode._area.end_cell()
 	mode._show_status(null)
+	return outcome
+
+
+## Applies a Foundation drag atomically in one composite transaction and undo step.
+static func finish_foundation(mode: BuildMode) -> AreaDrag.Outcome:
+	var drag_rect := mode._area.rect()
+	var before_bal := mode.wallet().balance if mode.wallet() != null else 0
+	mode.grid.hold_signals()
+	mode.grid.begin_batch()
+	var outcome := FoundationDrag.apply(mode.grid, drag_rect, mode.wallet())
+	if outcome.ok and outcome.placed > 0:
+		reshape_belts(mode, outcome.touched_cells)
+		mode._redraw()
+	mode.grid.end_batch()
+	mode.grid.release_signals()
+	if outcome.ok and outcome.placed > 0:
+		mode.grid_changed.emit()
+		var after_bal := mode.wallet().balance if mode.wallet() != null else 0
+		mode.emit_player_commit(
+			&"area", outcome.touched_cells, [] as Array[int], before_bal - after_bal
+		)
+	mode._status_note = outcome.message()
+	mode._status_note_is_refusal = not outcome.ok
+	mode._note_cell = mode._area.end_cell()
+	mode._show_status(null)
+	if not outcome.ok:
+		mode.notify_refusal(outcome.message())
+	mode._status_note_is_refusal = false
 	return outcome
 
 

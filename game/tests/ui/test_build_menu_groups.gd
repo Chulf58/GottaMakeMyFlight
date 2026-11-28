@@ -118,7 +118,7 @@ func test_every_bar_button_shows_its_drawn_icon_and_no_text() -> void:
 
 func test_all_79_build_menu_tools_appear_exactly_once_across_the_seven_domain_tabs() -> void:
 	var seen := {}
-	var expected_counts := [8, 15, 9, 4, 4, 13, 4]
+	var expected_counts := [9, 15, 9, 4, 4, 13, 4]
 	var cats := BuildMenu.categories()
 	for i in BuildMenu.REMOVE_CATEGORY:
 		var tools: Array = cats[i]["tools"]
@@ -128,7 +128,7 @@ func test_all_79_build_menu_tools_appear_exactly_once_across_the_seven_domain_ta
 			assert_bool(BuildMenuCatalog.is_room_only_tool(tool)).is_false()
 			seen[tool] = true
 			assert_int(BuildMenu.category_of(tool)).is_equal(i)
-	assert_int(seen.size()).is_equal(57)
+	assert_int(seen.size()).is_equal(58)
 	for tool: BuildMode.Tool in BuildMenuCatalog.ROOM_TOOL_OWNERS:
 		(
 			assert_bool(seen.has(tool))
@@ -137,7 +137,7 @@ func test_all_79_build_menu_tools_appear_exactly_once_across_the_seven_domain_ta
 		)
 		assert_int(BuildMenu.category_of(tool)).is_equal(BuildMenu.NO_CATEGORY)
 		seen[tool] = true
-	assert_int(seen.size()).is_equal(80)
+	assert_int(seen.size()).is_equal(81)
 	for tool: BuildMode.Tool in BuildMode.Tool.values():
 		if (
 			tool == BuildMode.Tool.NONE

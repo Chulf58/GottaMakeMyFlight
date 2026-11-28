@@ -36,6 +36,12 @@ func texts(tool: BuildMode.Tool) -> Array:
 				),
 				tr("Land you own. Removing a tile refunds half."),
 			]
+		BuildMode.Tool.FOUNDATION:
+			lines = [
+				tr("Builds terminal floor with outer walls in one drag."),
+				tr("Drag to add floor + outer walls & open shared wall."),
+				tr("Land you own. Keeps room walls, glass walls, and standing doors intact."),
+			]
 		BuildMode.Tool.WALL:
 			lines = [
 				tr("A wall along a tile edge. Passengers cannot cross it and it blocks the view."),
