@@ -105,6 +105,9 @@ var _portrait := TextureRect.new()
 var _body_scroll := ScrollContainer.new()
 var _body := Label.new()
 var _chips_row := HFlowContainer.new()
+var _chip_tip := PanelContainer.new()
+var _chip_tip_label := Label.new()
+var _active_chip: Button
 var _footer := Label.new()
 var _continue := Button.new()
 var _action_btn: Button
@@ -260,6 +263,7 @@ func dismiss() -> void:
 		return
 	_done = true
 	_revealing = false
+	_clear_chip_tip()
 	_kill_entrance_tween()
 	_reset_portrait_pose()
 	visible = false
@@ -424,6 +428,7 @@ func _build_box() -> void:
 	_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_body_scroll.add_child(_body)
 	_build_chips_row()
+	_build_chip_tip()
 	_build_footer()
 	_continue.name = "Continue"
 	_continue.text = tr("Continue ({key})").format({"key": CONTINUE_KEY})
@@ -491,25 +496,27 @@ func _build_chips_row() -> void:
 	_chips_row.visible = not _chips.is_empty()
 
 
-func _make_chip(entry: Dictionary) -> PanelContainer:
+func _make_chip(entry: Dictionary) -> Button:
 	var tint: Color = entry.get("tint", Color(0.20, 0.42, 0.64, 1.0))
-	var pill := PanelContainer.new()
+	var tip_text := str(entry.get("tip", entry.get("tooltip", "")))
+	var pill := Button.new()
 	pill.name = "Chip"
-	pill.mouse_filter = Control.MOUSE_FILTER_PASS
-	pill.tooltip_text = str(entry.get("tooltip", ""))
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(tint.r, tint.g, tint.b, 0.14)
-	style.border_color = Color(tint.r, tint.g, tint.b, 0.65)
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(12)
-	style.content_margin_left = 10.0
-	style.content_margin_right = 12.0
-	style.content_margin_top = 4.0
-	style.content_margin_bottom = 4.0
-	pill.add_theme_stylebox_override("panel", style)
+	pill.theme = BuildMenu.HUD_THEME
+	pill.text = ""
+	pill.toggle_mode = true
+	pill.focus_mode = Control.FOCUS_NONE
+	pill.mouse_filter = Control.MOUSE_FILTER_STOP
+	pill.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	pill.tooltip_text = tip_text
+	_apply_chip_styles(pill, tint)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 10.0
+	row.offset_top = 4.0
+	row.offset_right = -10.0
+	row.offset_bottom = -4.0
 	pill.add_child(row)
 	var icon_val: Variant = entry.get("icon", null)
 	var icon_tex: Texture2D = null
@@ -529,16 +536,118 @@ func _make_chip(entry: Dictionary) -> PanelContainer:
 	var lbl := Label.new()
 	lbl.name = "ChipLabel"
 	lbl.text = text
+	lbl.theme = BuildMenu.HUD_THEME
 	lbl.theme_type_variation = &"HudSmall"
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var max_w := BOX_SIZE.x - TEXT_LEFT - BODY_RIGHT - 56.0
+	var max_w := BOX_SIZE.x - TEXT_LEFT - BODY_RIGHT - 72.0
 	var font := BuildMenu.HUD_THEME.get_font(&"font", &"HudSmall")
 	var fsize := BuildMenu.HUD_THEME.get_font_size(&"font_size", &"HudSmall")
 	if font != null and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize).x > max_w:
 		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		lbl.custom_minimum_size.x = max_w
 	row.add_child(lbl)
+	var cue := Label.new()
+	cue.name = "ChipCue"
+	cue.text = "?"
+	cue.theme = BuildMenu.HUD_THEME
+	cue.theme_type_variation = &"HudHint"
+	cue.add_theme_color_override("font_color", Color(tint.r, tint.g, tint.b, 0.95).darkened(0.25))
+	cue.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cue.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(cue)
+	var sync_min := func() -> void:
+		if is_instance_valid(pill) and is_instance_valid(row):
+			pill.custom_minimum_size = row.get_combined_minimum_size() + Vector2(20.0, 8.0)
+	row.minimum_size_changed.connect(sync_min)
+	sync_min.call()
+	pill.pressed.connect(_on_chip_pressed.bind(pill, tip_text, tint))
 	return pill
+
+
+static func _chip_style(bg: Color, border: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = bg
+	style.border_color = border
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 10.0
+	style.content_margin_right = 10.0
+	style.content_margin_top = 4.0
+	style.content_margin_bottom = 4.0
+	return style
+
+
+func _apply_chip_styles(pill: Button, tint: Color) -> void:
+	var normal := _chip_style(
+		Color(tint.r, tint.g, tint.b, 0.16), Color(tint.r, tint.g, tint.b, 0.72)
+	)
+	var hover := _chip_style(
+		Color(tint.r, tint.g, tint.b, 0.28), Color(tint.r, tint.g, tint.b, 1.0)
+	)
+	var active := _chip_style(Color(tint.r, tint.g, tint.b, 0.36), Color(0.10, 0.13, 0.26, 0.92))
+	pill.add_theme_stylebox_override("normal", normal)
+	pill.add_theme_stylebox_override("hover", hover)
+	pill.add_theme_stylebox_override("pressed", active)
+	pill.add_theme_stylebox_override("hover_pressed", active)
+	pill.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+
+func _build_chip_tip() -> void:
+	_chip_tip.name = "ChipTip"
+	_chip_tip.visible = false
+	_chip_tip.mouse_filter = Control.MOUSE_FILTER_STOP
+	_chip_tip.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_chip_tip.offset_left = TEXT_LEFT
+	_chip_tip.offset_right = -BODY_RIGHT
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.99, 0.97, 0.92, 0.98)
+	style.border_color = Color(0.10, 0.13, 0.26, 0.75)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(10)
+	style.content_margin_left = 12.0
+	style.content_margin_right = 12.0
+	style.content_margin_top = 6.0
+	style.content_margin_bottom = 6.0
+	_chip_tip.add_theme_stylebox_override("panel", style)
+	_chip_tip_label.name = "ChipTipLabel"
+	_chip_tip_label.theme = BuildMenu.HUD_THEME
+	_chip_tip_label.theme_type_variation = &"HudSmall"
+	_chip_tip_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_chip_tip_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_chip_tip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chip_tip.add_child(_chip_tip_label)
+	_box.add_child(_chip_tip)
+
+
+func _on_chip_pressed(btn: Button, tip_text: String, tint: Color) -> void:
+	if _done:
+		return
+	if _active_chip == btn:
+		_clear_chip_tip()
+		_refit()
+		return
+	if is_instance_valid(_active_chip):
+		_active_chip.set_pressed_no_signal(false)
+	_active_chip = btn
+	btn.set_pressed_no_signal(true)
+	if tip_text != "":
+		var style := _chip_tip.get_theme_stylebox("panel") as StyleBoxFlat
+		if style != null:
+			style.border_color = Color(tint.r, tint.g, tint.b, 0.85)
+		_chip_tip_label.text = tip_text
+		_chip_tip.visible = true
+	else:
+		_chip_tip.visible = false
+		_chip_tip_label.text = ""
+	_refit()
+
+
+func _clear_chip_tip() -> void:
+	if is_instance_valid(_active_chip):
+		_active_chip.set_pressed_no_signal(false)
+	_active_chip = null
+	_chip_tip.visible = false
+	_chip_tip_label.text = ""
 
 
 func _build_footer() -> void:
@@ -558,6 +667,7 @@ func _build_footer() -> void:
 
 
 func _start_beat(idx: int) -> void:
+	_clear_chip_tip()
 	_beat_index = clampi(idx, 0, maxi(0, _beats.size() - 1))
 	_body_text = _beats[_beat_index] if not _beats.is_empty() else ""
 	_body.text = _body_text
@@ -668,16 +778,24 @@ func _intro_chips() -> Array[Dictionary]:
 			"icon": ICON_CHECKIN,
 			"label": tr("Check-in"),
 			"tint": Color(0.24, 0.56, 0.72, 1.0),
+			"tooltip":
+			tr("Place Check-in Desks from Operations and hire Check-in Agents on the Staff bar."),
 		},
 		{
 			"icon": ICON_SECURITY,
 			"label": tr("Security"),
 			"tint": Color(0.84, 0.52, 0.22, 1.0),
+			"tooltip":
+			tr("Place a Security Scanner after check-in and hire an Officer to screen passengers."),
 		},
 		{
 			"icon": ICON_STAFF,
 			"label": tr("Staff"),
 			"tint": Color(0.22, 0.58, 0.36, 1.0),
+			"tooltip":
+			tr(
+				"Open Staff on the bottom bar to hire Check-in Agents, Security Officers, and Gate Staff."
+			),
 		},
 	]
 
@@ -690,17 +808,27 @@ func _intro_body() -> String:
 ## Sizes the box to its body text and optional chips row: never below the
 ## caller's height, never above the cap from _max_box_height.
 func _fit_box() -> void:
+	var chip_area_w := BOX_SIZE.x - TEXT_LEFT - BODY_RIGHT
+	var tip_h := 0.0
+	if _chip_tip.visible:
+		_chip_tip.size.x = chip_area_w
+		_chip_tip_label.custom_minimum_size.x = maxf(80.0, chip_area_w - 24.0)
+		_chip_tip_label.size.x = _chip_tip_label.custom_minimum_size.x
+		var tip_min_h := maxf(28.0, _chip_tip_label.get_minimum_size().y + 12.0)
+		_chip_tip.offset_bottom = -BODY_BOTTOM - 4.0
+		_chip_tip.offset_top = -BODY_BOTTOM - 4.0 - tip_min_h
+		_chip_tip.size = Vector2(chip_area_w, tip_min_h)
+		tip_h = tip_min_h + 8.0
 	var chips_h := 0.0
 	if not _chips.is_empty():
-		var chip_area_w := BOX_SIZE.x - TEXT_LEFT - BODY_RIGHT
 		_chips_row.custom_minimum_size.x = chip_area_w
 		var min_h := maxf(30.0, _chips_row.get_combined_minimum_size().y)
 		chips_h = min_h + 12.0
-		_chips_row.offset_bottom = -BODY_BOTTOM - 4.0
-		_chips_row.offset_top = -BODY_BOTTOM - 4.0 - min_h
-	_body_scroll.offset_bottom = -(BODY_BOTTOM + chips_h)
-	_body.size.x = BOX_SIZE.x - TEXT_LEFT - BODY_RIGHT
-	var wanted := _body.get_minimum_size().y + BODY_TOP + BODY_BOTTOM + chips_h
+		_chips_row.offset_bottom = -BODY_BOTTOM - 4.0 - tip_h
+		_chips_row.offset_top = -BODY_BOTTOM - 4.0 - tip_h - min_h
+	_body_scroll.offset_bottom = -(BODY_BOTTOM + chips_h + tip_h)
+	_body.size.x = chip_area_w
+	var wanted := _body.get_minimum_size().y + BODY_TOP + BODY_BOTTOM + chips_h + tip_h
 	var cap := _max_box_height()
 	_set_box_height(clampf(wanted, minf(_box_height, cap), cap))
 

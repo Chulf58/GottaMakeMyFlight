@@ -1353,6 +1353,8 @@ func _pa_bottom() -> float:
 func _pa_modal_open() -> bool:
 	if _camera_gates > 0 or demo_end_card.is_open():
 		return true
+	if _hints != null and _hints.help_sheet() != null and _hints.help_sheet().is_open():
+		return true
 	if _planner != null and _planner.is_node_ready() and _planner.is_open():
 		return true
 	if not is_inside_tree():

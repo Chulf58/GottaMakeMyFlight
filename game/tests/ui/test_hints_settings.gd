@@ -50,15 +50,19 @@ func test_the_h_key_toggles_hints_and_the_action_is_bound_to_h() -> void:
 	assert_bool(bound).is_true()
 	var hints := _hints()
 	var key := _h_key()
+	assert_bool(hints.help_sheet().is_open()).is_false()
 	hints._shortcut_input(key)
-	assert_bool(hints.is_enabled()).is_false()
+	assert_bool(hints.help_sheet().is_open()).is_true()
+	assert_bool(hints.is_enabled()).is_true()
 	hints._shortcut_input(key)
+	assert_bool(hints.help_sheet().is_open()).is_false()
 	assert_bool(hints.is_enabled()).is_true()
 
 
 func test_h_with_a_modifier_does_nothing() -> void:
 	var hints := _hints()
 	hints._shortcut_input(_h_key(true))
+	assert_bool(hints.help_sheet().is_open()).is_false()
 	assert_bool(hints.is_enabled()).is_true()
 
 
@@ -66,24 +70,37 @@ func test_h_does_nothing_while_a_modal_is_open() -> void:
 	var hints := _hints()
 	hints.modal = func() -> bool: return true
 	hints._shortcut_input(_h_key())
+	assert_bool(hints.help_sheet().is_open()).is_false()
 	assert_bool(hints.is_enabled()).is_true()
 
 
 func test_the_toggle_button_follows_the_setting() -> void:
 	var hints := _hints()
+	var sheet := hints.help_sheet()
 	var button := hints.toggle_button()
+	assert_bool(button.button_pressed).is_false()
+	assert_bool(sheet.is_open()).is_false()
+	button.pressed.emit()
+	assert_bool(sheet.is_open()).is_true()
 	assert_bool(button.button_pressed).is_true()
-	button.button_pressed = false
+	button.pressed.emit()
+	assert_bool(sheet.is_open()).is_false()
+	assert_bool(button.button_pressed).is_false()
+
+	var auto_btn := sheet.auto_hints_button()
+	assert_bool(auto_btn.button_pressed).is_true()
+	auto_btn.button_pressed = false
 	assert_bool(hints.is_enabled()).is_false()
 	hints.set_enabled(true)
-	assert_bool(button.button_pressed).is_true()
+	assert_bool(auto_btn.button_pressed).is_true()
 
 
 ## Reset hints moved to GameMenu Settings (8f51e09c part 3); the HUD row holds
-## only the Hints toggle.
+## only the Help & Hints toggle.
 func test_the_settings_row_is_visible_with_only_the_hints_toggle() -> void:
 	var hints := _hints()
 	assert_bool(hints.settings_row().visible).is_true()
+	assert_str(hints.toggle_button().text).contains("Help & Hints")
 	assert_str(hints.toggle_button().text).contains("H")
 	assert_object(hints.find_child("HintsReset", true, false)).is_null()
 
