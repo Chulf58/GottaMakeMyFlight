@@ -421,16 +421,12 @@ static func clearance_target(mode: BuildMode) -> Dictionary:
 			StarterRoomKits.rect_at(mode.starter_kit.armed, cell, mode.starter_kit.turns),
 			true
 		)
-	if (
-		mode.templates != null
-		and mode.templates.armed >= 0
-		and mode.templates.armed < mode.templates.library.size()
-	):
+	var active_tpl := mode.templates.active_template() if mode.templates != null else null
+	if active_tpl != null:
 		if not mode._pointer_on_grid or mode._hover_point == null:
 			return {"active": false}
-		var template := mode.templates.library.get_template(mode.templates.armed)
 		var cell := mode.grid.world_to_cell(mode._hover_point)
-		return _area_target(mode, template.rect_at(cell, mode.templates.turns), true)
+		return _area_target(mode, active_tpl.rect_at(cell, mode.templates.turns), true)
 	if not mode._pointer_on_grid or mode._hover_point == null:
 		return {"active": false}
 	if mode.tool == BuildMode.Tool.BELT:

@@ -1624,8 +1624,14 @@ func _on_templates_armed_changed() -> void:
 	if build_mode != null:
 		if build_mode.templates.capturing:
 			current = "capture"
-		elif build_mode.templates.armed >= 0:
-			current = "arm:%d" % build_mode.templates.armed
+		elif build_mode.templates.active_template() != null:
+			current = (
+				"arm:%d:%d"
+				% [
+					build_mode.templates.armed,
+					build_mode.templates.active_template().get_instance_id(),
+				]
+			)
 	var started := current != "" and current != _last_template_key
 	_last_template_key = current
 	_sync()
