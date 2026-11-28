@@ -98,6 +98,7 @@ const GAP_POLL_S := 1.0
 @export var save_game: SaveGame
 @export var unlocks: BuildUnlocks
 @export var finances: Finances
+@export var goals: AirportGoals
 
 var wallet: Wallet:
 	set(value):
@@ -302,6 +303,10 @@ func checklist() -> ChecklistCard:
 ## The banner card the hint sits in.
 func hint_card() -> Control:
 	return _hint_box
+
+
+func is_checklist_visible() -> bool:
+	return _hint_box.visible or (_hint_yielded and _checklist.has_visible_content())
 
 
 ## Hired and on duty; a member fired mid-service still works until that
@@ -580,6 +585,8 @@ func _hire_why(role: StaffMember.Role) -> String:
 
 
 func _milestone_text() -> String:
+	if _has_goals():
+		return ""
 	if gate == null or not gate.is_open() or _unlocks == null:
 		return ""
 	if _unlocks.tier() >= BuildUnlocks.CAFE_TIER:
@@ -591,6 +598,14 @@ func _milestone_text() -> String:
 	return tr("Serve {done}/{need} passengers to unlock Cafe & Baggage").format(
 		{"done": done, "need": need}
 	)
+
+
+func _has_goals() -> bool:
+	if goals != null:
+		return true
+	if get_parent() != null:
+		goals = get_parent().get_node_or_null("AirportGoals") as AirportGoals
+	return goals != null
 
 
 func _role_tooltip(role: StaffMember.Role) -> String:

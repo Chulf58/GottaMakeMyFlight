@@ -1,4 +1,4 @@
-[gd_scene load_steps=57 format=3]
+[gd_scene load_steps=58 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -55,6 +55,7 @@
 [ext_resource type="Script" path="res://airside/airfield_backdrop.gd" id="56_backdrop"]
 [ext_resource type="Script" path="res://airside/bus_shuttle_sim.gd" id="57_busshuttle"]
 [ext_resource type="Script" path="res://airside/bus_view.gd" id="58_busview"]
+[ext_resource type="Script" path="res://economy/airport_goals.gd" id="59_goals"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(2400, 2400)
@@ -365,7 +366,7 @@ baggage = NodePath("../BaggageSim")
 flights = NodePath("../FlightSim")
 plane_fleet = NodePath("../PlaneFleet")
 
-[node name="PassengerHud" type="CanvasLayer" parent="." node_paths=PackedStringArray("clock", "flights", "sim", "views", "camera", "build_mode", "save_game", "landside_views")]
+[node name="PassengerHud" type="CanvasLayer" parent="." node_paths=PackedStringArray("clock", "flights", "sim", "views", "camera", "build_mode", "save_game", "landside_views", "goals")]
 script = ExtResource("12_hud")
 clock = NodePath("../SimClock")
 flights = NodePath("../FlightSim")
@@ -375,6 +376,7 @@ camera = NodePath("../TycoonCamera")
 build_mode = NodePath("../BuildMode")
 save_game = NodePath("../SaveGame")
 landside_views = NodePath("../LandsideViews")
+goals = NodePath("../AirportGoals")
 
 [node name="BuildMenu" type="CanvasLayer" parent="." node_paths=PackedStringArray("build_mode", "rescue_grant", "day_ledger", "settlement", "save_game", "clock")]
 layer = 2
@@ -455,7 +457,7 @@ finances = NodePath("../Finances")
 build_mode = NodePath("../BuildMode")
 save_game = NodePath("../SaveGame")
 
-[node name="StaffPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("staff", "gate", "menu", "save_game", "unlocks")]
+[node name="StaffPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("staff", "gate", "menu", "save_game", "unlocks", "goals")]
 layer = 2
 script = ExtResource("22_staffpanel")
 staff = NodePath("../Staff")
@@ -463,13 +465,27 @@ gate = NodePath("../AirportGate")
 menu = NodePath("../BuildMenu")
 save_game = NodePath("../SaveGame")
 unlocks = NodePath("../BuildUnlocks")
+goals = NodePath("../AirportGoals")
 
 [node name="RatingBadge" type="CanvasLayer" parent="." node_paths=PackedStringArray("rating")]
 layer = 2
 script = ExtResource("24_ratingbadge")
 rating = NodePath("../AirportRating")
 
-[node name="SaveGame" type="Node" parent="." node_paths=PackedStringArray("clock", "build_mode", "flights", "passengers", "staff", "finances", "settlement", "rescue_grant", "offer_desk", "rating", "baggage", "day_ledger", "landside", "bus_shuttle", "apron", "gates", "unlocks", "incidents")]
+[node name="AirportGoals" type="Node" parent="." node_paths=PackedStringArray("finances", "passengers", "flights", "build_mode", "staff", "baggage", "incidents", "unlocks", "clock", "save_game")]
+script = ExtResource("59_goals")
+finances = NodePath("../Finances")
+passengers = NodePath("../PassengerSim")
+flights = NodePath("../FlightSim")
+build_mode = NodePath("../BuildMode")
+staff = NodePath("../Staff")
+baggage = NodePath("../BaggageSim")
+incidents = NodePath("../IncidentDirector")
+unlocks = NodePath("../BuildUnlocks")
+clock = NodePath("../SimClock")
+save_game = NodePath("../SaveGame")
+
+[node name="SaveGame" type="Node" parent="." node_paths=PackedStringArray("clock", "build_mode", "flights", "passengers", "staff", "finances", "settlement", "rescue_grant", "offer_desk", "rating", "baggage", "day_ledger", "landside", "bus_shuttle", "apron", "gates", "unlocks", "incidents", "goals")]
 script = ExtResource("25_save")
 clock = NodePath("../SimClock")
 build_mode = NodePath("../BuildMode")
@@ -489,6 +505,7 @@ apron = NodePath("../ApronStand")
 gates = NodePath("../GateDesks")
 unlocks = NodePath("../BuildUnlocks")
 incidents = NodePath("../IncidentDirector")
+goals = NodePath("../AirportGoals")
 
 [node name="LandsideViews" type="Node3D" parent="." node_paths=PackedStringArray("landside", "clock", "save_game")]
 script = ExtResource("31_landsideview")

@@ -174,7 +174,9 @@ signal loaded(ok: bool)
 ## AT_CLAIM, claim_bag_id, claim_carousel, has_claimed_bag); v47 refused.
 ## 49: Arrivals A4 remote bus deplaning: BusShuttleSnapshot v2 (inbound flag);
 ## version 48 saves are refused (no migration).
-const SAVE_VERSION := 49
+## 50: Airport Goals tracker (part "goals", AirportGoals v1: active_ids,
+## completed_ids, counters); version 49 saves are refused (no migration).
+const SAVE_VERSION := 50
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -215,6 +217,8 @@ const HUD_THEME := preload("res://ui/hud_theme.tres")
 @export var awards_ceremony: AwardsCeremony
 ## Career achievement tracker; auto-created when unset so main.tscn stays untouched.
 @export var achievements: Achievements
+## Airport goals tracker; auto-created when unset or wired from main.tscn.
+@export var goals: AirportGoals
 ## Where F5 and F8 save and load. Tests point it at their own file. Left at
 ## QUICK_SAVE_PATH, _ready makes it SaveSlots.manual_path().
 @export var quick_save_path := QUICK_SAVE_PATH
@@ -290,6 +294,7 @@ func _ready() -> void:
 				loaded.connect(badge._on_save_loaded)
 	ensure_awards()
 	ensure_achievements()
+	ensure_goals()
 
 
 func _exit_tree() -> void:
@@ -491,6 +496,15 @@ func parts() -> Array[SavePart]:
 			current_awards.from_save_dict
 		)
 	)
+	var current_goals := ensure_goals()
+	list.append(
+		SavePart.new(
+			"goals",
+			current_goals.to_snapshot,
+			SavePart.checked("goals", _stage_goals),
+			current_goals.from_snapshot
+		)
+	)
 	return list
 
 
@@ -576,6 +590,31 @@ func ensure_achievements() -> Achievements:
 		is_career_mode
 	)
 	return achievements
+
+
+## Returns the scene's AirportGoals, creating and wiring it under SaveGame when unset.
+func ensure_goals() -> AirportGoals:
+	if goals == null:
+		if get_parent() != null:
+			goals = get_parent().get_node_or_null("AirportGoals") as AirportGoals
+		if goals == null:
+			goals = AirportGoals.new()
+			goals.name = "AirportGoals"
+			add_child(goals)
+	var current_cert := ensure_certification()
+	goals.bind(
+		finances,
+		passengers,
+		flights,
+		build_mode,
+		staff,
+		baggage,
+		incidents,
+		current_cert,
+		unlocks,
+		clock
+	)
+	return goals
 
 
 ## Returns the active GameRules, creating Career defaults when unset.
@@ -674,14 +713,17 @@ func load_world(data: Variant) -> bool:
 	var cert := ensure_certification()
 	var current_awards := ensure_awards()
 	var current_achievements := ensure_achievements()
+	var current_goals := ensure_goals()
 	cert.set_loading(true)
 	current_awards.set_loading(true)
 	current_achievements.set_loading(true)
+	current_goals.set_loading(true)
 	for part in parts():
 		if not _install(part, data):
 			cert.set_loading(false)
 			current_awards.set_loading(false)
 			current_achievements.set_loading(false)
+			current_goals.set_loading(false)
 			# Unreachable while each install repeats its own stage check; said
 			# loudly, because the world is then partly loaded.
 			_fail("Load", "the %s part was refused after it was checked" % part.key)
@@ -690,6 +732,7 @@ func load_world(data: Variant) -> bool:
 	cert.set_loading(false)
 	current_awards.set_loading(false)
 	current_achievements.set_loading(false)
+	current_goals.set_loading(false)
 	# The rescue grant's repair bound, worked out now rather than in a tick.
 	if rescue_grant != null:
 		rescue_grant.prepare()
@@ -1352,6 +1395,13 @@ static func _stage_certification(data: Dictionary) -> Dictionary:
 
 static func _stage_awards(data: Dictionary) -> Dictionary:
 	var problem := AirportAwards.validation_problem(data)
+	if problem != "":
+		return {"error": problem}
+	return data
+
+
+static func _stage_goals(data: Dictionary) -> Dictionary:
+	var problem := AirportGoals.validation_problem(data)
 	if problem != "":
 		return {"error": problem}
 	return data

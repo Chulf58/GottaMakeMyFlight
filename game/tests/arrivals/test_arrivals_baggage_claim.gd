@@ -563,7 +563,7 @@ func test_save_v49_round_trip_v47_refusal_and_save_links_validation() -> void:
 
 	# Version 47 refusal.
 	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_save_path))
-	assert_int(int(raw["save_version"])).is_equal(49)
+	assert_int(int(raw["save_version"])).is_equal(50)
 	var v47: Dictionary = raw.duplicate(true)
 	v47["save_version"] = 47
 	FileAccess.open(_save_path, FileAccess.WRITE).store_string(JSON.stringify(v47))
