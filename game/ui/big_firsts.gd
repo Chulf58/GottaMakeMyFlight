@@ -136,6 +136,24 @@ static func chips_for(kinds: Array, departure_time := "") -> Array[Dictionary]:
 			if departure_time != ""
 			else _translator.tr("1st Flight")
 		)
+		var flight_tip := (
+			(
+				_translator
+				. tr(
+					# gdlint:ignore = max-line-length
+					"Your starter Oslo flight leaves at {time}. Open Planner (P) to check gates and times."
+				)
+				. format({"time": departure_time})
+			)
+			if departure_time != ""
+			else (
+				_translator
+				. tr(
+					# gdlint:ignore = max-line-length
+					"Your starter Oslo flight is scheduled today. Open Planner (P) to check gates and times."
+				)
+			)
+		)
 		(
 			chips
 			. append(
@@ -143,6 +161,7 @@ static func chips_for(kinds: Array, departure_time := "") -> Array[Dictionary]:
 					"icon": ICON_GATES,
 					"label": flight_lbl,
 					"tint": Color(0.24, 0.56, 0.72, 1.0),
+					"tooltip": flight_tip,
 				}
 			)
 		)
@@ -153,6 +172,14 @@ static func chips_for(kinds: Array, departure_time := "") -> Array[Dictionary]:
 					"icon": ICON_COIN,
 					"label": _translator.tr("Offers"),
 					"tint": Color(0.84, 0.58, 0.16, 1.0),
+					"tooltip":
+					(
+						_translator
+						. tr(
+							# gdlint:ignore = max-line-length
+							"Airlines send new flight contracts here. Click Offers at the top to review and accept them."
+						)
+					),
 				}
 			)
 		)
@@ -164,6 +191,10 @@ static func chips_for(kinds: Array, departure_time := "") -> Array[Dictionary]:
 					"icon": ICON_GATES,
 					"label": _translator.tr("Larger planes"),
 					"tint": Color(0.24, 0.56, 0.72, 1.0),
+					"tooltip":
+					_translator.tr(
+						"Your longer runway can now land bigger planes that bring more passengers."
+					),
 				}
 			)
 		)
@@ -174,6 +205,10 @@ static func chips_for(kinds: Array, departure_time := "") -> Array[Dictionary]:
 					"icon": ICON_COIN,
 					"label": _translator.tr("New offers"),
 					"tint": Color(0.84, 0.58, 0.16, 1.0),
+					"tooltip":
+					_translator.tr(
+						"Open Offers at the top to see new airline contracts for larger planes."
+					),
 				}
 			)
 		)
@@ -185,6 +220,14 @@ static func chips_for(kinds: Array, departure_time := "") -> Array[Dictionary]:
 					"icon": ICON_SERVICES,
 					"label": _translator.tr("Major event"),
 					"tint": Color(0.78, 0.36, 0.24, 1.0),
+					"tooltip":
+					(
+						_translator
+						. tr(
+							# gdlint:ignore = max-line-length
+							"Major events affect terminal traffic or rewards. Read the notice and prepare your staff."
+						)
+					),
 				}
 			)
 		)

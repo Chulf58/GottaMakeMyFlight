@@ -432,3 +432,116 @@ func test_unlock_guide_opening_call_and_incident_panel_wire_chips_and_actions() 
 	assert_int((parts["chips"] as Array).size()).is_equal(2)
 	assert_str((parts["chips"][0] as Dictionary)["label"]).is_equal("Reward: 500 money.")
 	assert_str((parts["chips"][1] as Dictionary)["label"]).is_equal("If it fails: -1 star.")
+
+
+func _chip_buttons(dialog: IntroDialogue) -> Array[Button]:
+	var out: Array[Button] = []
+	for child in dialog.chips_row().get_children():
+		var btn := child as Button
+		if btn != null:
+			out.append(btn)
+	return out
+
+
+func _chip_tip(dialog: IntroDialogue) -> PanelContainer:
+	return dialog.find_child("ChipTip", true, false) as PanelContainer
+
+
+func _chip_tip_text(dialog: IntroDialogue) -> String:
+	var tip := _chip_tip(dialog)
+	if tip == null or not tip.visible:
+		return ""
+	var lbl := tip.find_child("ChipTipLabel", true, false) as Label
+	return lbl.text if lbl != null else ""
+
+
+func test_clicking_chip_consumes_click_and_toggles_inline_tip_without_advancing() -> void:
+	var dialog := (
+		IntroDialogue
+		. new(
+			BigFirsts.opening_title_text(),
+			"",
+			IntroDialogue.BOX_SIZE.y,
+			false,
+			IntroDialogue.Speaker.GOTTA_AIR,
+			{
+				"beats": ["First beat.", "Second beat."],
+				"chips": BigFirsts.chips_for([BigFirsts.OPENING], "08:13"),
+			}
+		)
+	)
+	_port.add_child(dialog)
+	dialog.finish_reveal()
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	var chips := _chip_buttons(dialog)
+	assert_int(chips.size()).is_equal(2)
+	for chip in chips:
+		assert_int(chip.focus_mode).is_equal(Control.FOCUS_NONE)
+		assert_int(chip.mouse_default_cursor_shape).is_equal(Control.CURSOR_POINTING_HAND)
+		assert_str(chip.tooltip_text).is_not_empty()
+	assert_bool(_chip_tip(dialog).visible).is_false()
+
+	# Clicking first chip opens inline tip and does NOT advance or dismiss.
+	_click(chips[0].get_global_rect().get_center())
+	await get_tree().process_frame
+	assert_int(dialog.beat_index()).is_equal(0)
+	assert_bool(dialog.is_dismissed()).is_false()
+	assert_bool(_chip_tip(dialog).visible).is_true()
+	assert_str(_chip_tip_text(dialog)).is_equal(chips[0].tooltip_text)
+	assert_bool(chips[0].button_pressed).is_true()
+	assert_bool(dialog.part_rects()["box"].encloses(_chip_tip(dialog).get_global_rect())).is_true()
+
+	# Clicking second chip switches active chip and tip without advancing.
+	_click(chips[1].get_global_rect().get_center())
+	await get_tree().process_frame
+	assert_int(dialog.beat_index()).is_equal(0)
+	assert_bool(dialog.is_dismissed()).is_false()
+	assert_bool(chips[0].button_pressed).is_false()
+	assert_bool(chips[1].button_pressed).is_true()
+	assert_str(_chip_tip_text(dialog)).is_equal(chips[1].tooltip_text)
+
+	# Clicking active chip again hides the callout without advancing.
+	_click(chips[1].get_global_rect().get_center())
+	await get_tree().process_frame
+	assert_int(dialog.beat_index()).is_equal(0)
+	assert_bool(dialog.is_dismissed()).is_false()
+	assert_bool(chips[1].button_pressed).is_false()
+	assert_bool(_chip_tip(dialog).visible).is_false()
+
+	# Advancing beats clears any open chip tip.
+	_click(chips[0].get_global_rect().get_center())
+	assert_bool(_chip_tip(dialog).visible).is_true()
+	dialog.continue_button().pressed.emit()
+	assert_int(dialog.beat_index()).is_equal(1)
+	assert_bool(_chip_tip(dialog).visible).is_false()
+
+
+func test_all_big_firsts_and_intro_chips_have_non_empty_tips_and_pointing_hand() -> void:
+	var intro := IntroDialogue.new()
+	_port.add_child(intro)
+	assert_int(_chip_buttons(intro).size()).is_equal(3)
+	for chip in _chip_buttons(intro):
+		assert_str(chip.tooltip_text).is_not_empty()
+		assert_int(chip.mouse_default_cursor_shape).is_equal(Control.CURSOR_POINTING_HAND)
+	intro.free()
+
+	for kind in [BigFirsts.OPENING, BigFirsts.RUNWAY, BigFirsts.INCIDENT]:
+		var chips := BigFirsts.chips_for([kind], "08:13")
+		assert_array(chips).is_not_empty()
+		for entry in chips:
+			assert_str(str(entry.get("tooltip", ""))).is_not_empty()
+		var dlg := IntroDialogue.new(
+			"Test",
+			"Body",
+			IntroDialogue.BOX_SIZE.y,
+			false,
+			IntroDialogue.Speaker.TERMINAL_MANAGER,
+			{"chips": chips}
+		)
+		_port.add_child(dlg)
+		for chip in _chip_buttons(dlg):
+			assert_str(chip.tooltip_text).is_not_empty()
+			assert_int(chip.mouse_default_cursor_shape).is_equal(Control.CURSOR_POINTING_HAND)
+		dlg.free()

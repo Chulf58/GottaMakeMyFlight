@@ -94,6 +94,8 @@ var _caption := Label.new()
 var _body := Label.new()
 var _row := VBoxContainer.new()
 var _toggle := Button.new()
+var _help_layer: CanvasLayer
+var _help_sheet: HelpSheet
 ## The follow hint's Show me button, visible only while that hint shows.
 var _show_me := Button.new()
 ## Whether the follow hint's seen mark is in the file. It is written when the
@@ -156,9 +158,10 @@ func _notification(what: int) -> void:
 
 
 func _retranslate() -> void:
-	_caption.text = tr("Hint ({key} turns hints off)").format({"key": HOTKEY})
+	_caption.text = tr("Hint ({key} opens Help & Hints)").format({"key": HOTKEY})
 	_show_me.text = tr("Show me")
-	_toggle.text = tr("Hints ({key})").format({"key": HOTKEY})
+	_toggle.text = tr("Help & Hints ({key})").format({"key": HOTKEY})
+	_fit_toggle_font()
 	if _shown_id != &"":
 		_body.text = HintRules.text(_shown_id)
 
@@ -211,6 +214,20 @@ func toggle_button() -> Button:
 	return _toggle
 
 
+func help_sheet() -> HelpSheet:
+	return _help_sheet
+
+
+func _toggle_help_sheet() -> void:
+	if _help_sheet == null:
+		return
+	if _help_sheet.is_open():
+		_help_sheet.close()
+	else:
+		_help_sheet.open()
+	_sync_help_toggle()
+
+
 func show_me_button() -> Button:
 	return _show_me
 
@@ -229,13 +246,16 @@ func press_show_me() -> int:
 	return id
 
 
-## Turns hints on or off and keeps the choice. Off hides the hint on screen.
+## Turns auto-hints on or off and keeps the choice. Off hides the hint on screen.
 func set_enabled(value: bool) -> void:
-	_toggle.set_pressed_no_signal(value)
+	if _help_sheet != null:
+		_help_sheet.sync_auto_hints(value)
 	if value == _enabled:
 		return
 	_enabled = value
 	HudFlagSetting.save_flag(memory_path(), SETTING_KEY, value, WHO)
+	if _help_sheet != null:
+		_help_sheet.sync_auto_hints(value)
 	if not value:
 		_end_hint()
 
@@ -319,15 +339,18 @@ func advance(delta: float, world: Dictionary, open_categories: Array) -> void:
 		_show(due)
 
 
-## The H key turns hints on or off, unless a modifier is held or a modal is open.
+## The H key opens or closes Help & Hints, unless a modifier is held or a
+## blocking modal is open.
 func _shortcut_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if _mode == Mode.OFF or key == null or not key.pressed or not event.is_action_pressed(ACTION):
 		return
-	if key.ctrl_pressed or key.alt_pressed or key.meta_pressed or key.shift_pressed or _modal():
+	if key.ctrl_pressed or key.alt_pressed or key.meta_pressed or key.shift_pressed:
+		return
+	if _blocking_modal():
 		return
 	if not key.echo:
-		set_enabled(not _enabled)
+		_toggle_help_sheet()
 	get_viewport().set_input_as_handled()
 
 
@@ -495,7 +518,8 @@ func _mark_seen(id: StringName) -> void:
 func _load_memory() -> void:
 	var path := memory_path()
 	_enabled = HudFlagSetting.load_flag(path, SETTING_KEY, true, WHO)
-	_toggle.set_pressed_no_signal(_enabled)
+	if _help_sheet != null:
+		_help_sheet.sync_auto_hints(_enabled)
 	for id in HintRules.IDS:
 		_seen[id] = HudFlagSetting.load_flag(path, SEEN_PREFIX + id, false, WHO)
 	_follow_saved = _seen[HintRules.FOLLOW_PASSENGER]
@@ -514,8 +538,14 @@ func _banner() -> StaffPanel:
 
 
 ## True while the intro, the unlock dialog, the GameMenu/question, the Offers
-## sheet or an extra modal is open.
+## sheet, HelpSheet or an extra modal is open.
 func _modal() -> bool:
+	if _blocking_modal():
+		return true
+	return _help_sheet != null and _help_sheet.is_open()
+
+
+func _blocking_modal() -> bool:
 	if modal.is_valid() and modal.call():
 		return true
 	if hud != null and (hud.intro() != null or hud.unlock_guide().is_open()):
@@ -576,6 +606,8 @@ func _on_edit(_edit: BuildEdit, _result: BuildResult) -> void:
 
 func _on_loaded(ok: bool) -> void:
 	if ok:
+		if _help_sheet != null:
+			_help_sheet.close()
 		reset_session()
 
 
@@ -603,7 +635,7 @@ func _build() -> void:
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_card.add_child(column)
 	_caption.name = "HintCaption"
-	_caption.text = tr("Hint ({key} turns hints off)").format({"key": HOTKEY})
+	_caption.text = tr("Hint ({key} opens Help & Hints)").format({"key": HOTKEY})
 	_caption.theme_type_variation = &"HudHint"
 	_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -630,12 +662,46 @@ func _build() -> void:
 	_row.add_theme_constant_override("separation", HudLayout.GAP)
 	add_child(_row)
 	_toggle.name = "HintsToggle"
-	_toggle.text = tr("Hints ({key})").format({"key": HOTKEY})
+	_toggle.text = tr("Help & Hints ({key})").format({"key": HOTKEY})
 	LeftColumn.size_toggle(_toggle)
+	_fit_toggle_font()
 	_toggle.add_to_group(LeftColumn.TOGGLE_ROW_GROUP)
 	_toggle.set_meta(LeftColumn.META_SLOT, LeftColumn.SLOT_HINTS)
 	_toggle.toggle_mode = true
-	_toggle.button_pressed = true
+	_toggle.button_pressed = false
 	_toggle.focus_mode = Control.FOCUS_NONE
-	_toggle.toggled.connect(set_enabled)
+	_toggle.pressed.connect(_toggle_help_sheet)
 	_row.add_child(_toggle)
+	_build_help_sheet()
+
+
+func _build_help_sheet() -> void:
+	_help_layer = CanvasLayer.new()
+	_help_layer.name = "HelpSheetLayer"
+	_help_layer.layer = TopRow.SHEET_LAYER
+	add_child(_help_layer)
+	_help_sheet = HelpSheet.new()
+	_help_sheet.hints = self
+	if hud != null:
+		_help_sheet.unlocks = hud.build_mode.unlocks if hud.build_mode != null else null
+		_help_sheet.flights = hud.flights
+		_help_sheet.save_game = hud.save_game
+	_help_sheet.visibility_changed.connect(_sync_help_toggle)
+	_help_layer.add_child(_help_sheet)
+
+
+func _sync_help_toggle() -> void:
+	if _toggle != null and _help_sheet != null:
+		_toggle.set_pressed_no_signal(_help_sheet.is_open())
+
+
+func _fit_toggle_font() -> void:
+	var font := BuildMenu.HUD_THEME.get_font(&"font", &"Button")
+	var base := BuildMenu.HUD_THEME.get_font_size(&"font_size", &"Button")
+	if font == null:
+		return
+	var size := HudLayout.fit_size(_toggle.text, font, base, float(HudLayout.TOGGLE_W) - 18.0, 1)
+	if size < base:
+		_toggle.add_theme_font_size_override("font_size", size)
+	else:
+		_toggle.remove_theme_font_size_override("font_size")
