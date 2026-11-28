@@ -105,14 +105,20 @@ static func reachable_seats(grid: BuildGrid, object_id: int) -> Array[Dictionary
 	var def := BuildCatalog.get_def(record["def"])
 	var out: Array[Dictionary] = []
 	for seat in def.seat_descriptors(record["anchor"], record["facing"]):
-		var approach: Vector2i = seat["approach"]
-		var side := BuildGrid.SIDE_STEP.find(seat["cell"] - approach)
-		var wall := grid.wall_kind(approach, side)
-		if (
-			grid.is_passenger_cell(approach)
-			and (wall == BuildGrid.WallKind.NONE or wall == BuildGrid.WallKind.DOOR)
-		):
-			out.append(seat)
+		var cell: Vector2i = seat["cell"]
+		for approach: Vector2i in seat.get("approaches", [seat["approach"]]):
+			var side := BuildGrid.SIDE_STEP.find(cell - approach)
+			if side < 0:
+				continue
+			var wall := grid.wall_kind(approach, side)
+			if (
+				grid.is_passenger_cell(approach)
+				and (wall == BuildGrid.WallKind.NONE or wall == BuildGrid.WallKind.DOOR)
+			):
+				var chosen := seat.duplicate()
+				chosen["approach"] = approach
+				out.append(chosen)
+				break
 	return out
 
 

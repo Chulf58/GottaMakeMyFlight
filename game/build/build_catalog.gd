@@ -190,18 +190,20 @@ static func _build() -> void:
 	var table := _add(&"cafe_table", "Cafe table", Vector2i(3, 1), Color(0.55, 0.4, 0.3), 0.92)
 	# A chair in each outer cell, the table in the middle cell. The roots are the
 	# .glb's Mount_SitRoot_L/R (0.55 m either side of the table centre, facing
-	# it); a guest steps in from the cell in front of the chair, since the cell
-	# the chair faces is the table.
+	# it); each chair is open on both lateral sides, so a guest steps in from
+	# either side, preferring +y.
 	table.seats = [
 		{
 			"cell": Vector2i(0, 0),
 			"approach": Vector2i(0, 1),
+			"alt_approaches": [Vector2i(0, -1)],
 			"root": Vector2(0.45, 0.0),
 			"facing": Vector2i(1, 0),
 		},
 		{
 			"cell": Vector2i(2, 0),
 			"approach": Vector2i(2, 1),
+			"alt_approaches": [Vector2i(2, -1)],
 			"root": Vector2(-0.45, 0.0),
 			"facing": Vector2i(-1, 0),
 		},
@@ -378,8 +380,9 @@ static func _build_activities() -> void:
 ## A 2x3 restaurant table or booth with four seats: roots are the .glb's
 ## Mount_SitRoot_BL/BR/FL/FR (0.55 m from the table centre, facing it), given
 ## relative to the chair's cell centre. Each approach is the cell of the seat's
-## Mount_Approach_*: behind the chair, or with `end_approach` beside the seat
-## outside the footprint's side (a booth bench is entered from its end).
+## Mount_Approach_*: behind the chair (with its open outer side as fallback for
+## the open-sided table chairs), or with `end_approach` beside the seat outside
+## the footprint's side (a booth bench is entered only from its open end).
 static func _add_dining(
 	id: StringName, label: String, color: Color, height: float, end_approach: bool
 ) -> void:
@@ -387,21 +390,16 @@ static func _add_dining(
 	for row in [0, 2]:
 		var facing := Vector2i(0, 1) if row == 0 else Vector2i(0, -1)
 		for column in [0, 1]:
-			var approach := Vector2i(column, row) - facing
-			if end_approach:
-				approach = Vector2i(-1 if column == 0 else 2, row)
-			(
-				dining
-				. seats
-				. append(
-					{
-						"cell": Vector2i(column, row),
-						"approach": approach,
-						"root": Vector2(0.0, 0.45 * facing.y),
-						"facing": facing,
-					}
-				)
-			)
+			var end_cell := Vector2i(-1 if column == 0 else 2, row)
+			var entry := {
+				"cell": Vector2i(column, row),
+				"approach": end_cell if end_approach else Vector2i(column, row) - facing,
+				"root": Vector2(0.0, 0.45 * facing.y),
+				"facing": facing,
+			}
+			if not end_approach:
+				entry["alt_approaches"] = [end_cell]
+			dining.seats.append(entry)
 
 
 ## A 2x1 counter, stall or desk served from the cell in front of its left half.
