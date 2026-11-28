@@ -835,6 +835,8 @@ func _on_tool_changed(tool: BuildMode.Tool) -> void:
 	_keep_tray_on_clear = false
 	if guide != null and tool != BuildMode.Tool.NONE:
 		guide.mark_seen(tool)
+	if tool != BuildMode.Tool.NONE and tool == _pulsed_tool:
+		_stop_pulse()
 	if tool == BuildMode.Tool.NONE:
 		if not _browsing and not keep_tray:
 			var kit_active := (
@@ -1578,10 +1580,14 @@ func _on_grid_edit_applied(edit: BuildEdit, result: BuildResult) -> void:
 			)
 		)
 	):
+		var by_room_tool: bool = BuildMode.TOOL_ROOMS.get(build_mode.tool, &"") == edit.room_type
 		enter_room_context(edit.room_type, result.room_id)
+		if by_room_tool:
+			_pulse_first_missing_room_tool()
 		return
 	if is_room_context():
 		_refresh_room_context_state()
+		_clear_pulse_if_room_ready()
 		_sync_tray_layout()
 
 
@@ -1590,7 +1596,34 @@ func _on_grid_graph_changed(_cells: Array[Vector2i]) -> void:
 		_refresh_money()
 	if is_room_context():
 		_refresh_room_context_state()
+		_clear_pulse_if_room_ready()
 		_sync_tray_layout()
+
+
+func _pulse_first_missing_room_tool() -> void:
+	for entry: Dictionary in _room_entries:
+		if not entry.get("missing", false) or entry.get("room_tool", false):
+			continue
+		var missing_tool: BuildMode.Tool = entry["tool"]
+		if (
+			_room_cards.has(missing_tool)
+			and (
+				_card_states.get(missing_tool, BuildMenuCatalog.CardState.OPEN)
+				!= BuildMenuCatalog.CardState.HIDDEN
+			)
+		):
+			_pulse_card(missing_tool)
+			return
+
+
+func _clear_pulse_if_room_ready() -> void:
+	if _pulsed_tool == BuildMode.Tool.NONE or not is_room_context():
+		return
+	if build_mode == null or build_mode.grid == null or _room_context_id == 0:
+		return
+	var status := RoomRules.status(build_mode.grid, _room_context_id)
+	if status != null and status.ok:
+		_stop_pulse()
 
 
 func _on_built_selection_changed() -> void:

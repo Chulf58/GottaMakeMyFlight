@@ -432,8 +432,16 @@ static func room_context_entries(
 ) -> Array[Dictionary]:
 	var type := RoomTypes.get_type(room_type)
 	var status: RoomRules.RoomStatus = (
-		RoomRules.status(grid, room_id) if grid != null and room_id != 0 else null
+		RoomRules.status(grid, room_id) if grid != null and room_id > 0 else null
 	)
+	var room := grid.get_room(room_id) if grid != null and room_id > 0 else {}
+	var needs_opening := (
+		status != null
+		and not room.is_empty()
+		and not RoomRules.has_opening(grid, room["rect"] as Rect2i)
+	)
+	var missing_mandatory: Array[Dictionary] = []
+	var satisfied_mandatory: Array[Dictionary] = []
 	var mandatory_entries: Array[Dictionary] = []
 	var optional_entries: Array[Dictionary] = []
 	for tool: BuildMode.Tool in ROOM_TOOLS.get(room_type, []):
@@ -451,25 +459,53 @@ static func room_context_entries(
 					if status != null and _count_pieces(status.pieces, accepted) > 0:
 						satisfied = true
 					break
+		var missing := mandatory and status != null and not satisfied
 		var entry := {
 			"tool": tool,
 			"mandatory": mandatory,
 			"satisfied": satisfied,
+			"missing": missing,
 			"room_tool": false,
 		}
 		if mandatory:
 			mandatory_entries.append(entry)
+			if missing:
+				missing_mandatory.append(entry)
+			else:
+				satisfied_mandatory.append(entry)
 		else:
 			optional_entries.append(entry)
+	var door_entry := {
+		"tool": BuildMode.Tool.DOOR,
+		"mandatory": false,
+		"satisfied": false,
+		"missing": needs_opening,
+		"room_tool": false,
+	}
 	var out: Array[Dictionary] = []
-	out.append_array(mandatory_entries)
-	out.append_array(optional_entries)
-	out.append(
-		{"tool": BuildMode.Tool.DOOR, "mandatory": false, "satisfied": false, "room_tool": false}
-	)
+	if needs_opening:
+		out.append_array(missing_mandatory)
+		out.append(door_entry)
+		out.append_array(satisfied_mandatory)
+		out.append_array(optional_entries)
+	else:
+		out.append_array(mandatory_entries)
+		out.append_array(optional_entries)
+		out.append(door_entry)
 	var room_tool := room_tool_for(room_type)
 	if room_tool != BuildMode.Tool.NONE:
-		out.append({"tool": room_tool, "mandatory": false, "satisfied": false, "room_tool": true})
+		(
+			out
+			. append(
+				{
+					"tool": room_tool,
+					"mandatory": false,
+					"satisfied": false,
+					"missing": false,
+					"room_tool": true,
+				}
+			)
+		)
 	return out
 
 

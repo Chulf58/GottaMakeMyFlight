@@ -126,8 +126,37 @@ static func preview_price(grid: BuildGrid, area: Rect2i, type: StringName) -> Ve
 	return Vector2i(maxi(0, needed), maxi(0, needed))
 
 
+## Final rectangle a room drag of `area` as `room_type` will occupy, including
+## any flush auto-extend merge via RoomResize.
+static func final_rect(grid: BuildGrid, area: Rect2i, room_type: StringName) -> Rect2i:
+	if grid == null:
+		return area
+	var extend := RoomResize.auto_extend(grid, area, room_type)
+	if not extend.is_empty():
+		return extend["rect"]
+	return area
+
+
+## Pre-commit min-size readiness warning for `area` as `room_type`, or "" when
+## `final_rect()` meets the room type's orientation-agnostic minimum size.
+static func too_small_note(grid: BuildGrid, area: Rect2i, room_type: StringName) -> String:
+	var type := RoomTypes.get_type(room_type)
+	if type == null:
+		return ""
+	var rect := final_rect(grid, area, room_type)
+	if not rect.has_area() or type.fits(rect.size):
+		return ""
+	var room := TranslationServer.translate(
+		type.display_name.to_lower(), DisplayWords.ROOM_MID_CONTEXT
+	)
+	var note := TranslationServer.translate(
+		"Too small: a {room} needs at least {width}x{height}", DisplayWords.NEED_CONTEXT
+	)
+	return note.format({"room": room, "width": type.min_size.x, "height": type.min_size.y})
+
+
 ## The status line while a rectangle is dragged: "Cafe 4 x 3", followed by
-## the reason the grid/wallet would refuse it.
+## the reason the grid/wallet would refuse it or a pre-commit min-size note.
 static func drag_label(
 	grid: BuildGrid,
 	area: Rect2i,
@@ -142,6 +171,10 @@ static func drag_label(
 	var result := check(grid, area, type, wallet, unlocks, require_unlocks)
 	if not result.ok:
 		text += "  " + result.reason_text()
+	else:
+		var warn := too_small_note(grid, area, type)
+		if warn != "":
+			text += "  " + warn
 	return text
 
 

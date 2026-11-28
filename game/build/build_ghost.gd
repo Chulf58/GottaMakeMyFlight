@@ -11,6 +11,9 @@ extends RefCounted
 ## stands over the room, and this deep across the wall line.
 const WALL_BLOCK_HEIGHT := InteriorKit.STUB_HEIGHT
 const WALL_BLOCK_DEPTH := 0.5
+const WARN_TINT := Color(0.96, 0.68, 0.16, 0.5)
+
+static var _warn_material := material(WARN_TINT)
 
 
 ## A tinted ghost material; `through` draws it over what stands in front of it.
@@ -181,17 +184,25 @@ static func draw_area(mode: BuildMode) -> void:
 			var ext_id := int(extend["room_id"])
 			var ext_rect: Rect2i = extend["rect"]
 			var ext_fits := RoomResize.check(mode.grid, ext_id, ext_rect, purse).ok
-			tint = mode._valid_material if ext_fits else mode._invalid_material
+			if not ext_fits:
+				tint = mode._invalid_material
+			elif RoomTool.too_small_note(mode.grid, area, room_type) != "":
+				tint = _warn_material
+			else:
+				tint = mode._valid_material
 			slab(mode, ext_rect, tint)
 			for edit in RoomResize.plan(mode.grid, ext_id, ext_rect):
 				if edit.kind == BuildEdit.Kind.PLACE_WALL:
 					wall(mode, edit.cell, edit.side, tint)
 			mode._show_status(null)
 			return
-		if not (
-			RoomTool.check(mode.grid, area, room_type, purse, mode.unlocks, mode.require_unlocks).ok
-		):
+		var check_res := RoomTool.check(
+			mode.grid, area, room_type, purse, mode.unlocks, mode.require_unlocks
+		)
+		if not check_res.ok:
 			tint = mode._invalid_material
+		elif RoomTool.too_small_note(mode.grid, area, room_type) != "":
+			tint = _warn_material
 		for edit in RoomTool.plan(mode.grid, area, room_type):
 			if edit.kind == BuildEdit.Kind.PLACE_WALL:
 				wall(mode, edit.cell, edit.side, tint)
