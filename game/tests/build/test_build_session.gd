@@ -146,3 +146,21 @@ func test_with_no_clock_it_still_reports_and_keeps_undo_until_abandon() -> void:
 	assert_int(_mode.undo_history().size()).is_equal(1)
 	_session.abandon()
 	assert_int(_mode.undo_history().size()).is_equal(0)
+
+
+func test_ensure_paused_reacquires_hold_after_yield_without_needing_prior_sync() -> void:
+	_clock.set_speed(2)
+	_clock.set_paused(false)
+	_session.set_building(true)
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
+	_clock.set_paused(false)
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.holds.count()).is_equal(0)
+	# Even before sync() runs, ensure_paused() clears the dropped token and re-acquires.
+	_session.ensure_paused()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
+	_session.sync()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
