@@ -339,9 +339,10 @@ func test_offer_panel_and_flight_planner_show_tier_and_hub_badges() -> void:
 	assert_str((panel.trait_row("O12N2").get_node("Loyal") as Label).text).is_equal("Silver +10%")
 	assert_str((panel.trait_row("O12N3").get_node("Loyal") as Label).text).is_equal("Bronze +5%")
 
-	# Accept O12N1 (Hub) and O12N2 (non-Hub) and verify FlightPlanner HubTag.
+	# Accept O12N1 (Hub) through OfferBoard and add a non-Hub contract directly
+	# to verify FlightPlanner HubTag (Pick-1-of-3 dismisses O12N2 on accept).
 	assert_bool(desk.board.accept("O12N1", sim)).is_true()
-	assert_bool(desk.board.accept("O12N2", sim)).is_true()
+	assert_bool(sim.accept_contract(OfferBoard.terms_of(desk.board.offer_of("O12N2")))).is_true()
 	var planner := FlightPlanner.new()
 	planner.flights = sim
 	planner.clock = clock

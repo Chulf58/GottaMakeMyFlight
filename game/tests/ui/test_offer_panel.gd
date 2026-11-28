@@ -1,9 +1,10 @@
 class_name TestOfferPanel
 extends GdUnitTestSuite
-## OfferPanel: a button with the open offer count, and a cream card per open
-## offer (airline, destination, departure, size, booked passengers, fee
-## per passenger) with Accept and Decline wired to the board and FlightSim. A
-## refused accept shows FlightSim.accept_problem's reason and leaves the offer.
+## OfferPanel (Pick-1-of-3 side-by-side): a button with the open offer count,
+## a horizontal row of 3 daily offer cards (airline badge, destination,
+## departure, size, booked passengers, fee per passenger, Accept) plus a Pass
+## button. Accepting 1 daily offer dismisses the others with a spin-away
+## discard animation. A refused accept shows FlightSim.accept_problem's reason.
 
 var _port: SubViewport
 var _desk: OfferDesk
@@ -54,6 +55,9 @@ func test_the_button_opens_and_closes_the_sheet() -> void:
 func test_each_open_offer_has_a_card_with_its_terms() -> void:
 	_panel.open()
 	assert_array(_panel.card_ids()).is_equal(["O0N1", "O0N2", "O0N3"])
+	assert_object(_panel.decline_button("O0N1")).is_null()
+	assert_object(_panel.pass_button()).is_not_null()
+	assert_bool(_panel.pass_button().visible).is_true()
 	var text := _panel.card_text("O0N1")
 	for part in ["Gotta Air", "Oslo", "10:00", "Small", "6 passengers", "$58"]:
 		assert_str(text).contains(part)
@@ -80,19 +84,45 @@ func test_the_card_lines_show_airline_destination_departure_size_passengers_and_
 	)
 
 
-func test_accept_makes_a_contract_and_removes_the_card() -> void:
+func test_accept_makes_a_contract_closes_others_and_animates_spin_away() -> void:
 	_panel.open()
+	await get_tree().process_frame
 	_panel.accept_button("O0N1").pressed.emit()
 	assert_array(_sim.contract_ids()).is_equal(["O0N1"])
 	assert_str(_desk.board.offer_of("O0N1")["status"]).is_equal(OfferBoard.ACCEPTED)
-	assert_array(_panel.card_ids()).is_equal(["O0N2", "O0N3"])
+	assert_str(_desk.board.offer_of("O0N2")["status"]).is_equal(OfferBoard.DECLINED)
+	assert_str(_desk.board.offer_of("O0N3")["status"]).is_equal(OfferBoard.DECLINED)
+	assert_array(_desk.board.open_offers()).is_empty()
 	assert_str(_panel.message()).contains("Accepted")
-	assert_str(_panel.toggle_button().text).is_equal("Offers (2)")
+	assert_str(_panel.toggle_button().text).is_equal("Offers (0)")
+	assert_bool(_panel.is_discard_animating()).is_true()
+	assert_object(_panel.discard_tween()).is_not_null()
+	assert_bool(_panel.accept_button("O0N1").disabled).is_true()
+	assert_bool(_panel.accept_button("O0N2").disabled).is_true()
+	assert_bool(_panel.pass_button().disabled).is_true()
+
+	await get_tree().create_timer(0.20).timeout
+	for unchosen in ["O0N2", "O0N3"]:
+		var c := _panel.card(unchosen)
+		assert_object(c).is_not_null()
+		assert_float(absf(c.rotation)).is_greater(0.01)
+		assert_float(c.scale.x).is_less(1.0)
+		assert_float(c.modulate.a).is_less(1.0)
+
+	var safety := 0
+	while _panel.is_discard_animating() and safety < 30:
+		safety += 1
+		await get_tree().create_timer(0.05).timeout
+	await get_tree().process_frame
+	assert_bool(_panel.is_discard_animating()).is_false()
+	assert_array(_panel.card_ids()).is_empty()
+	assert_str(_panel.message()).is_equal(OfferPanel.PICKED_TODAY_TEXT)
+	assert_bool(_panel.pass_button().visible).is_false()
 
 
 func test_a_refused_accept_shows_the_reason_and_keeps_the_offer() -> void:
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("EXISTING", 600))).is_true()
 	_panel.open()
-	_panel.accept_button("O0N1").pressed.emit()
 	var reason := _sim.accept_problem(TestFlightContracts.terms("O0N2", 660))
 	_panel.accept_button("O0N2").pressed.emit()
 	assert_str(reason).is_not_empty()
@@ -103,14 +133,15 @@ func test_a_refused_accept_shows_the_reason_and_keeps_the_offer() -> void:
 	assert_bool(_panel.card("O0N2").is_ancestor_of(_panel.refusal_label("O0N2"))).is_true()
 	assert_str(_panel.refusal_text("O0N3")).is_empty()
 	assert_bool(_panel.refusal_label("O0N3").visible).is_false()
-	assert_array(_sim.contract_ids()).is_equal(["O0N1"])
+	assert_array(_sim.contract_ids()).is_equal(["EXISTING"])
 	assert_str(_desk.board.offer_of("O0N2")["status"]).is_equal(OfferBoard.OPEN)
-	assert_array(_panel.card_ids()).is_equal(["O0N2", "O0N3"])
+	assert_array(_panel.card_ids()).is_equal(["O0N1", "O0N2", "O0N3"])
+	assert_bool(_panel.is_discard_animating()).is_false()
 
 
 func test_a_refusal_is_gone_when_the_sheet_is_closed_and_opened_again() -> void:
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("EXISTING", 600))).is_true()
 	_panel.open()
-	_panel.accept_button("O0N1").pressed.emit()
 	_panel.accept_button("O0N2").pressed.emit()
 	assert_str(_panel.refusal_text("O0N2")).is_not_empty()
 	_panel.close()
@@ -120,21 +151,18 @@ func test_a_refusal_is_gone_when_the_sheet_is_closed_and_opened_again() -> void:
 	assert_bool(_panel.refusal_label("O0N2").visible).is_false()
 
 
-func test_a_refused_offer_can_still_be_declined() -> void:
+func test_a_refused_offer_batch_can_still_be_passed() -> void:
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("EXISTING", 600))).is_true()
 	_panel.open()
-	_panel.accept_button("O0N1").pressed.emit()
+	await get_tree().process_frame
 	_panel.accept_button("O0N2").pressed.emit()
-	_panel.decline_button("O0N2").pressed.emit()
-	assert_array(_panel.card_ids()).is_equal(["O0N3"])
+	assert_str(_panel.refusal_text("O0N2")).is_not_empty()
+	_panel.pass_button().pressed.emit()
+	assert_array(_desk.board.open_offers()).is_empty()
 	assert_str(_desk.board.offer_of("O0N2")["status"]).is_equal(OfferBoard.DECLINED)
-
-
-func test_decline_removes_the_card_and_makes_no_contract() -> void:
-	_panel.open()
-	_panel.decline_button("O0N1").pressed.emit()
-	assert_array(_sim.contract_ids()).is_empty()
-	assert_str(_desk.board.offer_of("O0N1")["status"]).is_equal(OfferBoard.DECLINED)
-	assert_array(_panel.card_ids()).is_equal(["O0N2", "O0N3"])
+	_panel.close()
+	await get_tree().process_frame
+	assert_array(_panel.card_ids()).is_empty()
 
 
 func test_a_new_day_replaces_the_cards_with_the_new_days_offers() -> void:
@@ -149,7 +177,7 @@ func test_a_new_day_replaces_the_cards_with_the_new_days_offers() -> void:
 func test_with_no_open_offers_the_sheet_says_when_more_arrive() -> void:
 	_panel.open()
 	for id in ["O0N1", "O0N2", "O0N3"]:
-		_panel.decline_button(id).pressed.emit()
+		_desk.board.decline(id)
 	assert_array(_panel.card_ids()).is_empty()
 	assert_str(_panel.message()).is_equal(OfferPanel.EMPTY_TEXT)
 	assert_str(_panel.toggle_button().text).is_equal("Offers (0)")
@@ -161,18 +189,7 @@ func test_the_accept_message_is_gone_when_the_sheet_is_closed_and_opened_again()
 	assert_str(_panel.message()).contains("Accepted")
 	_panel.close()
 	_panel.open()
-	assert_str(_panel.message()).is_empty()
-
-
-func test_closing_after_accepting_the_last_offer_leaves_the_empty_board_text() -> void:
-	_panel.open()
-	_desk.board.decline("O0N2")
-	_desk.board.decline("O0N3")
-	_panel.accept_button("O0N1").pressed.emit()
-	assert_str(_panel.message()).contains("Accepted")
-	_panel.close()
-	_panel.open()
-	assert_str(_panel.message()).is_equal(OfferPanel.EMPTY_TEXT)
+	assert_str(_panel.message()).is_equal(OfferPanel.PICKED_TODAY_TEXT)
 
 
 func test_a_panel_without_a_desk_builds_nothing_instead_of_showing_no_offers() -> void:

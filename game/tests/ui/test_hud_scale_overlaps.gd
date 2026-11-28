@@ -246,7 +246,11 @@ func _assert_sheets_clear_the_clock(layout: Vector2) -> void:
 		var sheet := _rect(control)
 		owner_node.close()
 		print("%s %s vs FlightPanel %s left_end=%.1f" % [pair[1], sheet, clock, left_end])
-		assert_float(sheet.size.x).is_equal_approx(560.0, 0.5)
+		if pair[1] == "RunwaySheet":
+			assert_float(sheet.size.x).is_equal_approx(560.0, 0.5)
+		else:
+			assert_float(sheet.size.x).is_greater_equal(560.0 - 0.5)
+			assert_float(sheet.size.x).is_less_equal(OfferPanel.WIDE_SHEET_W + 0.5)
 		assert_float(sheet.size.y).is_greater(0.0)
 		assert_bool(Rect2(Vector2.ZERO, layout).encloses(sheet)).is_true()
 		assert_float(clock.position.x - sheet.end.x).is_greater_equal(float(HudLayout.GAP) - 0.5)

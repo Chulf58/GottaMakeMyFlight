@@ -147,6 +147,9 @@ func test_accepting_a_slot_that_has_passed_repeats_tomorrow_in_the_message() -> 
 	_at(NOON)
 	_panel.accept_button("O0N1").pressed.emit()
 	assert_str(_panel.message()).contains("first flight tomorrow")
+	_panel.close()
+	_load(TestOfferBoard.day_records(0, [600, 1200, 1260]))
+	_panel.open()
 	_panel.accept_button("O0N2").pressed.emit()
 	assert_str(_panel.message()).not_contains("first flight")
 

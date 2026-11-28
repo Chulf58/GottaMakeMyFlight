@@ -1,28 +1,23 @@
 class_name TestOfferBoardFit
 extends GdUnitTestSuite
 ## Given the flights, ensure_day fits a new day's offers to the timetable
-## (decision airline-offers-2-a-day-fit-the-free-gate-slots-1-needs-more): N1
-## and N2 depart where the gates have room, as a pair that also fits together,
-## and N3 where only another gate is missing. The RNG advances exactly as it
-## does without fitting, a fitted day is saved as drawn and never fitted again,
-## and when nothing fits the day still has its three offers, each with a reason.
-
-## Each fit costs a few hundred ms (test_the_cost_of_a_day_boundary_fit_on_two_
-## busy_gates), so a case draws a handful of days.
+## (decision airline-offers-pick-1-of-3-side-by-side-spin-away-discard): all 3
+## offers depart at distinct slots the gates have room for whenever free slots
+## allow, falling back to another-gate push slots only when fewer than 3
+## distinct fitting slots exist. The RNG advances as it does without fitting.
+##
+## Each fit costs a few hundred ms, so a case draws a handful of days.
 const SEEDS := [1, 42, 2024, 7_654_321]
 ## One gate whose day is full for all plane sizes: 135 minutes apart from 07:00 to 20:30.
 const FULL_DAY := [420, 555, 690, 825, 960, 1095, 1230]
 ## Seed -> the fitted N1, N2 and N3 departures on one gate busy at 10:00 and
-## 16:40 (test_golden_fitted_departures_on_a_busy_gate). Seed 2024 was
-## measured again for trait seed version 3: its day 0 N1 is now an Odd hours
-## offer, which fits only at 06:00 or 22:00. Remeasured for the compressed
-## small-plane gate hold (131 min at BASE, [AT_STAND - lead_in, DEPARTED)) and
-## after main.tscn's Stand/PushbackEnd shifted 14 m south.
+## 16:40 (test_golden_fitted_departures_on_a_busy_gate). Updated for FIT_OFFERS=3
+## (8e0c5b1b) where all 3 offers fit distinct free slots.
 const GOLDEN_BUSY := {
-	1: [795, 1215, 525],
-	42: [1200, 450, 720],
-	2024: [360, 1230, 570],
-	7_654_321: [1200, 465, 480],
+	1: [795, 1215, 450],
+	42: [1200, 450, 855],
+	2024: [360, 1230, 855],
+	7_654_321: [1200, 465, 735],
 }
 
 
@@ -52,10 +47,9 @@ func _minutes(board: OfferBoard, day := 0) -> Array:
 	return out
 
 
-## With nothing booked every slot fits, so each of the 57 picks maps onto
-## itself: N1 and N3 (no slot needs another gate) depart as drawn. N2 does too
-## unless it would share the one gate with N1, and then it moves to a time it
-## fits beside N1. Every other term is as drawn.
+## With nothing booked every slot fits, so each of the 3 offers fits the
+## empty gate and takes a distinct departure (moving off an earlier offer's
+## gate hold if needed). Every other term matches the plain draw.
 func test_an_empty_timetable_keeps_the_drawn_departures() -> void:
 	var sim := _sim(["C"] as Array[String], [])
 	var moved := 0
@@ -67,14 +61,17 @@ func test_an_empty_timetable_keeps_the_drawn_departures() -> void:
 		var a := _minutes(fitted)
 		var b := _minutes(plain)
 		assert_int(a[0]).is_equal(b[0])
-		assert_int(a[2]).is_equal(b[2])
-		var drawn_second := _offer_terms(plain, 2)
-		if FlightFit.fits(sim, drawn_second, [_offer_terms(plain, 1)]):
-			assert_int(a[1]).is_equal(b[1])
-		else:
-			moved += 1
-			var fitted_second := _offer_terms(fitted, 2)
-			assert_bool(FlightFit.fits(sim, fitted_second, [_offer_terms(fitted, 1)])).is_true()
+		var chosen: Array[Dictionary] = [_offer_terms(plain, 1)]
+		for idx in range(1, OfferBoard.OFFERS_PER_DAY):
+			var drawn_terms := _offer_terms(plain, idx + 1)
+			var fitted_terms := _offer_terms(fitted, idx + 1)
+			assert_bool(FlightFit.fits(sim, fitted_terms)).is_true()
+			if FlightFit.fits(sim, drawn_terms, chosen) and not a.slice(0, idx).has(b[idx]):
+				assert_int(a[idx]).is_equal(b[idx])
+			else:
+				moved += 1
+				assert_bool(FlightFit.fits(sim, fitted_terms, chosen)).is_true()
+			chosen.append(fitted_terms)
 		for number in range(1, OfferBoard.OFFERS_PER_DAY + 1):
 			var left := _offer_terms(fitted, number)
 			var right := _offer_terms(plain, number)
@@ -90,7 +87,7 @@ func test_an_empty_timetable_keeps_the_drawn_departures() -> void:
 			left.erase("fee_per_passenger")
 			right.erase("fee_per_passenger")
 			assert_dict(left).is_equal(right)
-	print("empty timetable: N2 moved off N1's gate time on %d of %d seeds" % [moved, SEEDS.size()])
+	print("empty timetable: offers moved to distinct non-clashing slots %d times" % moved)
 
 
 ## The RNG state after ensure_day is the same with and without fitting, over
@@ -115,43 +112,39 @@ func test_fitting_leaves_the_rng_exactly_where_drawing_alone_does() -> void:
 	assert_int(moved).is_greater(0)
 
 
-## One gate holding a 10:00 contract: N1 and N2 fit, together too, whichever
-## is accepted first, and N3 clashes only for want of another gate.
-func test_one_gate_with_one_contract_gives_two_fits_and_one_push() -> void:
+## One gate holding a 10:00 contract: all 3 daily offers fit distinct slots
+## on the gate (true 3-way trade-off).
+func test_one_gate_with_one_contract_fits_all_three_offers() -> void:
 	var sim := _sim(["C"] as Array[String], [600])
 	for seed_value in SEEDS:
 		var board := OfferBoard.new()
 		board.ensure_day(0, _rng(seed_value), 0, PlaneClasses.LARGE, sim)
-		var first := _offer_terms(board, 1)
-		var second := _offer_terms(board, 2)
-		var push := FlightFit.assess(sim, _offer_terms(board, 3))
-		print("seed %d minutes %s push %s" % [seed_value, _minutes(board), push])
-		assert_bool(FlightFit.fits(sim, first)).is_true()
-		assert_bool(FlightFit.fits(sim, second)).is_true()
-		assert_bool(FlightFit.fits(sim, second, [first])).is_true()
-		assert_bool(FlightFit.fits(sim, first, [second])).is_true()
-		assert_str(push["blocker"]).is_equal(FlightSim.BLOCKER_GATE)
-		assert_bool(push["another_gate_helps"]).is_true()
+		var minutes := _minutes(board)
+		print("seed %d minutes %s" % [seed_value, minutes])
+		var seen := {}
+		for number in range(1, OfferBoard.OFFERS_PER_DAY + 1):
+			var terms := _offer_terms(board, number)
+			assert_bool(FlightFit.fits(sim, terms)).is_true()
+			seen[terms["departure_minute"]] = true
+		assert_int(seen.size()).is_equal(OfferBoard.OFFERS_PER_DAY)
 
 
-## One gate busy at 10:00 and 16:40 leaves 13:15 and 20:00 to 21:00: a joint
-## pair still exists, and accepting both on the board works in draw order.
-func test_one_busy_gate_still_gets_a_pair_that_fits_together() -> void:
+## One gate busy at 10:00 and 16:40 still gives all 3 offers fitting slots,
+## and accepting 1 immediately closes the other 2 (Pick-1-of-3).
+func test_one_busy_gate_fits_three_offers_and_accepting_one_closes_others() -> void:
 	for seed_value in SEEDS:
 		var sim := _sim(["C"] as Array[String], [600, 1000])
 		var board := OfferBoard.new()
 		board.ensure_day(0, _rng(seed_value), 0, PlaneClasses.LARGE, sim)
-		var first := _offer_terms(board, 1)
-		var second := _offer_terms(board, 2)
-		print("seed %d busy gate minutes %s" % [seed_value, _minutes(board)])
-		assert_bool(FlightFit.fits(sim, second, [first])).is_true()
-		assert_bool(FlightFit.fits(sim, first, [second])).is_true()
+		for number in range(1, OfferBoard.OFFERS_PER_DAY + 1):
+			assert_bool(FlightFit.fits(sim, _offer_terms(board, number))).is_true()
 		assert_bool(board.accept("O0N1", sim)).is_true()
-		assert_bool(board.accept("O0N2", sim)).is_true()
+		assert_array(board.open_offers()).is_empty()
+		assert_str(board.offer_of("O0N2")["status"]).is_equal(OfferBoard.DECLINED)
+		assert_str(board.offer_of("O0N3")["status"]).is_equal(OfferBoard.DECLINED)
 
 
-## The pair is a pair, not two fits that each take the last free slot: on one
-## gate with limited free slots left, N1 and N2 fit together without clashing.
+## The fitted offers take distinct free slots rather than all piling onto one slot.
 func test_the_two_fit_offers_do_not_take_the_same_free_time() -> void:
 	var sim := _sim(["C"] as Array[String], [600, 1000])
 	for seed_value in SEEDS:
@@ -164,15 +157,13 @@ func test_the_two_fit_offers_do_not_take_the_same_free_time() -> void:
 		assert_int(absi(minutes[0] - minutes[1])).is_greater_equal(135)
 
 
-## A full gate: still three offers, none fits, each card has its reason, and the
-## two fit offers keep the slots they were drawn with.
+## A full gate: still three offers, none fits, each card falls back to a push
+## slot with "No gate free at this time: build another gate".
 func test_full_gates_still_show_three_offers_each_with_a_reason() -> void:
 	var sim := _sim(["C"] as Array[String], FULL_DAY)
 	for seed_value in SEEDS:
 		var board := OfferBoard.new()
-		var plain := OfferBoard.new()
 		board.ensure_day(0, _rng(seed_value), 0, PlaneClasses.LARGE, sim)
-		plain.ensure_day(0, _rng(seed_value), 0, PlaneClasses.LARGE)
 		assert_array(board.open_offers()).has_size(OfferBoard.OFFERS_PER_DAY)
 		var texts := []
 		for number in range(1, OfferBoard.OFFERS_PER_DAY + 1):
@@ -182,11 +173,28 @@ func test_full_gates_still_show_three_offers_each_with_a_reason() -> void:
 			assert_bool(assessment["fits"]).is_false()
 		print("seed %d full gate: %s" % [seed_value, texts])
 		for text: String in texts:
-			assert_str(text).is_not_empty()
-			assert_str(text).is_not_equal(FlightFit.FITS_TEXT)
-		# The push offer found a slot where only a gate is missing.
-		assert_str(texts[2]).is_equal(FlightFit.ANOTHER_GATE_TEXT)
-		assert_array(_minutes(board).slice(0, 2)).is_equal(_minutes(plain).slice(0, 2))
+			assert_str(text).is_equal(FlightFit.ANOTHER_GATE_TEXT)
+
+
+## When fewer than 3 distinct fitting slots exist on a nearly full gate (only
+## 07:00 is free), N1 fits at 07:00 while N2/N3 fall back cleanly to push slots.
+func test_fewer_than_three_distinct_fitting_slots_falls_back_cleanly() -> void:
+	var nearly_full := FULL_DAY.slice(1)
+	var sim := _sim(["C"] as Array[String], nearly_full)
+	var board := OfferBoard.new()
+	board.ensure_day(0, _rng(1), 0, PlaneClasses.LARGE, sim)
+	var fit_count := 0
+	var fallback_count := 0
+	for number in range(1, OfferBoard.OFFERS_PER_DAY + 1):
+		var assessment := FlightFit.assess(sim, _offer_terms(board, number))
+		if assessment["fits"]:
+			fit_count += 1
+		else:
+			fallback_count += 1
+			assert_str(assessment["blocker"]).is_equal(FlightSim.BLOCKER_GATE)
+			assert_bool(assessment["another_gate_helps"]).is_true()
+	assert_int(fit_count).is_equal(1)
+	assert_int(fallback_count).is_equal(2)
 
 
 ## A fitted day is saved with its fitted departures; loading it and starting

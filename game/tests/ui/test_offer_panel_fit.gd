@@ -42,24 +42,30 @@ func test_every_card_says_it_fits_on_an_empty_timetable() -> void:
 		assert_str(_panel.fit_label(id).theme_type_variation).is_equal("HudGoodText")
 
 
-## Accepting 10:00 rewrites the 12:00 card at once: it now needs another gate,
-## said in the problem look, while its click refusal line stays empty.
+## Schedule changes on open and live gate additions rewrite a card's fit line
+## at once, while its click refusal stays empty.
 func test_an_accept_rewrites_the_other_cards_fit_line() -> void:
 	_panel.open()
-	_panel.accept_button("O0N1").pressed.emit()
-	assert_str(_desk.board.offer_of("O0N1")["status"]).is_equal(OfferBoard.ACCEPTED)
+	assert_str(_panel.fit_text("O0N2")).is_equal(OfferPanel.FITS_TEXT)
+	_panel.close()
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("EXISTING", 600))).is_true()
+	_panel.open()
 	print("after accepting 10:00: 12:00 says '%s'" % _panel.fit_text("O0N2"))
 	assert_str(_panel.fit_text("O0N2")).is_equal(OfferPanel.NEEDS_GATE_TEXT)
 	assert_str(_panel.fit_label("O0N2").theme_type_variation).is_equal("HudProblemText")
 	assert_str(_panel.fit_text("O0N3")).is_equal(OfferPanel.FITS_TEXT)
 	assert_bool(_panel.refusal_label("O0N2").visible).is_false()
+	_sim.gate_source = func() -> Array[String]: return ["C", "D"] as Array[String]
+	_sim.check_planning_changed()
+	assert_str(_panel.fit_text("O0N2")).is_equal(OfferPanel.FITS_TEXT)
+	assert_str(_panel.fit_label("O0N2").theme_type_variation).is_equal("HudGoodText")
 
 
 ## Accept still checks at the click: the refused card shows its refusal, and
 ## the advice line stays as it was beside it.
 func test_the_click_refusal_and_the_fit_line_are_separate() -> void:
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("EXISTING", 600))).is_true()
 	_panel.open()
-	_panel.accept_button("O0N1").pressed.emit()
 	_panel.accept_button("O0N2").pressed.emit()
 	assert_str(_desk.board.offer_of("O0N2")["status"]).is_equal(OfferBoard.OPEN)
 	assert_str(_panel.refusal_text("O0N2")).contains("Can't accept")
@@ -77,7 +83,9 @@ func test_the_fit_line_has_the_small_text_size_in_both_looks() -> void:
 	var fits := _panel.fit_label("O0N1").get_theme_font_size("font_size")
 	print("green fit line %d px" % fits)
 	assert_int(fits).is_equal(small)
-	_panel.accept_button("O0N1").pressed.emit()
+	_panel.close()
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("EXISTING", 600))).is_true()
+	_panel.open()
 	assert_str(_panel.fit_label("O0N2").theme_type_variation).is_equal("HudProblemText")
 	assert_int(_panel.fit_label("O0N2").get_theme_font_size("font_size")).is_equal(small)
 
