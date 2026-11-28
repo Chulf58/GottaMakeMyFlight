@@ -928,6 +928,7 @@ func _wire_unlock_guide() -> void:
 	if flights != null:
 		_unlock_guide.runway = flights.runway
 	_unlock_guide.director = get_node_or_null("../IncidentDirector") as IncidentDirector
+	_unlock_guide.ring_bottom_provider = _bottom_clearance
 	_unlock_guide.dialog_changed.connect(_gate_camera)
 	add_child(_unlock_guide)
 	var menu := get_node_or_null("../BuildMenu") as BuildMenu
@@ -984,6 +985,7 @@ func open_intro(ring_delay_s: float = 0.0) -> bool:
 func _start_intro_ring() -> void:
 	_ensure_intro_layer()
 	_intro_ring = IntroDialogue.PhoneRingCue.new()
+	_intro_ring.bottom_provider = _bottom_clearance
 	_intro_layer.add_child(_intro_ring)
 	_intro_ring.answered.connect(_on_intro_ring_answered)
 	if not _intro_layer.tree_exiting.is_connected(_close_intro):
@@ -1338,20 +1340,14 @@ func _on_save_loaded(ok: bool) -> void:
 		_frame_start_view()
 
 
+func _bottom_clearance() -> float:
+	return IntroDialogue.PhoneRingCue.bottom_clearance(self)
+
+
 func _pa_bottom() -> float:
-	if not is_inside_tree():
-		return BuildMenu.MARGIN + BuildMenu.BAR_H + HudLayout.GAP
-	var menu := get_node_or_null("../BuildMenu") as BuildMenu
-	if menu != null and menu.is_node_ready():
-		if menu.is_tray_open() or menu.status_card().visible:
-			return menu.stack_top() + HudLayout.GAP
-	var staff := get_node_or_null("../StaffPanel") as StaffPanel
-	if staff != null and staff.is_node_ready():
-		var staff_card := staff.get_node_or_null("StaffCard") as Control
-		if staff_card != null and staff_card.visible:
-			var staff_h := maxf(staff_card.size.y, staff_card.get_combined_minimum_size().y)
-			return BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP + staff_h + HudLayout.GAP
-	return BuildMenu.MARGIN + BuildMenu.BAR_H + HudLayout.GAP
+	var bottom := _bottom_clearance()
+	var top := IntroDialogue.PhoneRingCue.visible_top(self, bottom, _intro_ring, _unlock_guide)
+	return maxf(bottom, top + HudLayout.GAP) if top > 0.0 else bottom
 
 
 func _pa_modal_open() -> bool:

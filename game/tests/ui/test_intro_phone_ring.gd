@@ -70,18 +70,21 @@ func test_open_intro_starts_ring_beat_before_dialogue_and_click_answers() -> voi
 	assert_bool(_world.clock.paused).is_false()
 	assert_bool(_hud.open_intro()).is_true()
 
-	# Frame 0: ringing icon visible bottom-centre, SFX triggered, IntroDialogue not yet open.
+	# Frame 0: ringing icon visible bottom-centre (128x128), SFX played, dialogue pending.
 	assert_object(_hud.intro()).is_null()
 	var cue := _ring_cue()
 	assert_object(cue).is_not_null()
 	assert_bool(cue.is_ringing()).is_true()
 	assert_bool(cue.is_visible_in_tree()).is_true()
 	assert_object(cue.phone_icon().texture).is_not_null()
+	assert_float(IntroDialogue.PhoneRingCue.CUE_SIZE).is_equal(128.0)
+	assert_float(IntroDialogue.PhoneRingCue.ICON_SIZE).is_equal(88.0)
 	var rect := cue.get_global_rect()
-	assert_float(cue.offset_top).is_less_equal(TopRow.SHEET_TOP + 0.5)
-	var max_y := TopRow.SHEET_TOP + IntroDialogue.PhoneRingCue.CUE_SIZE + 4.0
-	assert_float(rect.end.y).is_less_equal(max_y)
-	assert_float(rect.end.x).is_less_equal(1280.0 - HudLayout.MARGIN - HudLayout.RAIL_W)
+	assert_float(cue.size.x).is_equal_approx(128.0, 0.5)
+	assert_float(cue.size.y).is_equal_approx(128.0, 0.5)
+	assert_float(absf(rect.get_center().x - 1280.0 * 0.5)).is_less_equal(1.0)
+	assert_float(-cue.offset_bottom).is_equal_approx(IntroDialogue.PhoneRingCue.CUE_BOTTOM, 0.5)
+	assert_float(rect.end.y).is_equal_approx(720.0 - IntroDialogue.PhoneRingCue.CUE_BOTTOM, 0.5)
 	assert_bool(_world.clock.paused).is_true()
 	assert_int(_world.clock.holds.count()).is_equal(1)
 	assert_bool(cam.is_processing()).is_false()
@@ -194,6 +197,11 @@ func test_unlock_guide_opening_call_rings_audio_and_shows_icon() -> void:
 	assert_object(cue).is_not_null()
 	assert_bool(cue.is_ringing()).is_true()
 	assert_bool(cue.is_visible_in_tree()).is_true()
+	var cue_rect := cue.get_global_rect()
+	assert_float(cue.size.x).is_equal_approx(128.0, 0.5)
+	assert_float(cue.size.y).is_equal_approx(128.0, 0.5)
+	assert_float(absf(cue_rect.get_center().x - 1280.0 * 0.5)).is_less_equal(1.0)
+	assert_float(cue_rect.end.y).is_equal_approx(720.0 - IntroDialogue.PhoneRingCue.CUE_BOTTOM, 0.5)
 	assert_bool(_world.clock.paused).is_true()
 	var audio := get_node_or_null("/root/GameAudio")
 	if audio != null and audio.has_method(&"sfx_count"):

@@ -95,6 +95,8 @@ var director: IncidentDirector
 ## Optional: target panels opened by contextual call actions ("Open Offers", "Open Runway").
 var offer_panel: OfferPanel
 var runway_card: RunwayCard
+## Optional callable returning bottom offset in px above viewport bottom for PhoneRingCue.
+var ring_bottom_provider := Callable()
 
 var _layer: CanvasLayer
 var _dialog: IntroDialogue
@@ -488,6 +490,7 @@ func _show_dialog(tiers: Array, firsts: Array = []) -> void:
 		_ringing_tiers = tiers.duplicate()
 		_ringing_firsts = firsts.duplicate()
 		_ring_cue = IntroDialogue.PhoneRingCue.new()
+		_ring_cue.bottom_provider = ring_bottom_provider
 		_layer.add_child(_ring_cue)
 		_ring_cue.answered.connect(
 			_on_ring_answered.bind(_layer, tiers.duplicate(), firsts.duplicate())
