@@ -32,6 +32,7 @@ enum SubMode {
 	NONE,
 	SEC_CLEAN,
 	SEC_ALARM,
+	SEC_PATDOWN,
 	SEC_LIQUIDS,
 	SHOP_INFO_DESK,
 	SHOP_CAFE,
@@ -55,6 +56,12 @@ enum SubMode {
 	LULL_STRETCH,
 	LULL_CLIPBOARD,
 	LULL_WATCH,
+}
+
+enum SecurityInspectKind {
+	WAND,
+	PATDOWN,
+	BOTH,
 }
 
 const EASE_TICKS := 6.0
@@ -197,6 +204,28 @@ static func idle_fidget_variant(seed_id: int, elapsed_ticks: float) -> int:
 	shifted += float(posmod(seed_id * 47, 100))
 	var bucket := floori(shifted / float(FIDGET_PERIOD_TICKS))
 	return posmod(seed_id * 7 + bucket * 3, 4)
+
+
+## Deterministic alarm inspection mode for `pax_id`: wand, pat-down, or both.
+static func alarm_inspect_kind(pax_id: int) -> SecurityInspectKind:
+	var bucket := posmod(pax_id - 1, 3)
+	if bucket == 0:
+		return SecurityInspectKind.WAND
+	if bucket == 1:
+		return SecurityInspectKind.PATDOWN
+	return SecurityInspectKind.BOTH
+
+
+## Secondary-check sub-mode for `pax` (first half wand then pat-down for BOTH).
+static func security_inspect_sub_mode(pax: Passenger) -> SubMode:
+	var kind := alarm_inspect_kind(pax.id)
+	if kind == SecurityInspectKind.WAND:
+		return SubMode.SEC_ALARM
+	if kind == SecurityInspectKind.PATDOWN:
+		return SubMode.SEC_PATDOWN
+	if pax.security_work * 2 > SecurityRuntime.BODY_CHECK_TICKS:
+		return SubMode.SEC_ALARM
+	return SubMode.SEC_PATDOWN
 
 
 ## Shop sub-mode for a ShopCounters station id.
@@ -368,6 +397,7 @@ static func build_context(
 		"checkin": {},
 		"checkin_queue": {},
 		"security_queue": {},
+		"security_queue_head": {},
 		"station_active_pax": {},
 		"info": {},
 		"shop_rooms": {},
@@ -426,8 +456,16 @@ static func _collect_passenger(
 		if not ctx["checkin_queue"].has(p.station):
 			ctx["checkin_queue"][p.station] = eye
 	if p.stage == Passenger.Stage.SECURITY_QUEUE and p.station != 0:
-		if not ctx["security_queue"].has(p.station):
+		if not ctx["security_queue_head"].has(p.station):
+			ctx["security_queue_head"][p.station] = true
 			ctx["security_queue"][p.station] = eye
+	elif (
+		p.stage == Passenger.Stage.TO_SECURITY
+		and p.station != 0
+		and not ctx["security_queue"].has(p.station)
+		and p.at.distance_squared_to(sim.grid.interaction_cell(p.station)) <= 25
+	):
+		ctx["security_queue"][p.station] = eye
 	if p.stage == Passenger.Stage.CHECKIN and p.station != 0:
 		ctx["checkin"][p.station] = eye
 	if sim.info_desks.holds(p) and not p.is_moving():
@@ -553,18 +591,24 @@ static func _security_eval(m: StaffMember, sim: PassengerSim) -> Array:
 	var eye := Vector3(0.0, PASSENGER_EYE_M, 0.0)
 	var pos := sim.world_position(pax) + SecurityLooks.target_offset(sim, pax) + eye
 	var sec_sub := SubMode.SEC_CLEAN
-	if SecurityRuntime.incident_open(pax):
-		if pax.security_phase == SecurityRuntime.Phase.BODY_CHECK:
-			sec_sub = SubMode.SEC_ALARM
-		elif pax.liquids and pax.carry_on > 0 and not pax.bag_resolved:
-			sec_sub = SubMode.SEC_LIQUIDS
-		elif pax.alarm and not pax.body_resolved:
-			sec_sub = SubMode.SEC_ALARM
 	var sec_mode := (
 		Mode.SECURITY_REPACK
 		if pax.security_phase == SecurityRuntime.Phase.REPACK
 		else Mode.SECURITY_SCAN
 	)
+	if SecurityRuntime.incident_open(pax):
+		if pax.security_phase == SecurityRuntime.Phase.BODY_CHECK:
+			sec_sub = security_inspect_sub_mode(pax)
+			sec_mode = Mode.SECURITY_SCAN
+		elif (
+			pax.security_phase == SecurityRuntime.Phase.REPACK and SecurityRuntime.body_pending(pax)
+		):
+			sec_sub = security_inspect_sub_mode(pax)
+			sec_mode = Mode.SECURITY_SCAN
+		elif pax.liquids and pax.carry_on > 0 and not pax.bag_resolved:
+			sec_sub = SubMode.SEC_LIQUIDS
+		elif pax.alarm and not pax.body_resolved:
+			sec_sub = SubMode.SEC_ALARM
 	return [sec_mode, pos, true, sec_sub]
 
 
@@ -984,6 +1028,9 @@ func _pose_security_scan(skeleton: Skeleton3D, p_sub_mode: SubMode, w: float) ->
 		_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, -68.0 * w)
 		_rotate_char(skeleton, "Hand.L", Vector3.RIGHT, -18.0 * w)
 		return
+	if p_sub_mode == SubMode.SEC_PATDOWN:
+		_pose_security_patdown(skeleton, w)
+		return
 	if p_sub_mode == SubMode.SEC_LIQUIDS:
 		var point := 0.5 + 0.5 * sin(t * 2.4)
 		var shake := sin(t * 4.8)
@@ -1003,24 +1050,48 @@ func _pose_security_scan(skeleton: Skeleton3D, p_sub_mode: SubMode, w: float) ->
 		var scan := sin(PI * p) * env
 		_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, 3.0 * w)
 		_rotate_char(skeleton, "Head", Vector3.RIGHT, 6.0 * scan * w)
-		_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, (-38.0 + 4.0 * env - 16.0 * scan) * w)
-		_rotate_char(skeleton, "Arm.R", Vector3.UP, 12.0 * sin(t * 2.8) * env * w)
+		_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, (-38.0 + 4.0 * env - 18.0 * scan) * w)
+		_rotate_char(skeleton, "Arm.R", Vector3.UP, 16.0 * sin(t * 2.8) * env * w)
 		_rotate_char(skeleton, "Arm.R", Vector3.BACK, (-11.0 + env) * w)
-		_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, (-42.0 - 4.0 * env + 14.0 * scan) * w)
-		_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, (-19.0 + 3.0 * env) * w)
-		_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, (-26.0 + 2.0 * env) * w)
+		_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, (-42.0 - 4.0 * env + 16.0 * scan) * w)
+		_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, (-19.0 + 8.0 * scan) * w)
+		_rotate_char(skeleton, "Arm.L", Vector3.UP, -10.0 * scan * w)
+		_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, (-26.0 - 14.0 * scan) * w)
+		_rotate_char(skeleton, "Hand.L", Vector3.UP, -14.0 * scan * w)
 		return
 	var sweep := sin(t * 3.2) * env
 	var nod := cos(t * 3.2) * env
-	var beckon := sin(t * 2.1) * env
+	var beckon := sin(t * 2.4) * env
 	_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, 3.0 * w)
 	_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, (-38.0 - 4.0 * env) * w)
-	_rotate_char(skeleton, "Arm.R", Vector3.UP, 18.0 * sweep * w)
+	_rotate_char(skeleton, "Arm.R", Vector3.UP, 20.0 * sweep * w)
 	_rotate_char(skeleton, "Arm.R", Vector3.BACK, (-11.0 - env) * w)
-	_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, (-42.0 + 4.0 * env + 10.0 * nod) * w)
-	_rotate_char(skeleton, "Hand.R", Vector3.UP, 12.0 * sweep * w)
-	_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, (-19.0 - 3.0 * env + 6.0 * beckon) * w)
-	_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, (-26.0 - 2.0 * env + 8.0 * beckon) * w)
+	_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, (-42.0 + 4.0 * env + 16.0 * nod) * w)
+	_rotate_char(skeleton, "Hand.R", Vector3.UP, 14.0 * sweep * w)
+	_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, (-19.0 - 3.0 * env + 8.0 * beckon) * w)
+	_rotate_char(skeleton, "Arm.L", Vector3.UP, -12.0 * env * w)
+	_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, (-26.0 - 10.0 * env + 14.0 * beckon) * w)
+	_rotate_char(skeleton, "Hand.L", Vector3.RIGHT, -12.0 * beckon * w)
+
+
+func _pose_security_patdown(skeleton: Skeleton3D, w: float) -> void:
+	var c := _cycle_state(sim_time, variant_seed, SECURITY_CYCLE_SEC, 2)
+	var t := float(c["t"])
+	var sweep := sin(t * 4.2)
+	var height := 0.5 - 0.5 * cos(t * 2.1)
+	_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, (6.0 + 6.0 * height) * w)
+	_rotate_char(skeleton, "Spine_02", Vector3.UP, 8.0 * sweep * w)
+	_rotate_char(skeleton, "Head", Vector3.RIGHT, (4.0 + 8.0 * height) * w)
+	_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, (-52.0 + 18.0 * height) * w)
+	_rotate_char(skeleton, "Arm.R", Vector3.UP, (12.0 + 10.0 * sweep) * w)
+	_rotate_char(skeleton, "Arm.R", Vector3.BACK, -10.0 * w)
+	_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, (-48.0 + 14.0 * sweep) * w)
+	_rotate_char(skeleton, "Hand.R", Vector3.RIGHT, -12.0 * w)
+	_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, (-52.0 + 18.0 * height) * w)
+	_rotate_char(skeleton, "Arm.L", Vector3.UP, (-12.0 - 10.0 * sweep) * w)
+	_rotate_char(skeleton, "Arm.L", Vector3.BACK, 10.0 * w)
+	_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, (-48.0 - 14.0 * sweep) * w)
+	_rotate_char(skeleton, "Hand.L", Vector3.RIGHT, -12.0 * w)
 
 
 func _pose_security_repack(skeleton: Skeleton3D, w: float) -> void:

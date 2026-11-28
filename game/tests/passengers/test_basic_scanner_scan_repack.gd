@@ -124,7 +124,7 @@ func _skeleton_tick(skeleton: Skeleton3D) -> void:
 
 func test_repack_pose_activates_mid_repack_and_clears_before_pickup() -> void:
 	_setup()
-	var id := _world.send(1, false, true)
+	var id := _world.send(1, true, false)
 	var p := _world.world.passenger(id)
 	var bones: Array[String] = ["Spine_01", "Arm.L", "Arm.R"]
 
@@ -183,7 +183,7 @@ func test_repack_pose_activates_mid_repack_and_clears_before_pickup() -> void:
 
 func test_snap_mid_scan_and_mid_repack_resets_cleanly() -> void:
 	_setup()
-	var id := _world.send(2, false, true)
+	var id := _world.send(2, true, false)
 	var p := _world.world.passenger(id)
 	var sim := _world.world.sim
 	var passage: Array = sim.layout.passages[_world.station]

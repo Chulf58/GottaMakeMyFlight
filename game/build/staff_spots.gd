@@ -1,7 +1,7 @@
 class_name StaffSpots
 extends RefCounted
 ## The staff spot: the cell a staff member stands on to work a station, behind
-## a check-in desk's counter or beside a security scanner's landside half. It
+## a check-in desk's counter or beside a security scanner's airside half. It
 ## is derived from the station's anchor and facing and never stored; cell_of()
 ## is the one function the grid, StaffSim and StaffCharacters use for it.
 ##
@@ -30,7 +30,7 @@ extends RefCounted
 ## member stands and "beside" the footprint cell it works next to.
 const LAYOUT := {
 	&"checkin_desk": {"spot": Vector2i(0, -1), "beside": Vector2i(0, 0)},
-	&"security_scanner": {"spot": Vector2i(1, 1), "beside": Vector2i(0, 1)},
+	&"security_scanner": {"spot": Vector2i(1, 0), "beside": Vector2i(0, 0)},
 	&"gate_desk": {"spot": Vector2i(0, -1), "beside": Vector2i(0, 0)},
 	&"bus_gate_desk": {"spot": Vector2i(0, -1), "beside": Vector2i(0, 0)},
 }

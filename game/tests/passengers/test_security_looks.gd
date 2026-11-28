@@ -271,7 +271,7 @@ func test_bag_moves_run_on_sim_time() -> void:
 
 func test_the_basic_scanner_carries_the_bags_and_repacks_in_place() -> void:
 	var w := _make(false)
-	var ids := w.send_all([[2, false, true]])
+	var ids := w.send_all([[2, true, false]])
 	var seen: Dictionary = _watch(w, ids)[ids[0]]
 	print("basic phases seen: %s" % [seen])
 	var scan: Dictionary = seen["%d/false" % SecurityRuntime.Phase.SCAN]

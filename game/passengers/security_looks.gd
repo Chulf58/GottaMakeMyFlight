@@ -369,7 +369,14 @@ static func face(sim: PassengerSim, p: Passenger) -> Vector2:
 	if lane.is_empty():
 		if (
 			p.stage == Passenger.Stage.SECURITY
-			and p.security_phase in [SecurityRuntime.Phase.SCAN, SecurityRuntime.Phase.REPACK]
+			and (
+				p.security_phase
+				in [
+					SecurityRuntime.Phase.SCAN,
+					SecurityRuntime.Phase.BODY_CHECK,
+					SecurityRuntime.Phase.REPACK,
+				]
+			)
 		):
 			var passage: Array = sim.layout.passages.get(p.station, [])
 			if passage.size() >= 2:

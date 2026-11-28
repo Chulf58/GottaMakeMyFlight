@@ -169,9 +169,9 @@ func test_break_room_seat_claim_no_double_seating_fallback_and_demolish() -> voi
 
 	var ids: Array[int] = [
 		_w.staff.hire(StaffMember.Role.CHECKIN),
-		_w.staff.hire(StaffMember.Role.SECURITY),
 		_w.staff.hire(StaffMember.Role.SHOP),
 		_w.staff.hire(StaffMember.Role.GATE),
+		_w.staff.hire(StaffMember.Role.SECURITY),
 	]
 	for _i in 120:
 		_w.step()

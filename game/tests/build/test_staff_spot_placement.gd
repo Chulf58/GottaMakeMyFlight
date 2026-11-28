@@ -41,7 +41,7 @@ func test_the_spot_is_behind_the_desk_and_beside_the_scanner_at_every_facing() -
 			Vector2i(5, 5) + BuildObjectDef.rotate_offset(Vector2i(0, -1), facing)
 		)
 		assert_that(scanner).is_equal(
-			Vector2i(5, 5) + BuildObjectDef.rotate_offset(Vector2i(1, 1), facing)
+			Vector2i(5, 5) + BuildObjectDef.rotate_offset(Vector2i(1, 0), facing)
 		)
 	assert_that(StaffSpots.cell_of(SEATS, Vector2i(5, 5), 0)).is_equal(BuildObjectDef.NO_CELL)
 	var id := _place(DESK, Vector2i(3, 3)).object_id
@@ -80,9 +80,9 @@ func test_a_desk_whose_spot_is_another_station_interaction_cell_is_refused() -> 
 
 func test_a_station_whose_spot_is_another_station_spot_is_refused() -> void:
 	var desk := _place(DESK, Vector2i(3, 3)).object_id
-	# A scanner at (2, 1) facing 0 would stand its officer on (3, 2) as well.
-	assert_that(StaffSpots.cell_of(SCANNER, Vector2i(2, 1), 0)).is_equal(Vector2i(3, 2))
-	_expect_spot_refusal(_place(SCANNER, Vector2i(2, 1)), desk)
+	# A scanner at (2, 2) facing 0 would stand its officer on (3, 2) as well.
+	assert_that(StaffSpots.cell_of(SCANNER, Vector2i(2, 2), 0)).is_equal(Vector2i(3, 2))
+	_expect_spot_refusal(_place(SCANNER, Vector2i(2, 2)), desk)
 
 
 func test_a_desk_walled_off_from_its_spot_is_refused() -> void:
@@ -120,7 +120,7 @@ func test_back_to_back_desks_are_refused() -> void:
 
 func test_same_facing_scanners_side_by_side_need_a_gap_column() -> void:
 	var first := _place(SCANNER, Vector2i(3, 3)).object_id
-	assert_that(StaffSpots.spot_of(_grid, first)).is_equal(Vector2i(4, 4))
+	assert_that(StaffSpots.spot_of(_grid, first)).is_equal(Vector2i(4, 3))
 	_expect_spot_refusal(_place(SCANNER, Vector2i(4, 3)), first)
 	var spaced := _place(SCANNER, Vector2i(5, 3))
 	print("scanner with a gap column: ok=%s" % spaced.ok)

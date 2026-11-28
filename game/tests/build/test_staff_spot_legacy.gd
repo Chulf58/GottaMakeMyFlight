@@ -49,8 +49,8 @@ func test_a_save_with_a_blocked_spot_loads_and_reports_that_station() -> void:
 
 
 func test_a_shared_spot_blocks_both_until_one_station_goes() -> void:
-	# The scanner at (2, 1) and the desk at (3, 3) both stand staff on (3, 2).
-	var grid := _legacy_grid([[SCANNER, Vector2i(2, 1), 0], [DESK, Vector2i(3, 3), 0]])
+	# The scanner at (2, 2) and the desk at (3, 3) both stand staff on (3, 2).
+	var grid := _legacy_grid([[SCANNER, Vector2i(2, 2), 0], [DESK, Vector2i(3, 3), 0]])
 	assert_bool(StaffSpots.blocked(grid, 1)).is_true()
 	assert_bool(StaffSpots.blocked(grid, 2)).is_true()
 	assert_bool(grid.apply(BuildEdit.remove_object(1)).ok).is_true()
@@ -65,7 +65,7 @@ func test_a_shared_spot_blocks_both_until_one_station_goes() -> void:
 
 
 func test_removing_the_desk_of_a_shared_spot_keeps_the_scanner_protected() -> void:
-	var grid := _legacy_grid([[SCANNER, Vector2i(2, 1), 0], [DESK, Vector2i(3, 3), 0]])
+	var grid := _legacy_grid([[SCANNER, Vector2i(2, 2), 0], [DESK, Vector2i(3, 3), 0]])
 	assert_bool(grid.apply(BuildEdit.remove_object(2)).ok).is_true()
 	assert_bool(StaffSpots.blocked(grid, 1)).is_false()
 	var floor_gone := grid.apply(BuildEdit.remove_floor(Vector2i(3, 2)))

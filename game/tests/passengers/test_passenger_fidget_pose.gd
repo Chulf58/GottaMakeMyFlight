@@ -268,12 +268,12 @@ func test_security_alarm_reaction_and_yield_to_repack_and_walk() -> void:
 	assert_bool(mod.active).is_false()
 	assert_float(mod.weight).is_equal(0.0)
 
-	while p.security_phase != SecurityRuntime.Phase.REPACK and sec.world.clock.tick < 1500:
+	while p.security_phase != SecurityRuntime.Phase.BODY_CHECK and sec.world.clock.tick < 1500:
 		sec.world.step()
 		views.draw()
-	assert_int(p.security_phase).is_equal(SecurityRuntime.Phase.REPACK)
+	assert_int(p.security_phase).is_equal(SecurityRuntime.Phase.BODY_CHECK)
 
-	# Early REPACK ticks (before RepackPose eases in): hands-up + step-back lean.
+	# BODY_CHECK on the basic scanner keeps arms-up Mode.ALARM active past SCAN_REACTION_TICKS.
 	for _i in 6:
 		sec.world.step()
 		views.draw()
@@ -292,15 +292,6 @@ func test_security_alarm_reaction_and_yield_to_repack_and_walk() -> void:
 	assert_float(arm_delta).is_greater(0.8)
 	assert_float(spine_delta).is_greater(0.05)
 
-	# Mid-REPACK: PassengerFidgetPose yields cleanly to RepackPose.
-	while p.security_work > 40 and sec.world.clock.tick < 1500:
-		sec.world.step()
-		views.draw()
-	assert_float(RepackPose.weight_for(p)).is_equal(1.0)
-	assert_bool(mod.active).is_false()
-	assert_float(mod.weight).is_equal(0.0)
-
-	# Post-REPACK walking exit to TO_GATE keeps PassengerFidgetPose yielded.
 	while p.stage != Passenger.Stage.TO_GATE and sec.world.clock.tick < 1500:
 		sec.world.step()
 		views.draw()
@@ -308,6 +299,31 @@ func test_security_alarm_reaction_and_yield_to_repack_and_walk() -> void:
 	assert_bool(p.is_moving()).is_true()
 	assert_bool(mod.active).is_false()
 	assert_float(mod.weight).is_equal(0.0)
+
+	# A bag-liquids passenger at the basic scanner enters REPACK and yields cleanly to RepackPose.
+	var repack_id := sec.send(1, true, false)
+	var rp := sec.world.passenger(repack_id)
+	while rp.security_phase != SecurityRuntime.Phase.REPACK and sec.world.clock.tick < 2500:
+		sec.world.step()
+		views.draw()
+	assert_int(rp.security_phase).is_equal(SecurityRuntime.Phase.REPACK)
+	var r_node := views.node_for(repack_id)
+	var r_mod := _fidget_of(r_node)
+	assert_object(r_mod).is_not_null()
+	while rp.security_work > 40 and sec.world.clock.tick < 2500:
+		sec.world.step()
+		views.draw()
+	assert_float(RepackPose.weight_for(rp)).is_equal(1.0)
+	assert_bool(r_mod.active).is_false()
+	assert_float(r_mod.weight).is_equal(0.0)
+
+	while rp.stage != Passenger.Stage.TO_GATE and sec.world.clock.tick < 2500:
+		sec.world.step()
+		views.draw()
+	assert_int(rp.stage).is_equal(Passenger.Stage.TO_GATE)
+	assert_bool(rp.is_moving()).is_true()
+	assert_bool(r_mod.active).is_false()
+	assert_float(r_mod.weight).is_equal(0.0)
 
 
 func test_security_liquids_reaction_head_shake_and_shrug() -> void:
