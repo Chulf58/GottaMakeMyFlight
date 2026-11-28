@@ -50,6 +50,12 @@ var _revision := 0
 var _note := ""
 var _note_cell := Vector2i.ZERO
 var _key := ""
+var _preview_key: Array = []
+var _cached_preview := {}
+var _wallet_key: Array = []
+var _cached_wallet_result: BuildResult
+var _plan_builds := 0
+var _ghost_builds := 0
 var _valid_material := _tint(BuildMode.VALID_TINT)
 var _invalid_material := _tint(BuildMode.INVALID_TINT)
 
@@ -71,9 +77,15 @@ func _ready() -> void:
 	_ghost.name = "TemplateGhost"
 	add_child(_ghost)
 	_mode.tool_changed.connect(func(_tool: BuildMode.Tool) -> void: disarm())
-	_mode.grid.edit_applied.connect(func(_e: BuildEdit, _r: BuildResult) -> void: _revision += 1)
-	_mode.grid.graph_changed.connect(func(_cells: Array[Vector2i]) -> void: _revision += 1)
+	_mode.grid.edit_applied.connect(_on_grid_edit)
+	_mode.grid.graph_changed.connect(_on_grid_graph)
+	if _mode.grid is SiteGrid and (_mode.grid as SiteGrid).land != null:
+		(_mode.grid as SiteGrid).land.changed.connect(_on_grid_changed)
 	library.changed.connect(_on_library_changed)
+
+
+func _exit_tree() -> void:
+	_invalidate_cache()
 
 
 func _process(_delta: float) -> void:
@@ -127,7 +139,7 @@ func try_arm(index: int) -> bool:
 		armed = -1
 		capturing = false
 		_clear_ghost()
-		_key = ""
+		_invalidate_cache()
 		_status = locked
 		status_changed.emit(locked)
 		armed_changed.emit()
@@ -145,7 +157,7 @@ func arm(index: int) -> void:
 	armed = index
 	capturing = false
 	turns = 0
-	_key = ""
+	_invalidate_cache()
 	_set_status(PLACE_HINT % library.get_template(index).name)
 	armed_changed.emit()
 
@@ -154,7 +166,7 @@ func arm(index: int) -> void:
 func arm_capture() -> void:
 	armed = -1
 	capturing = true
-	_key = ""
+	_invalidate_cache()
 	_set_status(PICK_ROOM)
 	armed_changed.emit()
 
@@ -165,14 +177,14 @@ func disarm() -> void:
 	armed = -1
 	capturing = false
 	_clear_ghost()
-	_key = ""
+	_invalidate_cache()
 	_set_status(_mode.status_text())
 	armed_changed.emit()
 
 
 func rotate_turns() -> void:
 	turns = (turns + 1) % 4
-	_key = ""
+	_invalidate_cache()
 	armed_changed.emit()
 
 
@@ -195,7 +207,7 @@ func save_room(room_id: int) -> RoomTemplate:
 	library.add(template)
 	capturing = false
 	_clear_ghost()
-	_key = ""
+	_invalidate_cache()
 	_set_status(SAVED % template.name)
 	armed_changed.emit()
 	return template
@@ -211,35 +223,8 @@ func save_room(room_id: int) -> RoomTemplate:
 ## cell would have four links; then the wallet must pay for all of it at full
 ## price.
 func plan_at(cell: Vector2i) -> Dictionary:
-	var grid := _mode.grid
-	var edits := library.get_template(armed).plan(cell, turns, grid)
-	var awards_lock := _awards_lock_refusal(edits)
-	if awards_lock != null:
-		return {"edits": edits, "result": awards_lock}
-	var locked := BuildUnlocks.edits_lock_args(
-		_mode.unlocks, _mode.require_unlocks, _tier_edits(edits)
-	)
-	if not locked.is_empty():
-		var refusal := BuildResult.refused(BuildResult.Reason.LOCKED)
-		refusal.detail = (
-			BuildUnlocks.NOT_WIRED_TEXT
-			if locked.has("unwired")
-			else "Locked at tier %d" % locked["tier"]
-		)
-		refusal.detail_args = locked
-		return {"edits": edits, "result": refusal}
-	var scratch := BuildUndo.trial_copy_of(grid)
-	var result := scratch.apply_sequence(edits, BeltShaper.crossing_problem)
-	if result.ok:
-		var near := BeltShaper.around(_cells(library.get_template(armed).rect_at(cell, turns)))
-		result = _four_links(scratch, near)
-		if result.ok:
-			var reshapes := BeltShaper.reshape_edits(scratch, near)
-			result = scratch.apply_sequence(reshapes, Callable())
-			edits.append_array(reshapes)
-	if result.ok:
-		result = BuildTransaction.check(grid, edits, _mode.wallet())
-	return {"edits": edits, "result": result}
+	var cached := _preview_at(cell)
+	return {"edits": cached["edits"], "result": _result_for_wallet(cached)}
 
 
 ## Whether the armed template can be pasted centred on `cell` (plan_at()).
@@ -280,7 +265,7 @@ func paste_at(cell: Vector2i) -> BuildResult:
 	_note = PLACED % [template.name, spent]
 	_note_cell = cell
 	_set_status(_note)
-	_key = ""
+	_invalidate_cache()
 	_mode.grid_changed.emit()
 	var rect := template.rect_at(cell, turns)
 	var placed_ids: Array[int] = []
@@ -300,8 +285,13 @@ func preview_price() -> Vector2i:
 	var cell: Variant = _pointer_cell() if armed >= 0 else null
 	if cell == null:
 		return Vector2i.ZERO
-	var edits := library.get_template(armed).plan(cell, turns, _mode.grid)
-	var needed := BuildTransaction.needed(_mode.grid, edits)
+	return preview_price_at(cell)
+
+
+func preview_price_at(cell: Vector2i) -> Vector2i:
+	if armed < 0 or armed >= library.size() or _mode == null or _mode.grid == null:
+		return Vector2i.ZERO
+	var needed := int(_preview_at(cell)["needed"])
 	return Vector2i(needed, needed)
 
 
@@ -330,14 +320,20 @@ func _pointer_cell() -> Variant:
 ## Redraws the ghost and the status line when the cell, the turn, the grid or
 ## the balance changed.
 func _hover(cell: Variant) -> void:
-	var key := "%s:%d:%s:%d:%d:%d" % [cell, armed, capturing, turns, _revision, _balance()]
-	if key == _key:
-		return
-	_key = key
-	_clear_ghost()
 	if cell == null:
+		var empty_key := "null:%d:%s:%d:%d" % [armed, capturing, turns, _revision]
+		if empty_key == _key:
+			return
+		_key = empty_key
+		_clear_ghost()
 		return
 	if capturing:
+		var capture_key := "%s:capture:%d" % [cell, _revision]
+		if capture_key == _key:
+			return
+		_key = capture_key
+		_clear_ghost()
+		_ghost_builds += 1
 		var room := _mode.grid.get_room(_mode.grid.room_at(cell))
 		if room.is_empty():
 			_set_status(PICK_ROOM)
@@ -346,15 +342,27 @@ func _hover(cell: Variant) -> void:
 		_set_status(SAVE_ROOM % RoomTemplate.capture(_mode.grid, _mode.grid.room_at(cell)).name)
 		return
 	var template := library.get_template(armed)
-	var planned := plan_at(cell)
-	var checked: BuildResult = planned["result"]
+	var cached := _preview_at(cell)
+	var checked := _result_for_wallet(cached)
+	var note_flag := 1 if (_note != "" and cell == _note_cell) else 0
+	var key := (
+		"%s:%d:%d:%d:%s:%d:%s:%d"
+		% [cell, armed, turns, _revision, checked.ok, checked.reason, checked.detail, note_flag]
+	)
+	if not checked.ok:
+		key += ":" + str(checked.detail_args)
+	if key == _key:
+		return
+	_key = key
+	_clear_ghost()
+	_ghost_builds += 1
 	var material := _valid_material if checked.ok else _invalid_material
 	# A belt cell is drawn in the shape its reshape gives it.
 	var shaped := {}
-	for edit in planned["edits"]:
+	for edit in cached["edits"]:
 		if edit.kind == BuildEdit.Kind.RESHAPE_BELT:
 			shaped[edit.cell] = edit
-	for edit in planned["edits"]:
+	for edit in cached["edits"]:
 		if edit.kind == BuildEdit.Kind.PLACE_ROOM:
 			_ghost_slab(Rect2i(edit.cell, edit.room_size), material)
 		elif edit.kind == BuildEdit.Kind.PLACE_OBJECT:
@@ -436,8 +444,128 @@ func _set_status(text: String) -> void:
 
 ## A load replaced the list: a paste armed past its end is dropped.
 func _on_library_changed() -> void:
+	_revision += 1
+	_invalidate_cache()
 	if armed >= library.size():
 		disarm()
+
+
+func _invalidate_cache() -> void:
+	_key = ""
+	_preview_key = []
+	_cached_preview = {}
+	_wallet_key = []
+	_cached_wallet_result = null
+
+
+func _on_grid_edit(_edit: BuildEdit, _result: BuildResult) -> void:
+	_on_grid_changed()
+
+
+func _on_grid_graph(_cells: Array[Vector2i]) -> void:
+	_on_grid_changed()
+
+
+func _on_grid_changed() -> void:
+	_revision += 1
+	_invalidate_cache()
+
+
+func _preview_key_for(cell: Vector2i) -> Array:
+	var grid_id := _mode.grid.get_instance_id() if _mode.grid != null else 0
+	var template := library.get_template(armed)
+	var template_id := template.get_instance_id() if template != null else 0
+	var unlocks := _mode.unlocks
+	var unlocks_id := unlocks.get_instance_id() if unlocks != null else 0
+	var tier := unlocks.tier() if unlocks != null else -1
+	var made := unlocks.made_total() if unlocks != null else 0
+	var quality := (
+		AirportRating.quality_percent(unlocks.rating.stars())
+		if unlocks != null and unlocks.rating != null
+		else -1
+	)
+	var awards := _mode.awards
+	var awards_id := awards.get_instance_id() if awards != null else 0
+	var trophies := awards.trophies_earned() if awards != null else 0
+	return [
+		cell,
+		armed,
+		turns,
+		_revision,
+		library.get_instance_id(),
+		template_id,
+		grid_id,
+		_mode.require_unlocks,
+		unlocks_id,
+		tier,
+		made,
+		quality,
+		awards_id,
+		trophies,
+		DemoMode.is_demo(),
+	]
+
+
+func _preview_at(cell: Vector2i) -> Dictionary:
+	var key := _preview_key_for(cell)
+	if key == _preview_key and not _cached_preview.is_empty():
+		return _cached_preview
+	_plan_builds += 1
+	var grid := _mode.grid
+	var template := library.get_template(armed)
+	var edits := template.plan(cell, turns, grid)
+	var needed := BuildTransaction.needed(grid, edits)
+	var result := _compute_preview_result(grid, template, cell, edits)
+	_preview_key = key
+	_cached_preview = {"edits": edits, "result": result, "needed": needed}
+	_wallet_key = []
+	_cached_wallet_result = null
+	return _cached_preview
+
+
+func _compute_preview_result(
+	grid: BuildGrid, template: RoomTemplate, cell: Vector2i, edits: Array[BuildEdit]
+) -> BuildResult:
+	var awards_lock := _awards_lock_refusal(edits)
+	if awards_lock != null:
+		return awards_lock
+	var locked := BuildUnlocks.edits_lock_args(
+		_mode.unlocks, _mode.require_unlocks, _tier_edits(edits)
+	)
+	if not locked.is_empty():
+		var refusal := BuildResult.refused(BuildResult.Reason.LOCKED)
+		refusal.detail = (
+			BuildUnlocks.NOT_WIRED_TEXT
+			if locked.has("unwired")
+			else "Locked at tier %d" % locked["tier"]
+		)
+		refusal.detail_args = locked
+		return refusal
+	var scratch := BuildUndo.trial_copy_of(grid)
+	var result := scratch.apply_sequence(edits, BeltShaper.crossing_problem)
+	if not result.ok:
+		return result
+	var near := BeltShaper.around(_cells(template.rect_at(cell, turns)))
+	result = _four_links(scratch, near)
+	if not result.ok:
+		return result
+	var reshapes := BeltShaper.reshape_edits(scratch, near)
+	result = scratch.apply_sequence(reshapes, Callable())
+	edits.append_array(reshapes)
+	return result
+
+
+func _result_for_wallet(cached: Dictionary) -> BuildResult:
+	var base: BuildResult = cached["result"]
+	var wallet := _mode.wallet()
+	if not base.ok or wallet == null:
+		return base
+	var wkey := [_preview_key, wallet.get_instance_id(), wallet.balance]
+	if wkey == _wallet_key and _cached_wallet_result != null:
+		return _cached_wallet_result
+	_wallet_key = wkey
+	_cached_wallet_result = BuildTransaction.check(_mode.grid, cached["edits"], wallet)
+	return _cached_wallet_result
 
 
 func _awards_lock_refusal(edits: Array[BuildEdit]) -> BuildResult:

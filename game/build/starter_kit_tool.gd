@@ -17,6 +17,10 @@ var _revision := 0
 var _note := ""
 var _note_cell := Vector2i.ZERO
 var _key := ""
+var _preview_key: Array = []
+var _cached_preview := {}
+var _plan_builds := 0
+var _ghost_builds := 0
 var _valid_material := _tint(BuildMode.VALID_TINT)
 var _invalid_material := _tint(BuildMode.INVALID_TINT)
 var _wall_block_material := BuildGhost.material(BuildMode.WALL_BLOCK_TINT, true)
@@ -39,8 +43,14 @@ func _ready() -> void:
 	_ghost.name = "StarterKitGhost"
 	add_child(_ghost)
 	_mode.tool_changed.connect(_on_tool_changed)
-	_mode.grid.edit_applied.connect(func(_e: BuildEdit, _r: BuildResult) -> void: _revision += 1)
-	_mode.grid.graph_changed.connect(func(_cells: Array[Vector2i]) -> void: _revision += 1)
+	_mode.grid.edit_applied.connect(_on_grid_edit)
+	_mode.grid.graph_changed.connect(_on_grid_graph)
+	if _mode.grid is SiteGrid and (_mode.grid as SiteGrid).land != null:
+		(_mode.grid as SiteGrid).land.changed.connect(_on_grid_changed)
+
+
+func _exit_tree() -> void:
+	_invalidate_cache()
 
 
 func _process(_delta: float) -> void:
@@ -88,7 +98,7 @@ func try_arm(kit_id: StringName) -> bool:
 	if locked != "":
 		armed = &""
 		_clear_ghost()
-		_key = ""
+		_invalidate_cache()
 		_set_status(locked)
 		armed_changed.emit()
 		_mode.notify_refusal(locked)
@@ -112,7 +122,7 @@ func arm(kit_id: StringName) -> void:
 	armed = kit_id
 	turns = 0
 	_note = ""
-	_key = ""
+	_invalidate_cache()
 	_set_status(
 		tr("{kit}: click to place", "build status").format(
 			{"kit": BuildMenuCatalog.shown(StarterRoomKits.display_name(kit_id))}
@@ -127,25 +137,22 @@ func disarm() -> void:
 	armed = &""
 	_note = ""
 	_clear_ghost()
-	_key = ""
+	_invalidate_cache()
 	_set_status(_mode.status_text() if _mode != null else "")
 	armed_changed.emit()
 
 
 func rotate_turns() -> void:
 	turns = (turns + 1) % 4
-	_key = ""
+	_invalidate_cache()
 	armed_changed.emit()
 
 
 func plan_at(cell: Vector2i) -> Dictionary:
-	var grid := _mode.grid
-	var edits := StarterRoomKits.plan(grid, armed, cell, turns)
-	var rule := StarterRoomKits.placement_rule(armed, cell, turns)
-	var staged := BuildTransaction.stage_composite(
-		grid, edits, _mode.wallet(), _mode.unlocks, _mode.require_unlocks, rule
-	)
-	return {"edits": edits, "result": staged["result"], "net": staged["net"]}
+	var cached := _preview_at(cell)
+	var wallet := _mode.wallet()
+	var net: int = 0 if wallet == null else int(cached["net"])
+	return {"edits": cached["edits"], "result": _result_for_wallet(cached), "net": net}
 
 
 func check_at(cell: Vector2i) -> BuildResult:
@@ -175,7 +182,7 @@ func place_at(cell: Vector2i) -> BuildResult:
 	_note = tr("Placed {kit} for {cost}", "build status").format({"kit": kit_name, "cost": spent})
 	_note_cell = cell
 	_set_status(_note)
-	_key = ""
+	_invalidate_cache()
 	_mode._redraw()
 	_mode.grid_changed.emit()
 	var rect := StarterRoomKits.rect_at(armed, cell, turns)
@@ -199,14 +206,10 @@ func preview_price() -> Vector2i:
 func preview_price_at(cell: Vector2i) -> Vector2i:
 	if not is_active() or _mode == null or _mode.grid == null:
 		return Vector2i.ZERO
-	var edits := StarterRoomKits.plan(_mode.grid, armed, cell, turns)
-	var rule := StarterRoomKits.placement_rule(armed, cell, turns)
-	var staged := BuildTransaction.preview_composite(
-		_mode.grid, edits, _mode.unlocks, _mode.require_unlocks, rule
-	)
-	if not (staged["result"] as BuildResult).ok:
+	var cached := _preview_at(cell)
+	if not (cached["result"] as BuildResult).ok:
 		return Vector2i.ZERO
-	var net := maxi(0, int(staged["net"]))
+	var net := maxi(0, int(cached["net"]))
 	return Vector2i(net, net)
 
 
@@ -237,18 +240,30 @@ func _pointer_cell() -> Variant:
 
 
 func _hover(cell: Variant) -> void:
-	var key := "%s:%s:%d:%d:%d" % [cell, armed, turns, _revision, _balance()]
+	if cell == null:
+		var empty_key := "null:%s:%d:%d" % [armed, turns, _revision]
+		if empty_key == _key:
+			return
+		_key = empty_key
+		_clear_ghost()
+		return
+	var cached := _preview_at(cell)
+	var checked := _result_for_wallet(cached)
+	var note_flag := 1 if (_note != "" and cell == _note_cell) else 0
+	var key := (
+		"%s:%s:%d:%d:%s:%d:%s:%d"
+		% [cell, armed, turns, _revision, checked.ok, checked.reason, checked.detail, note_flag]
+	)
+	if not checked.ok:
+		key += ":" + str(checked.detail_args)
 	if key == _key:
 		return
 	_key = key
 	_clear_ghost()
-	if cell == null:
-		return
+	_ghost_builds += 1
 	var kit_name := BuildMenuCatalog.shown(StarterRoomKits.display_name(armed))
-	var planned := plan_at(cell)
-	var checked: BuildResult = planned["result"]
 	var material := _valid_material if checked.ok else _invalid_material
-	for edit: BuildEdit in planned["edits"]:
+	for edit: BuildEdit in cached["edits"]:
 		if edit.kind == BuildEdit.Kind.PLACE_ROOM:
 			_ghost_slab(Rect2i(edit.cell, edit.room_size), material)
 		elif edit.kind == BuildEdit.Kind.PLACE_WALL:
@@ -360,3 +375,81 @@ func _set_status(text: String) -> void:
 		return
 	_status = text
 	status_changed.emit(text)
+
+
+func _invalidate_cache() -> void:
+	_key = ""
+	_preview_key = []
+	_cached_preview = {}
+
+
+func _on_grid_edit(_edit: BuildEdit, _result: BuildResult) -> void:
+	_on_grid_changed()
+
+
+func _on_grid_graph(_cells: Array[Vector2i]) -> void:
+	_on_grid_changed()
+
+
+func _on_grid_changed() -> void:
+	_revision += 1
+	_invalidate_cache()
+
+
+func _preview_key_for(cell: Vector2i) -> Array:
+	var grid_id := _mode.grid.get_instance_id() if _mode.grid != null else 0
+	var unlocks := _mode.unlocks
+	var unlocks_id := unlocks.get_instance_id() if unlocks != null else 0
+	var tier := unlocks.tier() if unlocks != null else -1
+	var made := unlocks.made_total() if unlocks != null else 0
+	var quality := (
+		AirportRating.quality_percent(unlocks.rating.stars())
+		if unlocks != null and unlocks.rating != null
+		else -1
+	)
+	return [
+		cell,
+		armed,
+		turns,
+		_revision,
+		grid_id,
+		_mode.require_unlocks,
+		unlocks_id,
+		tier,
+		made,
+		quality,
+		DemoMode.is_demo(),
+	]
+
+
+func _preview_at(cell: Vector2i) -> Dictionary:
+	var key := _preview_key_for(cell)
+	if key == _preview_key and not _cached_preview.is_empty():
+		return _cached_preview
+	_plan_builds += 1
+	var grid := _mode.grid
+	var edits := StarterRoomKits.plan(grid, armed, cell, turns)
+	var rule := StarterRoomKits.placement_rule(armed, cell, turns)
+	var staged := BuildTransaction.preview_composite(
+		grid, edits, _mode.unlocks, _mode.require_unlocks, rule
+	)
+	_preview_key = key
+	_cached_preview = {
+		"edits": edits,
+		"result": staged["result"],
+		"net": staged["net"],
+	}
+	return _cached_preview
+
+
+func _result_for_wallet(cached: Dictionary) -> BuildResult:
+	var result: BuildResult = cached["result"]
+	var wallet := _mode.wallet()
+	if not result.ok or wallet == null:
+		return result
+	var net := int(cached["net"])
+	if net > 0 and not wallet.can_afford(net):
+		return BuildResult.refused(BuildResult.Reason.CANT_AFFORD)
+	if net < 0 and not wallet.can_credit(-net, Wallet.Category.BUILD):
+		return BuildResult.refused(BuildResult.Reason.WALLET_FULL)
+	return result
