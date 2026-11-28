@@ -33,11 +33,16 @@ static func show_status(mode: BuildMode, result: BuildResult) -> void:
 		var room_type: StringName = BuildMode.TOOL_ROOMS[mode.tool]
 		var extend := RoomResize.auto_extend(mode.grid, area, room_type)
 		if not extend.is_empty():
-			mode._set_status(
-				RoomResize.extend_label(
-					mode.grid, int(extend["room_id"]), room_type, extend["rect"], mode.wallet()
-				)
+			var ext_id := int(extend["room_id"])
+			var ext_rect: Rect2i = extend["rect"]
+			var text := RoomResize.extend_label(
+				mode.grid, ext_id, room_type, ext_rect, mode.wallet()
 			)
+			if RoomResize.check(mode.grid, ext_id, ext_rect, mode.wallet()).ok:
+				var warn := RoomTool.too_small_note(mode.grid, area, room_type)
+				if warn != "":
+					text += "  " + warn
+			mode._set_status(text)
 			return
 		mode._set_status(
 			RoomTool.drag_label(
