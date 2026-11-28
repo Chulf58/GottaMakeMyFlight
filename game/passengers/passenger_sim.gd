@@ -55,6 +55,17 @@ const CHECKIN_TICKS := 60
 const SIT_DOWN_TICKS := 24
 const STAND_UP_TICKS := 24
 const DEFAULT_PASSENGERS := 24
+const FOLLOW_WALK_STAGES := [
+	Passenger.Stage.TO_GATE,
+	Passenger.Stage.TO_AIRSIDE_EXIT,
+	Passenger.Stage.TO_ROAD_EXIT,
+	Passenger.Stage.TO_PARKED_CAR,
+	Passenger.Stage.TO_CURB_PICKUP,
+	Passenger.Stage.TO_CLAIM,
+	Passenger.Stage.CAFE_WALK,
+	Passenger.Stage.TOILET_WALK,
+	Passenger.Stage.SHOP_WALK,
+]
 ## The last scheduled spawn of a flight is this many ticks before doors close
 ## (68 s: clears check-in and security with positive slack before doors close).
 const LAST_SPAWN_LEAD_TICKS := 1360
@@ -394,6 +405,7 @@ func on_tick(new_tick: int) -> void:
 	arrivals.step()
 	PassengerLifecycle.spawn_due(self)
 	PassengerArrivals.spawn_due(self)
+	PassengerArrivals.gate_boarding(self)
 	if staff != null:
 		staff.step()
 	_reconcile()
@@ -817,9 +829,19 @@ func _move(p: Passenger) -> void:
 	# The line outside moves up together at a walk, so it keeps its spacing.
 	if entrance.waiting(p.id):
 		speed = mini(speed, WALK_MM)
+		if p.apron.size() >= 2 and p.apron_mm < p.apron_total_mm():
+			speed = OutsideWalks.follow_step(self, p, speed)
 	elif p.stage == Passenger.Stage.SPAWNED and entrance.has_claim(p.id):
 		# Admitted walkers reach the door one at a time, a gap apart.
-		speed = entrance.step_of(p, speed)
+		speed = entrance.step_of(p, speed, self)
+		speed = OutsideWalks.follow_step(self, p, speed)
+	elif (
+		p.stage == Passenger.Stage.DEPLANING
+		or p.walking_outside()
+		or (p.stage == Passenger.Stage.SPAWNED and p.apron_mm < p.apron_total_mm())
+		or p.stage in FOLLOW_WALK_STAGES
+	):
+		speed = OutsideWalks.follow_step(self, p, speed)
 	if p.stage == Passenger.Stage.DEPLANING or p.walking_outside():
 		PassengerArrivals.step_outside(self, p, speed)
 	elif p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED:

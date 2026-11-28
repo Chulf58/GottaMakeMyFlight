@@ -36,8 +36,9 @@ extends RefCounted
 ## the walker ahead is GAP_MM from its point. With no free spot it waits pending
 ## on its own point, keeping its exit, until one frees.
 
-## The least walk between two walkers in one file, in mm.
+## The least walk between two walkers in one file, in mm (ROLLER_GAP_MM behind a pulled roller).
 const GAP_MM := 700
+const ROLLER_GAP_MM := 1400
 ## Tighter single-body gap for bus riders rushing up airstairs during DOORS_CLOSED grace.
 const BUS_GRACE_GAP_MM := 450
 ## A save with no walker in any file.
@@ -84,11 +85,22 @@ static func plane_left(p: Passenger) -> int:
 	return p.apron_total_mm() - p.apron_mm
 
 
+## Minimum walk gap behind `ahead` in mm: clears a pulled roller when `ahead` pulls one.
+static func gap_mm_behind(ahead: Passenger) -> int:
+	if ahead != null and QueueRipple.pulls_roller(ahead):
+		return ROLLER_GAP_MM
+	return GAP_MM
+
+
 ## Ticks one walker adds behind another in a file, at a walk: the gap, plus
 ## one tick because a follower stepped before its predecessor in a tick sees
 ## where the predecessor was on the tick before.
 static func step_ticks() -> int:
 	return JourneyForecast.walk_ticks(GAP_MM) + 1
+
+
+static func step_ticks_for(ahead: Passenger) -> int:
+	return JourneyForecast.walk_ticks(gap_mm_behind(ahead)) + 1
 
 
 ## Clears what is derived from the layout and the passengers.
@@ -260,9 +272,9 @@ func _hold(id: int, on: bool) -> void:
 		_pending.erase(id)
 
 
-## After `p` stepped: once GAP_MM out on the apron it leaves its door file.
+## After `p` stepped: once its clearance gap out on the apron it leaves its door file.
 func moved(p: Passenger) -> void:
-	if p.stage == Passenger.Stage.APRON and _door_of.has(p.id) and p.apron_mm >= GAP_MM:
+	if p.stage == Passenger.Stage.APRON and _door_of.has(p.id) and p.apron_mm >= gap_mm_behind(p):
 		_take(_doors, _door_of, p.id)
 
 
@@ -432,13 +444,13 @@ func queued(sim: PassengerSim, p: Passenger, own: Dictionary) -> int:
 	var outside_free := {}
 	var popped := {}
 	var overtaken := {}
-	var gap := step_ticks()
 	for e: Dictionary in entries:
 		if e["door_tick"] < 0:
 			outside.append([e["plane_tick"], e["id"], e])
 			# Still in its door file: the next walker indoors waits for it.
-			if e["trail"] < GAP_MM and e["id"] != p.id:
-				var free: int = sim.tick + JourneyForecast.walk_ticks(GAP_MM - e["trail"]) + 1
+			var out_gap := gap_mm_behind(sim.get_passenger(e["id"]))
+			if e["trail"] < out_gap and e["id"] != p.id:
+				var free: int = sim.tick + JourneyForecast.walk_ticks(out_gap - e["trail"]) + 1
 				door_free[e["door"]] = maxi(door_free.get(e["door"], free), free)
 				corridor_free[e["door"]] = maxi(corridor_free.get(e["door"], free), free)
 				outside_free[e["door"]] = maxi(outside_free.get(e["door"], free), free)
@@ -467,6 +479,8 @@ func queued(sim: PassengerSim, p: Passenger, own: Dictionary) -> int:
 				continue
 			var delays: Array = overtaken.get(door, [])
 			var pick := _next_door_pick(
+				sim,
+				p,
 				sim.tick,
 				list,
 				corridor_free.get(door, -JourneyForecast.NEVER),
@@ -481,8 +495,11 @@ func queued(sim: PassengerSim, p: Passenger, own: Dictionary) -> int:
 				best = [due, e["id"], door, at_door, pick]
 		if best.is_empty():
 			break
-		var arrive := maxi(best[0], plane_free + gap)
-		plane_free = arrive
+		var arrive := maxi(best[0], plane_free)
+		var best_p := p if best[1] == p.id else sim.get_passenger(best[1])
+		var best_gap_mm := gap_mm_behind(best_p)
+		var best_step_ticks := step_ticks_for(best_p)
+		plane_free = arrive + best_step_ticks
 		if best[2] == 0:
 			o += 1
 		else:
@@ -492,9 +509,9 @@ func queued(sim: PassengerSim, p: Passenger, own: Dictionary) -> int:
 			# indoors reaches the door a gap after that. A pending walker on a
 			# wait spot is off the line and does not delay corridor_free behind
 			# it until admitted.
-			door_free[door] = best[3] + arrive - best[0] + gap
+			door_free[door] = best[3] + arrive - best[0] + best_step_ticks
+			var walk_gap := JourneyForecast.walk_ticks(best_gap_mm)
 			if not (_pending.has(picked["id"]) and waiters.owed_mm(picked["id"]) > 0):
-				var walk_gap := JourneyForecast.walk_ticks(GAP_MM)
 				corridor_free[door] = (
 					maxi(corridor_free.get(door, picked["door_tick"]), picked["door_tick"])
 					+ walk_gap
@@ -504,7 +521,7 @@ func queued(sim: PassengerSim, p: Passenger, own: Dictionary) -> int:
 				popped[door] = door_popped
 			if best[4] > 0:
 				var delays: Array = overtaken.get(door, [])
-				delays.append(int(picked.get("enter_tick", sim.tick)))
+				delays.append([int(picked.get("enter_tick", sim.tick)), walk_gap])
 				overtaken[door] = delays
 		if best[1] == p.id:
 			return arrive
@@ -512,12 +529,18 @@ func queued(sim: PassengerSim, p: Passenger, own: Dictionary) -> int:
 
 
 func _next_door_pick(
-	now: int, list: Array, free_at: int, out_free: int, popped: Array, delays: Array
+	sim: PassengerSim,
+	p: Passenger,
+	now: int,
+	list: Array,
+	free_at: int,
+	out_free: int,
+	popped: Array,
+	delays: Array
 ) -> int:
 	var head: Dictionary = list[0][2]
 	var base := maxi(head["door_tick"], free_at)
 	if base > head["door_tick"]:
-		var walk_gap := JourneyForecast.walk_ticks(GAP_MM)
 		for idx in range(1, list.size()):
 			var cand: Dictionary = list[idx][2]
 			if cand["door_tick"] >= base:
@@ -525,29 +548,39 @@ func _next_door_pick(
 			var enter := int(cand.get("enter_tick", now))
 			if enter <= now:
 				continue
-			var same_or_later := 0
-			for t: int in delays:
-				if t >= enter:
-					same_or_later += 1
-			if cand["door_tick"] >= base - same_or_later * walk_gap:
+			var delay_ticks := 0
+			for d: Array in delays:
+				if int(d[0]) >= enter:
+					delay_ticks += int(d[1])
+			if cand["door_tick"] >= base - delay_ticks:
 				continue
-			if _clears_corridor(now, enter, cand["door_tick"], out_free, popped, list, idx):
+			if _clears_corridor(sim, p, now, enter, cand["door_tick"], out_free, popped, list, idx):
 				return idx
 	return 0
 
 
 func _clears_corridor(
-	now: int, enter: int, cand_door: int, out_free: int, popped: Array, list: Array, until_idx: int
+	sim: PassengerSim,
+	p: Passenger,
+	now: int,
+	enter: int,
+	cand_door: int,
+	out_free: int,
+	popped: Array,
+	list: Array,
+	until_idx: int
 ) -> bool:
-	var walk_gap := JourneyForecast.walk_ticks(GAP_MM)
 	var cand_rem := cand_door - enter
 	var has_prev := false
 	var prev_rem := 0
+	var prev_walk_gap := 0
 	for u: Dictionary in popped:
 		var start := maxi(now, int(u.get("enter_tick", now)))
 		if start >= enter:
 			continue
-		prev_rem = _next_corridor_rem(u, start, enter, out_free, walk_gap, has_prev, prev_rem)
+		prev_rem = _next_corridor_rem(u, start, enter, out_free, prev_walk_gap, has_prev, prev_rem)
+		var u_p := p if u["id"] == p.id else sim.get_passenger(u["id"])
+		prev_walk_gap = JourneyForecast.walk_ticks(gap_mm_behind(u_p))
 		has_prev = true
 	for j in range(until_idx):
 		var w: Dictionary = list[j][2]
@@ -556,7 +589,9 @@ func _clears_corridor(
 		var start := maxi(now, int(w.get("enter_tick", now)))
 		if start >= enter:
 			return false
-		prev_rem = _next_corridor_rem(w, start, enter, out_free, walk_gap, has_prev, prev_rem)
+		prev_rem = _next_corridor_rem(w, start, enter, out_free, prev_walk_gap, has_prev, prev_rem)
+		var w_p := p if w["id"] == p.id else sim.get_passenger(w["id"])
+		prev_walk_gap = JourneyForecast.walk_ticks(gap_mm_behind(w_p))
 		has_prev = true
 		if cand_rem >= prev_rem:
 			return false
@@ -645,7 +680,7 @@ func _room(sim: PassengerSim, ids: Array, p: Passenger, in_door: bool) -> int:
 	var ahead := sim.get_passenger(ids[k - 1])
 	var mine := _left(p) if in_door else plane_left(p)
 	var theirs := _left(ahead) if in_door else plane_left(ahead)
-	var gap := GAP_MM
+	var gap := gap_mm_behind(ahead)
 	if (
 		not in_door
 		and sim.layout.bus_exits.has(p.exit_object)
@@ -658,7 +693,7 @@ func _room(sim: PassengerSim, ids: Array, p: Passenger, in_door: bool) -> int:
 
 ## The step filed walker `p` may take behind the walkers waiting to join door
 ## `door`'s file that it would come in behind (walk left, _left(), below its
-## own): each holds it GAP_MM back, as it will once it joins, so a walker that
+## own): each holds it gap_mm_behind(q) back, as it will once it joins, so a walker that
 ## turns pending in the line ahead is never walked into (board 54c9e0ce). One
 ## standing on its wait spot is off the line and holds no one: the line walks
 ## past it. Pending walkers wait only on walkers ahead of them, so no wait
@@ -672,16 +707,16 @@ func _room_behind_waiting(sim: PassengerSim, door: int, p: Passenger) -> int:
 			continue
 		var theirs := _left(q)
 		if theirs < mine or (theirs == mine and id < p.id):
-			room = mini(room, maxi(0, mine - theirs - GAP_MM))
+			room = mini(room, maxi(0, mine - theirs - gap_mm_behind(q)))
 	return room
 
 
 ## Where a walker with walk left `left` and id `id` goes in `ids`, or -1 when
-## it would be closer than GAP_MM to the walker ahead. The walker behind it
+## it would be closer than gap_mm_behind(ahead) to the walker ahead. The walker behind it
 ## may be closer: it is capped by the newcomer from the next step on. In a
 ## door file the walk left counts a walk back from a wait spot (_left()), and
 ## the gap is taken from the newcomer's own point (`from`, its door_left()), so
-## one on a wait spot joins once the walker ahead is GAP_MM from its point.
+## one on a wait spot joins once the walker ahead is gap_mm_behind(ahead) from its point.
 func _slot(sim: PassengerSim, ids: Array, left: int, id: int, in_door: bool, from := -1) -> int:
 	var at := ids.size()
 	for k in ids.size():
@@ -693,7 +728,7 @@ func _slot(sim: PassengerSim, ids: Array, left: int, id: int, in_door: bool, fro
 	if at > 0:
 		var ahead := sim.get_passenger(ids[at - 1])
 		var gap_from := from if from >= 0 else left
-		if gap_from - (_left(ahead) if in_door else plane_left(ahead)) < GAP_MM:
+		if gap_from - (_left(ahead) if in_door else plane_left(ahead)) < gap_mm_behind(ahead):
 			return -1
 	return at
 
@@ -754,7 +789,7 @@ func _load_door(entry: Variant, by_id: Dictionary, sim: PassengerSim) -> String:
 ## or "".
 func _member_problem(sim: PassengerSim, p: Passenger, door: int, last: Passenger) -> String:
 	var heading := p.stage == Passenger.Stage.TO_EXIT
-	var out := p.stage == Passenger.Stage.APRON and p.apron_mm < GAP_MM
+	var out := p.stage == Passenger.Stage.APRON and p.apron_mm < gap_mm_behind(p)
 	if p.exit_object != door or not (heading or out) or _door_of.has(p.id):
 		return "passenger %d cannot be in door file %d" % [p.id, door]
 	if heading and not _heads_for(sim, p):
@@ -859,6 +894,6 @@ func _unfiled(by_id: Dictionary, sim: PassengerSim = null) -> String:
 			if not _door_of.has(id) and not _pending.has(id):
 				return "passenger %d heading for exit %d is in no file" % [id, p.exit_object]
 		elif p.stage == Passenger.Stage.APRON:
-			if not _plane_of.has(id) or (p.apron_mm < GAP_MM) != _door_of.has(id):
+			if not _plane_of.has(id) or (p.apron_mm < gap_mm_behind(p)) != _door_of.has(id):
 				return "apron passenger %d is not in the files its walk puts it in" % id
 	return ""

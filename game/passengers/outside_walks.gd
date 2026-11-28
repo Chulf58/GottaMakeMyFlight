@@ -27,11 +27,23 @@ const CHECK_STEP_M := 0.25
 ## How near the door cell's outer edge must lie to the stand's exit sill for
 ## the stand's jet bridge to stand on that exit, in metres.
 const SAME_POINT_M := 0.01
+## Longitudinal same-direction following spacing for free-walking passengers
+## outside BoardingFiles / EntranceLine / station queues, in millimetres.
+const FOLLOW_GAP_MM := 900
+const FOLLOW_ROLLER_GAP_MM := 1400
+const FOLLOW_LATERAL_M := 0.55
+const FOLLOW_DIR_DOT := 0.55
 
 ## How many distance fields revalidate() has searched since the game started
 ## (one per entrance, and one to the plane, per call at most). A count only
 ## the tests read, to show a field is shared by every walker in a call.
 static var fields_searched := 0
+
+static var _follow_cache_sim_id := 0
+static var _follow_cache_tick := -1
+static var _follow_cache_count := -1
+static var _follow_cache_head := 0
+static var _follow_buckets := {}
 
 
 ## The walk in from the road to entrance `entrance`, or empty when there is
@@ -453,3 +465,187 @@ static func _default_departure(sim: PassengerSim, exit_door: int) -> Array[Vecto
 	points.append(centre + out * 1.5)
 	points.append_array(Array(sim.apron_waypoints))
 	return points
+
+
+## Caps `p`'s step this tick (at most `speed`) so it stays behind any actively
+## walking leader heading in the same direction (clearing a leader's pulled
+## roller by FOLLOW_ROLLER_GAP_MM, or FOLLOW_GAP_MM otherwise).
+static func follow_step(sim: PassengerSim, p: Passenger, speed: int) -> int:
+	if speed <= 0 or sim == null or p == null:
+		return speed
+	if (
+		p.stage == Passenger.Stage.DEPLANING
+		and sim.flights != null
+		and BusGatePairing.is_remote_stand_id(sim.flights.flight_stand_id(p.flight_id))
+	):
+		return speed
+	var my_out := _is_outside_walk(p)
+	var mine := _walk_pose_for(sim, p, my_out)
+	if mine.is_empty():
+		return speed
+	var my_pos: Vector2 = mine["pos"]
+	var my_dir: Vector2 = mine["dir"]
+	var buckets := _ensure_follow_cache(sim)
+	var center := _follow_bucket(my_pos)
+	var step := speed
+	for dx in [-1, 0, 1]:
+		for dy in [-1, 0, 1]:
+			var list: Array = buckets.get(Vector2i(center.x + dx, center.y + dy), [])
+			for entry: Dictionary in list:
+				step = _step_against_entry(p, my_pos, my_dir, my_out, entry, step)
+	return step
+
+
+static func _step_against_entry(
+	p: Passenger, my_pos: Vector2, my_dir: Vector2, my_out: bool, entry: Dictionary, step: int
+) -> int:
+	var other_id := int(entry["id"])
+	if other_id == p.id:
+		return step
+	var other_out := bool(entry["out"])
+	var gap_mm := int(entry["gap_mm"])
+	if my_out and other_out and _same_apron_entry(p, entry):
+		var other_mm := int(entry["apron_mm"])
+		if other_mm > p.apron_mm or (other_mm == p.apron_mm and other_id < p.id):
+			return mini(step, maxi(0, other_mm - p.apron_mm - gap_mm))
+		return step
+	if not my_out and not other_out and not bool(entry["is_apron"]):
+		var cell: Vector2i = entry["cell"]
+		if absi(cell.x - p.at.x) > 2 or absi(cell.y - p.at.y) > 2:
+			return step
+	var their_dir: Vector2 = entry["dir"]
+	if my_dir.dot(their_dir) <= FOLLOW_DIR_DOT:
+		return step
+	var their_pos: Vector2 = entry["pos"]
+	var delta: Vector2 = their_pos - my_pos
+	var forward := delta.dot(my_dir)
+	var lateral := absf(delta.x * my_dir.y - delta.y * my_dir.x)
+	if lateral > FOLLOW_LATERAL_M or forward < -0.02:
+		return step
+	if absf(forward) <= 0.02 and p.id < other_id:
+		return step
+	var forward_mm := roundi(maxf(0.0, forward) * 1000.0)
+	return mini(step, maxi(0, forward_mm - gap_mm))
+
+
+static func _ensure_follow_cache(sim: PassengerSim) -> Dictionary:
+	var sim_id := sim.get_instance_id()
+	var pax_count := sim._passengers.size()
+	var head := sim._passengers[0].get_instance_id() if pax_count > 0 else 0
+	if (
+		_follow_cache_sim_id == sim_id
+		and _follow_cache_tick == sim.tick
+		and _follow_cache_count == pax_count
+		and _follow_cache_head == head
+	):
+		return _follow_buckets
+	_follow_cache_sim_id = sim_id
+	_follow_cache_tick = sim.tick
+	_follow_cache_count = pax_count
+	_follow_cache_head = head
+	_follow_buckets = {}
+	for other in sim._passengers:
+		if not _is_active_leader(sim, other):
+			continue
+		var other_out := _is_outside_walk(other)
+		var pose := _walk_pose_for(sim, other, other_out)
+		if pose.is_empty():
+			continue
+		var pos: Vector2 = pose["pos"]
+		var bucket := _follow_bucket(pos)
+		if not _follow_buckets.has(bucket):
+			_follow_buckets[bucket] = []
+		var apron_size := other.apron.size()
+		(
+			(_follow_buckets[bucket] as Array)
+			. append(
+				{
+					"id": other.id,
+					"out": other_out,
+					"is_apron": other.stage == Passenger.Stage.APRON,
+					"cell": other.at,
+					"pos": pos,
+					"dir": pose["dir"],
+					"gap_mm": _follow_gap(other),
+					"apron_mm": other.apron_mm,
+					"apron_size": apron_size,
+					"apron_first": other.apron[0] if apron_size > 0 else Vector3.ZERO,
+					"apron_last": other.apron[apron_size - 1] if apron_size > 0 else Vector3.ZERO,
+				}
+			)
+		)
+	return _follow_buckets
+
+
+static func _follow_bucket(pos: Vector2) -> Vector2i:
+	return Vector2i(floori(pos.x * 0.5), floori(pos.y * 0.5))
+
+
+static func _follow_gap(leader: Passenger) -> int:
+	return FOLLOW_ROLLER_GAP_MM if QueueRipple.pulls_roller(leader) else FOLLOW_GAP_MM
+
+
+static func _is_outside_walk(p: Passenger) -> bool:
+	var outside := (
+		p.stage == Passenger.Stage.DEPLANING
+		or p.walking_outside()
+		or p.stage == Passenger.Stage.SPAWNED
+	)
+	return outside and p.apron.size() >= 2 and p.apron_mm < p.apron_total_mm()
+
+
+static func _is_active_leader(sim: PassengerSim, p: Passenger) -> bool:
+	if p == null or p.is_done() or p.stuck != Passenger.Stuck.NONE:
+		return false
+	if sim.files.is_pending(p.id) or sim.entrance.waiting(p.id):
+		return false
+	if p.stage in PassengerSim.QUEUE_STAGES or p.stage == Passenger.Stage.CAFE_QUEUE:
+		return false
+	if p.stage == Passenger.Stage.APRON or _is_outside_walk(p):
+		return p.apron.size() >= 2 and p.apron_mm < p.apron_total_mm()
+	return p.is_moving()
+
+
+static func _same_apron_entry(p: Passenger, entry: Dictionary) -> bool:
+	var apron_size := p.apron.size()
+	if apron_size != int(entry["apron_size"]) or apron_size < 2:
+		return false
+	return (
+		p.apron[0].is_equal_approx(entry["apron_first"])
+		and p.apron[apron_size - 1].is_equal_approx(entry["apron_last"])
+	)
+
+
+static func _walk_pose_for(sim: PassengerSim, p: Passenger, is_out: bool) -> Dictionary:
+	if p.stage == Passenger.Stage.APRON or is_out:
+		if p.apron.size() < 2 or p.apron_mm >= p.apron_total_mm():
+			return {}
+		var pos3 := p.apron_position()
+		var dir2 := _apron_dir(p)
+		if dir2 == Vector2.ZERO:
+			return {}
+		return {"pos": Vector2(pos3.x, pos3.z), "dir": dir2}
+	if not p.is_moving() or sim.grid == null:
+		return {}
+	var gp := p.grid_position()
+	var origin := sim.grid.origin
+	var next := p.path[p.path_index + 1]
+	var step := Vector2(next.x - p.at.x, next.y - p.at.y)
+	if step == Vector2.ZERO:
+		return {}
+	return {
+		"pos": Vector2(origin.x + gp.x, origin.z + gp.y),
+		"dir": step.normalized(),
+	}
+
+
+static func _apron_dir(p: Passenger) -> Vector2:
+	var left := p.apron_mm
+	for i in range(1, p.apron.size()):
+		var seg_len := p.apron_segment_mm(i)
+		if left < seg_len or i == p.apron.size() - 1:
+			var delta := p.apron[i] - p.apron[i - 1]
+			var flat := Vector2(delta.x, delta.z)
+			return flat.normalized() if flat.length_squared() > 1e-6 else Vector2.ZERO
+		left -= seg_len
+	return Vector2.ZERO

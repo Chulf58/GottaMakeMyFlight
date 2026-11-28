@@ -59,6 +59,11 @@ func test_a_file_waiter_stands_its_roller_and_tips_it_on_walking() -> void:
 	_world = TestBoardingFiles.boarding_world()
 	_world.run_to(TestBoardingFiles.BOARDING + 5)
 	_open_views()
+	var pace := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	pace.carry_on = 0
+	ToiletTestLayout.calm(pace)
+	_world.sim.entrance.forget(pace.id)
+	TestBoardingFiles.turn_out(_world, pace, FILE_CELL)
 	while _followed.size() < FILE_WALKERS:
 		var p := _roller_guest()
 		TestBoardingFiles.turn_out(_world, p, FILE_CELL)

@@ -8,6 +8,7 @@ extends RefCounted
 ## and walks them out the nearest entrance to the road.
 
 const DEBOARD_FINISH_MARGIN_TICKS := 10
+const DEBOARD_HOLD_CAP_TICKS := 300
 const ARRIVAL_NO_ROUTE_TIMEOUT_TICKS := 1200
 const ARRIVAL_MAX_LIFETIME_TICKS := 6000
 const PARK_PICKUP_SHARE := 30
@@ -31,7 +32,9 @@ static func schedule_deboarding(sim: PassengerSim, flight_id: String, count: int
 		count = mini(count, BusGatePairing.BUS_CAPACITY)
 	var window := sim.flights.deboarding_window(flight_id)
 	var start_t := maxi(sim.tick + 1, window.x)
-	var end_t := maxi(start_t, window.y - DEBOARD_FINISH_MARGIN_TICKS)
+	var end_t := mini(
+		maxi(start_t, window.y - DEBOARD_FINISH_MARGIN_TICKS), start_t + maxi(0, count - 1) * 3
+	)
 	for i in count:
 		var at := start_t
 		if count > 1 and end_t > start_t:
@@ -54,6 +57,69 @@ static func spawn_due(sim: PassengerSim) -> void:
 		var entry: Dictionary = sim._arrival_schedule[0]
 		sim._arrival_schedule.remove_at(0)
 		spawn(sim, entry["flight"], int(entry["variant"]))
+
+
+## Flights that still have deboarding arrivals scheduled or outside the terminal
+## (DEPLANING or ON_BUS), mapped to their earliest arrival spawn tick.
+static func active_deboarding_flights(sim: PassengerSim) -> Dictionary:
+	var active := {}
+	for entry: Dictionary in sim._arrival_schedule:
+		var fid := String(entry.get("flight", ""))
+		if fid == "":
+			continue
+		var tick := int(entry.get("tick", sim.tick))
+		if not active.has(fid) or tick < int(active[fid]):
+			active[fid] = tick
+	for p in sim._passengers:
+		if p.is_done() or not p.is_arriving() or p.flight_id == "":
+			continue
+		if p.stage == Passenger.Stage.DEPLANING or p.stage == Passenger.Stage.ON_BUS:
+			if not active.has(p.flight_id) or p.spawn_tick < int(active[p.flight_id]):
+				active[p.flight_id] = p.spawn_tick
+	return active
+
+
+## Latest tick boarding for `flight_id` may stay gated waiting for deboarding
+## arrivals, so a stuck arrival can never deadlock boarding past 1/2 of the window.
+static func deboarding_hold_cap_tick(
+	sim: PassengerSim, flight_id: String, earliest_spawn := -1
+) -> int:
+	if sim.flights == null or flight_id == "":
+		return earliest_spawn + DEBOARD_HOLD_CAP_TICKS if earliest_spawn >= 0 else sim.tick
+	var window := sim.flights.boarding_window(flight_id)
+	if window.x < 0 or window.y <= window.x:
+		var base := earliest_spawn if earliest_spawn >= 0 else sim.tick
+		return base + DEBOARD_HOLD_CAP_TICKS
+	@warning_ignore("integer_division")
+	var cap := mini(DEBOARD_HOLD_CAP_TICKS, maxi(0, (window.y - window.x) / 2))
+	return window.x + cap
+
+
+## Whether `flight_id` has finished deboarding into the terminal (or passed its
+## bounded fallback cap).
+static func deboarding_cleared(sim: PassengerSim, flight_id: String) -> bool:
+	var active := active_deboarding_flights(sim)
+	if not active.has(flight_id):
+		return true
+	return sim.tick >= deboarding_hold_cap_tick(sim, flight_id, int(active[flight_id]))
+
+
+## Holds departing passengers' boarding_tick at tick + 1 while their flight still
+## has deboarding passengers outside the terminal, up to the safety cap.
+static func gate_boarding(sim: PassengerSim) -> void:
+	var active := active_deboarding_flights(sim)
+	if active.is_empty():
+		return
+	var held := {}
+	for fid: String in active:
+		if sim.tick < deboarding_hold_cap_tick(sim, fid, int(active[fid])):
+			held[fid] = true
+	if held.is_empty():
+		return
+	for p in sim._passengers:
+		if not p.is_done() and p.is_departing() and held.has(p.flight_id):
+			if p.boarding_tick <= sim.tick:
+				p.boarding_tick = sim.tick + 1
 
 
 static func spawn(sim: PassengerSim, flight_id: String, variant: int) -> Passenger:
