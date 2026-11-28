@@ -50,6 +50,15 @@ func set_building(on: bool) -> void:
 	changed.emit(active)
 
 
+## Re-acquires the yielding pause hold while building is active (for example
+## after Space or a speed key yielded and the player picks a new category,
+## card, tool, or sub-tool).
+func ensure_paused() -> void:
+	if not active:
+		return
+	_acquire_hold()
+
+
 ## Ends build mode after a load and clears the undo history for the new world.
 ## Installing the loaded clock dropped every hold already, so releasing finds
 ## nothing to end and the clock stays as loaded.
@@ -67,7 +76,7 @@ func sync() -> void:
 		return
 	if _hold != ClockHolds.NONE and not clock.holds.has(_hold):
 		_hold = ClockHolds.NONE
-	elif _hold_pending and is_inside_tree():
+	if _hold_pending and is_inside_tree() and _hold == ClockHolds.NONE:
 		_hold_pending = false
 		_hold = clock.holds.acquire(self, true)
 
@@ -79,10 +88,12 @@ func _exit_tree() -> void:
 
 
 func _acquire_hold() -> void:
+	if clock != null and _hold != ClockHolds.NONE and not clock.holds.has(_hold):
+		_hold = ClockHolds.NONE
 	if clock != null and is_inside_tree() and _hold == ClockHolds.NONE:
 		_hold_pending = false
 		_hold = clock.holds.acquire(self, true)
-	else:
+	elif _hold == ClockHolds.NONE:
 		_hold_pending = true
 
 

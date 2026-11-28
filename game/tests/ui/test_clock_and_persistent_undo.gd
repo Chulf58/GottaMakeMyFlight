@@ -299,3 +299,83 @@ func test_modal_dialogs_still_pause_clock_via_clock_holds() -> void:
 	_incident_panel.dialog().continue_button().pressed.emit()
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.holds.count()).is_equal(0)
+
+
+func test_space_and_speed_shortcuts_during_game_menu_or_incident_keep_build_pause() -> void:
+	var hud := PassengerHud.new()
+	hud.clock = _clock
+	hud.flights = _offers.flights
+	hud.sim = _sim
+	hud.build_mode = _mode
+	_port.add_child(hud)
+
+	_clock.set_speed(2)
+	_clock.set_paused(false)
+	_menu.press_category(STRUCTURE)
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_clock.paused).is_true()
+
+	assert_bool(_game_menu.open()).is_true()
+	assert_bool(_game_menu.is_open()).is_true()
+	_port.push_input(_key(KEY_SPACE))
+	var shift_three := _key(KEY_3)
+	shift_three.shift_pressed = true
+	_port.push_input(shift_three)
+	_game_menu.close()
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.speed).is_equal(2)
+
+	var id := _incidents.add_scheduled()
+	_incidents.present(id, false)
+	assert_bool(_incident_panel.is_open()).is_true()
+	_port.push_input(_key(KEY_SPACE))
+	assert_bool(_incident_panel.is_open()).is_true()
+	_port.push_input(shift_three)
+	_port.push_input(_key(KEY_SPACE))
+	assert_bool(_incident_panel.is_open()).is_false()
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.speed).is_equal(2)
+
+	_menu.press_category(STRUCTURE)
+	assert_bool(_menu.build_session.active).is_false()
+	assert_bool(_clock.paused).is_false()
+
+
+func test_space_and_speed_keys_on_intro_over_build_mode_keep_build_pause_on_close() -> void:
+	var shown_before := IntroDialogue.shown_this_session
+	IntroDialogue.shown_this_session = false
+	var hud := PassengerHud.new()
+	hud.clock = _clock
+	hud.flights = _offers.flights
+	hud.sim = _sim
+	hud.build_mode = _mode
+	_port.add_child(hud)
+
+	_clock.set_speed(2)
+	_clock.set_paused(false)
+	_menu.press_category(STRUCTURE)
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_clock.paused).is_true()
+
+	assert_bool(hud.open_intro()).is_true()
+	assert_bool(_clock.holds.has_exclusive()).is_true()
+	var shift_three := _key(KEY_3)
+	shift_three.shift_pressed = true
+	_port.push_input(_key(KEY_SPACE))
+	_port.push_input(shift_three)
+	_port.push_input(_key(KEY_SPACE))
+	_port.push_input(_key(KEY_SPACE))
+	_port.push_input(_key(KEY_SPACE))
+	_port.push_input(_key(KEY_SPACE))
+	IntroDialogue.shown_this_session = shown_before
+	assert_bool(hud.intro() != null).is_false()
+	assert_bool(_clock.holds.has_exclusive()).is_false()
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.speed).is_equal(2)
+
+	_menu.press_category(STRUCTURE)
+	assert_bool(_menu.build_session.active).is_false()
+	assert_bool(_clock.paused).is_false()

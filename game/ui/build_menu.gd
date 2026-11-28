@@ -208,6 +208,10 @@ var _wages_hold_owed := 0
 var _staff_card: Control
 var _pulsed_tool := BuildMode.Tool.NONE
 var _pulse_tween: Tween
+var _last_object_move := 0
+var _last_room_move := 0
+var _last_template_key := ""
+var _last_starter_kit := &""
 
 
 ## What a tool's card costs: the floor tile, one wall piece or the object.
@@ -284,11 +288,11 @@ func _ready() -> void:
 			build_mode.grid.edit_applied.connect(_on_grid_edit_applied)
 			build_mode.grid.graph_changed.connect(_on_grid_graph_changed)
 		build_mode.templates.status_changed.connect(_on_status_changed)
-		build_mode.templates.armed_changed.connect(_show_status)
+		build_mode.templates.armed_changed.connect(_on_templates_armed_changed)
 		build_mode.room_mover.status_changed.connect(_on_status_changed)
-		build_mode.room_mover.active_changed.connect(_show_status)
+		build_mode.room_mover.active_changed.connect(_on_room_mover_active_changed)
 		build_mode.object_mover.status_changed.connect(_on_status_changed)
-		build_mode.object_mover.active_changed.connect(_show_status)
+		build_mode.object_mover.active_changed.connect(_on_object_mover_active_changed)
 		if build_mode.starter_kit != null:
 			build_mode.starter_kit.status_changed.connect(_on_status_changed)
 			build_mode.starter_kit.armed_changed.connect(_on_starter_kit_armed_changed)
@@ -445,6 +449,7 @@ func press_category(index: int) -> void:
 	if index == remove_category():
 		_clear_room_context_state()
 		build_mode.set_tool(BuildMode.Tool.REMOVE)
+		build_session.ensure_paused()
 		return
 	if index >= 0 and index < remove_category() and not _category_buttons[index].visible:
 		return
@@ -459,6 +464,7 @@ func press_category(index: int) -> void:
 	build_mode.set_tool(BuildMode.Tool.NONE)
 	_browsing = false
 	_sync()
+	build_session.ensure_paused()
 
 
 static func tray_height_for_rows(rows: int) -> float:
@@ -558,6 +564,7 @@ func focus_tool(tool: BuildMode.Tool) -> bool:
 			build_mode.set_tool(BuildMode.Tool.NONE)
 		_browsing = false
 		enter_room_context(target_type, target_id)
+		build_session.ensure_paused()
 		_pulse_card(tool)
 		return true
 	var cat := category_of(tool)
@@ -574,6 +581,7 @@ func focus_tool(tool: BuildMode.Tool) -> bool:
 		build_mode.set_tool(BuildMode.Tool.NONE)
 	_browsing = false
 	_sync()
+	build_session.ensure_paused()
 	_pulse_card(tool)
 	return true
 
@@ -858,6 +866,7 @@ func _on_tool_changed(tool: BuildMode.Tool) -> void:
 			else:
 				var keep_id := _room_context_id if _room_context_type == room_type else 0
 				enter_room_context(room_type, keep_id)
+				build_session.ensure_paused()
 				_show_status()
 				return
 		elif is_room_context() and _room_cards.has(tool):
@@ -871,6 +880,7 @@ func _on_tool_changed(tool: BuildMode.Tool) -> void:
 				_open = NO_CATEGORY
 			else:
 				enter_room_context(owners[0], 0)
+				build_session.ensure_paused()
 				_show_status()
 				return
 		else:
@@ -886,6 +896,8 @@ func _on_tool_changed(tool: BuildMode.Tool) -> void:
 			else:
 				_open = index
 	_sync()
+	if tool != BuildMode.Tool.NONE:
+		build_session.ensure_paused()
 	_show_status()
 
 
@@ -1414,7 +1426,21 @@ func _sync() -> void:
 		_stop_pulse()
 	templates_page.sync(_open == TEMPLATES_PAGE)
 	_sync_tray_layout()
-	build_session.set_building(_open != NO_CATEGORY or tool != BuildMode.Tool.NONE)
+	build_session.set_building(_is_building())
+
+
+func _is_building() -> bool:
+	if _open != NO_CATEGORY:
+		return true
+	if build_mode == null:
+		return false
+	return (
+		build_mode.tool != BuildMode.Tool.NONE
+		or build_mode.object_mover.active
+		or build_mode.room_mover.active
+		or build_mode.templates.is_active()
+		or (build_mode.starter_kit != null and build_mode.starter_kit.is_active())
+	)
 
 
 ## Height, from the bottom edge, of the top of the tray and status card stack:
@@ -1593,6 +1619,47 @@ func _on_built_selection_changed() -> void:
 		exit_room_context()
 
 
+func _on_templates_armed_changed() -> void:
+	var current := ""
+	if build_mode != null:
+		if build_mode.templates.capturing:
+			current = "capture"
+		elif build_mode.templates.armed >= 0:
+			current = "arm:%d" % build_mode.templates.armed
+	var started := current != "" and current != _last_template_key
+	_last_template_key = current
+	_sync()
+	if started:
+		build_session.ensure_paused()
+	_show_status()
+
+
+func _on_room_mover_active_changed() -> void:
+	var current := (
+		build_mode.room_mover.room_id if build_mode != null and build_mode.room_mover.active else 0
+	)
+	var started := current != 0 and current != _last_room_move
+	_last_room_move = current
+	_sync()
+	if started:
+		build_session.ensure_paused()
+	_show_status()
+
+
+func _on_object_mover_active_changed() -> void:
+	var current := (
+		build_mode.object_mover.object_id
+		if build_mode != null and build_mode.object_mover.active
+		else 0
+	)
+	var started := current != 0 and current != _last_object_move
+	_last_object_move = current
+	_sync()
+	if started:
+		build_session.ensure_paused()
+	_show_status()
+
+
 func _on_starter_kit_armed_changed() -> void:
 	var armed_kit := (
 		build_mode.starter_kit.armed
@@ -1601,6 +1668,11 @@ func _on_starter_kit_armed_changed() -> void:
 	)
 	for kit_id: StringName in _starter_kit_cards:
 		_starter_kit_cards[kit_id].set_pressed_no_signal(kit_id == armed_kit)
+	var started := armed_kit != &"" and armed_kit != _last_starter_kit
+	_last_starter_kit = armed_kit
+	_sync()
+	if started:
+		build_session.ensure_paused()
 	_show_status()
 
 

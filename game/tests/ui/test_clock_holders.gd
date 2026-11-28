@@ -199,3 +199,23 @@ func test_a_load_drops_every_holders_hold_and_the_clock_comes_back_paused_at_1x(
 	assert_int(_clock.speed).is_equal(1)
 	_press_speed(2)
 	assert_bool(_clock.paused).is_false()
+
+
+func test_yielding_does_not_drop_plain_holds_while_an_exclusive_modal_holds_the_clock() -> void:
+	_press_speed(3)
+	_start_building()
+	assert_bool(_clock.holds.has_exclusive()).is_false()
+	_guide.open_dialog([2])
+	assert_bool(_clock.holds.has_exclusive()).is_true()
+	_press_speed(2)
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(2)
+	_guide.dismiss()
+	assert_bool(_clock.holds.has_exclusive()).is_false()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
+	# Control: once the modal is gone, resuming yields BuildSession's hold.
+	_clock.set_paused(false)
+	_session.sync()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.holds.count()).is_equal(0)

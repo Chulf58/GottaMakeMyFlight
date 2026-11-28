@@ -105,6 +105,15 @@ func count() -> int:
 	return _holds.size()
 
 
+## True while any non-yielding exclusive hold (modal dialog) is held.
+func has_exclusive() -> bool:
+	for token in _order:
+		var hold: _Hold = _holds[token]
+		if hold.exclusive and not hold.yields:
+			return true
+	return false
+
+
 ## Drops every hold and the line, running no on_turn (a load).
 func clear() -> void:
 	for token in _order.duplicate():
@@ -112,15 +121,18 @@ func clear() -> void:
 
 
 ## The player resumed or picked another speed: every plain hold that gives way
-## ends, and every one in line that gives way stops pausing but keeps its place
-## and turn. Plain holds are never in line, so the line does not move.
+## ends (unless an exclusive modal holds the clock), and every one in line that
+## gives way stops pausing but keeps its place and turn. Plain holds are never
+## in line, so the line does not move.
 func yield_to_player() -> void:
+	var modal := has_exclusive()
 	for token in _order.duplicate():
 		var hold: _Hold = _holds[token]
 		if not hold.yields:
 			continue
 		if not hold.exclusive:
-			_drop(token)
+			if not modal:
+				_drop(token)
 		elif hold.pauses:
 			hold.pauses = false
 			_pausing -= 1

@@ -231,3 +231,117 @@ func test_a_menu_with_no_clock_still_keeps_undo_on_close() -> void:
 	assert_bool(_paint(Vector2i(1, 1)).ok).is_true()
 	bare.press_category(STRUCTURE)
 	assert_int(_steps()).is_equal(1)
+
+
+func _paint_floor_rect(area: Rect2i) -> void:
+	var edits: Array[BuildEdit] = []
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	_mode.grid.apply_batch(edits)
+
+
+func test_object_mover_with_tray_closed_pauses_clock_and_resumes_on_finish_or_cancel() -> void:
+	_paint_floor_rect(Rect2i(1, 1, 8, 8))
+	var placed := _mode.apply_edit(BuildEdit.place_object(&"statue_indoor", Vector2i(2, 2), 0))
+	assert_bool(placed.ok).is_true()
+	_press_speed(2)
+	assert_bool(_menu.is_tray_open()).is_false()
+	assert_int(_mode.tool).is_equal(BuildMode.Tool.NONE)
+	assert_bool(_clock.paused).is_false()
+
+	assert_bool(_mode.object_mover.pick_up(placed.object_id)).is_true()
+	assert_bool(_mode.object_mover.active).is_true()
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
+
+	var moved := _mode.object_mover.set_down(_mode.grid.cell_to_world(Vector2i(4, 4)))
+	assert_bool(moved != null and moved.ok).is_true()
+	assert_bool(_mode.object_mover.active).is_false()
+	assert_bool(_menu.build_session.active).is_false()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.speed).is_equal(2)
+
+	# Cancelling an object move also releases BuildSession and resumes SimClock.
+	assert_bool(_mode.object_mover.pick_up(placed.object_id)).is_true()
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_clock.paused).is_true()
+	_mode.object_mover.cancel()
+	assert_bool(_menu.build_session.active).is_false()
+	assert_bool(_clock.paused).is_false()
+
+
+func test_arming_starter_kit_or_template_with_tray_closed_pauses_and_rotate_keeps_unpause() -> void:
+	_paint_floor_rect(Rect2i(1, 1, 10, 10))
+	_press_speed(3)
+	assert_int(_menu.open_category()).is_equal(BuildMenu.NO_CATEGORY)
+
+	assert_bool(_mode.starter_kit.try_arm(&"kiosk")).is_true()
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_clock.paused).is_true()
+	# Intentional Space unpause while rotating the armed kit stays unpaused.
+	_clock.set_paused(false)
+	assert_bool(_clock.paused).is_false()
+	_mode.starter_kit.rotate_turns()
+	assert_bool(_clock.paused).is_false()
+	_mode.starter_kit.disarm()
+	assert_bool(_menu.build_session.active).is_false()
+	assert_bool(_clock.paused).is_false()
+
+	var room_edit := _mode.grid.apply(BuildEdit.place_room(Rect2i(2, 2, 3, 3), &"toilet"))
+	assert_bool(room_edit.ok).is_true()
+	var tpl := RoomTemplate.capture(_mode.grid, room_edit.room_id)
+	assert_object(tpl).is_not_null()
+	_mode.templates.library.add(tpl)
+
+	assert_bool(_mode.templates.try_arm(0)).is_true()
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_clock.paused).is_true()
+	_clock.set_paused(false)
+	_mode.templates.rotate_turns()
+	assert_bool(_clock.paused).is_false()
+	_mode.templates.disarm()
+	assert_bool(_menu.build_session.active).is_false()
+	assert_bool(_clock.paused).is_false()
+
+	_mode.templates.arm_capture()
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_clock.paused).is_true()
+	_mode.templates.disarm()
+	assert_bool(_menu.build_session.active).is_false()
+	assert_bool(_clock.paused).is_false()
+
+
+func test_switching_category_or_tool_after_manual_unpause_repauses_clock() -> void:
+	_press_speed(2)
+	_menu.press_category(STRUCTURE)
+	assert_bool(_clock.paused).is_true()
+	_clock.set_paused(false)
+	assert_bool(_clock.paused).is_false()
+
+	# Picking a tool card after manual unpause re-pauses the clock.
+	_menu.press_card(BuildMode.Tool.FLOOR)
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
+
+	# Unpause again, then switch category tab -> re-pauses cleanly.
+	_clock.set_paused(false)
+	assert_bool(_clock.paused).is_false()
+	_menu.press_category(1)
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
+
+	# Unpause again, then switch to Remove -> re-pauses cleanly.
+	_clock.set_paused(false)
+	assert_bool(_clock.paused).is_false()
+	_menu.press_category(_menu.remove_category())
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
+
+	# Unpause again, then arm starter kit -> re-pauses cleanly.
+	_clock.set_paused(false)
+	assert_bool(_clock.paused).is_false()
+	assert_bool(_mode.starter_kit.try_arm(&"kiosk")).is_true()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)

@@ -610,6 +610,8 @@ func _shortcut_input(event: InputEvent) -> void:
 		return
 	if key.ctrl_pressed or key.alt_pressed or key.meta_pressed:
 		return
+	if _has_exclusive_modal():
+		return
 	if key.physical_keycode == KEY_SPACE and not key.shift_pressed:
 		if not key.echo:
 			press_pause_toggle()
@@ -618,6 +620,12 @@ func _shortcut_input(event: InputEvent) -> void:
 		if not key.echo:
 			press_speed(SPEED_KEYS[key.physical_keycode])
 		viewport.set_input_as_handled()
+
+
+func _has_exclusive_modal() -> bool:
+	if clock != null and clock.holds.has_exclusive():
+		return true
+	return demo_end_card != null and demo_end_card.is_open()
 
 
 func _resolve_offer_panel() -> OfferPanel:
