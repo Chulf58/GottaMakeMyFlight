@@ -140,6 +140,9 @@ var _bound_wallet: Wallet
 var _retired_rows: Array[Node] = []
 var _pulsed_hire: Button
 var _pulse_tween: Tween
+var _right_pressing := false
+var _right_dragged := false
+var _right_press_screen := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -169,11 +172,47 @@ func _notification(what: int) -> void:
 		_flush_retired()
 
 
+func _input(event: InputEvent) -> void:
+	if not _is_card_open() or _modal_open():
+		_right_pressing = false
+		_right_dragged = false
+		return
+	var motion := event as InputEventMouseMotion
+	if motion != null:
+		if (
+			_right_pressing
+			and motion.position.distance_to(_right_press_screen) > BuildMode.CLICK_SLOP_PX
+		):
+			_right_dragged = true
+		return
+	var mb := event as InputEventMouseButton
+	if mb == null or mb.button_index != MOUSE_BUTTON_RIGHT:
+		return
+	if mb.pressed:
+		_right_pressing = true
+		_right_dragged = false
+		_right_press_screen = mb.position
+		return
+	var was_pressing := _right_pressing
+	var was_dragged := _right_dragged
+	_right_pressing = false
+	_right_dragged = false
+	if (
+		not was_pressing
+		or was_dragged
+		or mb.position.distance_to(_right_press_screen) > BuildMode.CLICK_SLOP_PX
+	):
+		return
+	_close_card()
+	get_viewport().set_input_as_handled()
+
+
 ## Follows `with_staff`'s hiring and members going on duty, and its grid's
 ## edits for the hint, and the gate when one is set. The StaffSim must already
 ## be bound to a PassengerSim.
 func watch(with_staff: StaffSim) -> void:
 	staff = with_staff
+	_resolve_unlocks()
 	staff.staff_changed.connect(_on_staff_changed)
 	staff.member_state_changed.connect(_on_member_state)
 	staff.member_energy_changed.connect(_on_member_energy)
@@ -303,7 +342,7 @@ func counts_text(role: StaffMember.Role) -> String:
 
 
 func member_energy_text(member_id: int) -> String:
-	if staff == null:
+	if staff == null or not _energy_visible():
 		return ""
 	var m := staff.get_member(member_id)
 	if m == null:
@@ -314,7 +353,7 @@ func member_energy_text(member_id: int) -> String:
 	elif m.is_tired():
 		line = tr("Tired {pct}%")
 	else:
-		line = tr("Rested {pct}%")
+		line = tr("Energy {pct}%")
 	return line.format({"pct": m.energy})
 
 
@@ -613,7 +652,55 @@ func _on_staff_toggled(open: bool) -> void:
 	elif open:
 		_fit_card()
 	if not open:
+		_right_pressing = false
+		_right_dragged = false
 		_stop_hire_pulse()
+
+
+func _is_card_open() -> bool:
+	if not _card.visible:
+		return false
+	return menu == null or menu.staff_open
+
+
+func _close_card() -> void:
+	if menu != null:
+		if menu.staff_open:
+			menu.press_staff()
+	else:
+		_card.visible = false
+		_stop_hire_pulse()
+
+
+func _modal_open() -> bool:
+	if is_inside_tree() and get_tree() != null and get_tree().paused:
+		return true
+	var parent := get_parent()
+	if parent == null:
+		return false
+	var game_menu := parent.get_node_or_null("GameMenu") as GameMenu
+	var incident := parent.get_node_or_null("IncidentPanel") as IncidentPanel
+	var offers := parent.get_node_or_null("OfferPanel") as OfferPanel
+	var runway := parent.get_node_or_null("RunwayCard") as RunwayCard
+	var awards := parent.get_node_or_null("AwardsCeremony") as AwardsCeremony
+	if (
+		(game_menu != null and (game_menu.is_open() or game_menu.is_question_open()))
+		or (incident != null and incident.is_open())
+		or (offers != null and offers.is_open())
+		or (runway != null and runway.is_open())
+		or (awards != null and awards.is_open())
+	):
+		return true
+	var hud := parent.get_node_or_null("PassengerHud") as PassengerHud
+	if hud == null:
+		return false
+	var planner := hud.find_child("FlightPlanner", false, false) as FlightPlanner
+	return (
+		hud.intro() != null
+		or (hud.unlock_guide() != null and hud.unlock_guide().is_open())
+		or (hud.demo_end_card != null and hud.demo_end_card.is_open())
+		or (planner != null and planner.is_open())
+	)
 
 
 func _exit_tree() -> void:
@@ -718,6 +805,8 @@ func _resolve_unlocks() -> void:
 	_unlocks = unlocks
 	if _unlocks == null and menu != null and menu.build_mode != null:
 		_unlocks = menu.build_mode.unlocks
+	if _unlocks == null and staff != null:
+		_unlocks = staff._resolve_unlocks()
 	if _unlocks != null:
 		if not _unlocks.tier_changed.is_connected(_on_tier_changed):
 			_unlocks.tier_changed.connect(_on_tier_changed)
@@ -729,7 +818,23 @@ func _resolve_unlocks() -> void:
 
 
 func _unlocks_required() -> bool:
-	return menu == null or menu.build_mode == null or menu.build_mode.require_unlocks
+	if menu != null and menu.build_mode != null:
+		return menu.build_mode.require_unlocks
+	if staff != null and staff.sim != null and staff.sim.build_mode != null:
+		return staff.sim.build_mode.require_unlocks
+	return true
+
+
+func _energy_visible() -> bool:
+	if not _unlocks_required():
+		return true
+	if _unlocks != null:
+		return _unlocks.allows(BuildMode.Tool.BREAK_ROOM)
+	if menu != null and menu.build_mode != null and menu.build_mode.require_unlocks:
+		return false
+	if staff != null:
+		return staff.is_energy_enabled()
+	return true
 
 
 func _ramp_visible() -> bool:
@@ -1119,6 +1224,7 @@ func _refresh_energy_box(role: StaffMember.Role) -> void:
 	if members.is_empty():
 		return
 	var active_wallet := _resolve_wallet()
+	var show_energy := _energy_visible()
 	for m in members:
 		var member_id := m.id
 		var entry := VBoxContainer.new()
@@ -1137,24 +1243,27 @@ func _refresh_energy_box(role: StaffMember.Role) -> void:
 		name_btn.tooltip_text = tr("Inspect {name}").format({"name": name_btn.text})
 		name_btn.pressed.connect(func() -> void: member_selected.emit(member_id))
 		entry.add_child(name_btn)
-		var lbl := _label(member_energy_text(m.id), &"HudSmall")
-		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		entry.add_child(lbl)
-		var bar := ProgressBar.new()
-		bar.show_percentage = false
-		bar.min_value = StaffMember.ENERGY_MIN
-		bar.max_value = StaffMember.ENERGY_MAX
-		bar.value = m.energy
-		bar.custom_minimum_size = Vector2(0.0, ENERGY_BAR_HEIGHT)
-		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var fill := StyleBoxFlat.new()
-		fill.bg_color = (
-			ENERGY_BREAK_COLOR
-			if m.is_on_break()
-			else (ENERGY_TIRED_COLOR if m.is_tired() else ENERGY_RESTED_COLOR)
-		)
-		bar.add_theme_stylebox_override("fill", fill)
-		entry.add_child(bar)
+		if show_energy:
+			var lbl := _label(member_energy_text(m.id), &"HudSmall")
+			lbl.name = "EnergyLabel%d" % member_id
+			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			entry.add_child(lbl)
+			var bar := ProgressBar.new()
+			bar.name = "EnergyBar%d" % member_id
+			bar.show_percentage = false
+			bar.min_value = StaffMember.ENERGY_MIN
+			bar.max_value = StaffMember.ENERGY_MAX
+			bar.value = m.energy
+			bar.custom_minimum_size = Vector2(0.0, ENERGY_BAR_HEIGHT)
+			bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var fill := StyleBoxFlat.new()
+			fill.bg_color = (
+				ENERGY_BREAK_COLOR
+				if m.is_on_break()
+				else (ENERGY_TIRED_COLOR if m.is_tired() else ENERGY_RESTED_COLOR)
+			)
+			bar.add_theme_stylebox_override("fill", fill)
+			entry.add_child(bar)
 		if StaffSim.is_role_trainable(role):
 			var train_row := HBoxContainer.new()
 			train_row.add_theme_constant_override("separation", 4)

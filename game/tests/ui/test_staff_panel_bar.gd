@@ -250,3 +250,127 @@ func test_status_card_clears_open_staff_card_and_drops_when_staff_closes() -> vo
 	assert_float(_menu.status_card().get_global_rect().end.y).is_equal(
 		bar_rect.position.y - BuildMenu.GAP
 	)
+
+
+func _right_btn(pressed: bool, pos: Vector2) -> InputEventMouseButton:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_RIGHT
+	ev.pressed = pressed
+	ev.position = pos
+	ev.global_position = pos
+	return ev
+
+
+func _right_motion(pos: Vector2, rel: Vector2) -> InputEventMouseMotion:
+	var ev := InputEventMouseMotion.new()
+	ev.position = pos
+	ev.global_position = pos
+	ev.relative = rel
+	ev.button_mask = MOUSE_BUTTON_MASK_RIGHT
+	return ev
+
+
+func test_short_right_click_closes_staff_panel_while_right_drag_orbits_camera() -> void:
+	var cam := TycoonCamera.new()
+	cam.settings_path = SaveTestKit.run_path("staff_panel_rclick_cam")
+	var eye := Camera3D.new()
+	eye.name = "Camera3D"
+	cam.add_child(eye)
+	_port.add_child(cam)
+	cam.set_process(false)
+
+	# 1. Right-drag beyond CLICK_SLOP_PX orbits camera and keeps StaffPanel open.
+	_menu.press_staff()
+	await await_idle_frame()
+	assert_bool(_menu.staff_open).is_true()
+	assert_bool(_panel.card().visible).is_true()
+	var world_pt := Vector2(120.0, 120.0)
+	var start_yaw := cam.yaw
+	_port.push_input(_right_btn(true, world_pt))
+	_port.push_input(_right_motion(world_pt + Vector2(30.0, 0.0), Vector2(30.0, 0.0)))
+	_port.push_input(_right_btn(false, world_pt + Vector2(30.0, 0.0)))
+	await await_idle_frame()
+	assert_bool(_menu.staff_open).is_true()
+	assert_bool(_panel.card().visible).is_true()
+	assert_float(cam.yaw).is_not_equal(start_yaw)
+
+	# 2. Out-and-back right-drag (beyond slop then returning to origin) also keeps StaffPanel open.
+	_port.push_input(_right_btn(true, world_pt))
+	_port.push_input(_right_motion(world_pt + Vector2(24.0, 0.0), Vector2(24.0, 0.0)))
+	_port.push_input(_right_motion(world_pt, Vector2(-24.0, 0.0)))
+	_port.push_input(_right_btn(false, world_pt))
+	await await_idle_frame()
+	assert_bool(_menu.staff_open).is_true()
+	assert_bool(_panel.card().visible).is_true()
+
+	# 3. Short right-click on the world closes StaffPanel and clears Staff button state.
+	_port.push_input(_right_btn(true, world_pt))
+	_port.push_input(_right_btn(false, world_pt + Vector2(2.0, 2.0)))
+	await await_idle_frame()
+	assert_bool(_menu.staff_open).is_false()
+	assert_bool(_panel.card().visible).is_false()
+	assert_bool(_menu.staff_button.button_pressed).is_false()
+
+	# 4. Short right-click directly on StaffCard also closes StaffPanel.
+	_menu.press_staff()
+	await await_idle_frame()
+	assert_bool(_menu.staff_open).is_true()
+	var card_center := _panel.card().get_global_rect().get_center()
+	_port.push_input(_right_btn(true, card_center))
+	_port.push_input(_right_btn(false, card_center))
+	await await_idle_frame()
+	assert_bool(_menu.staff_open).is_false()
+	assert_bool(_panel.card().visible).is_false()
+	assert_bool(_menu.staff_button.button_pressed).is_false()
+
+	var cam_path := cam.settings_path
+	cam.free()
+	DirAccess.remove_absolute(cam_path)
+
+
+func test_right_click_ignores_modal_and_passes_through_when_staff_closed() -> void:
+	var game_menu := GameMenu.new()
+	game_menu.name = "GameMenu"
+	game_menu.clock = _w.clock
+	_port.add_child(game_menu)
+
+	# 1. With GameMenu open over StaffPanel, short right-click does NOT close StaffPanel.
+	_menu.press_staff()
+	await await_idle_frame()
+	assert_bool(_menu.staff_open).is_true()
+	assert_bool(game_menu.open()).is_true()
+	await await_idle_frame()
+	assert_bool(game_menu.is_open()).is_true()
+	var pt := Vector2(120.0, 120.0)
+	_port.push_input(_right_btn(true, pt))
+	_port.push_input(_right_btn(false, pt))
+	await await_idle_frame()
+	assert_bool(_menu.staff_open).is_true()
+	assert_bool(_panel.card().visible).is_true()
+	game_menu.close()
+	await await_idle_frame()
+
+	# 2. Close StaffPanel, then verify right-click passes through to _unhandled_input.
+	_menu.press_staff()
+	await await_idle_frame()
+	assert_bool(_menu.staff_open).is_false()
+	var spy := _UnhandledRightClickSpy.new()
+	_port.add_child(spy)
+	_port.push_input(_right_btn(true, pt))
+	_port.push_input(_right_btn(false, pt))
+	await await_idle_frame()
+	assert_int(spy.releases).is_equal(1)
+
+	spy.free()
+	game_menu.free()
+
+
+class _UnhandledRightClickSpy:
+	extends Node
+
+	var releases := 0
+
+	func _unhandled_input(event: InputEvent) -> void:
+		var mb := event as InputEventMouseButton
+		if mb != null and not mb.pressed and mb.button_index == MOUSE_BUTTON_RIGHT:
+			releases += 1

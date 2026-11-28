@@ -10,7 +10,7 @@ static func _is_airport_closed(staff: StaffSim) -> bool:
 
 
 static func step_energy(staff: StaffSim) -> void:
-	if _is_airport_closed(staff):
+	if _is_airport_closed(staff) or not staff.is_energy_enabled():
 		return
 	for id in staff.member_ids():
 		var m := staff.get_member(id)
@@ -45,7 +45,12 @@ static func step_energy(staff: StaffSim) -> void:
 
 
 static func update_breaks(staff: StaffSim, begin_break: Callable, end_break: Callable) -> void:
-	if staff.sim == null or staff.sim.grid == null or _is_airport_closed(staff):
+	if (
+		staff.sim == null
+		or staff.sim.grid == null
+		or _is_airport_closed(staff)
+		or not staff.is_energy_enabled()
+	):
 		return
 	for id in staff.member_ids():
 		var m := staff.get_member(id)

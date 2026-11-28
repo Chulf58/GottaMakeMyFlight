@@ -312,6 +312,8 @@ func _ready() -> void:
 	_staff_inspect.staff = staff
 	_staff_inspect.views = staff_views
 	_staff_inspect.camera = camera
+	if build_mode != null:
+		_staff_inspect.unlocks = build_mode.unlocks
 	_staff_inspect.closed.connect(_on_staff_inspect_closed)
 	add_child(_staff_inspect)
 	_bind_staff_panel()
@@ -678,6 +680,8 @@ func refresh() -> void:
 	_staff_inspect.staff = staff
 	_staff_inspect.views = staff_views
 	_staff_inspect.camera = camera
+	if build_mode != null:
+		_staff_inspect.unlocks = build_mode.unlocks
 	_staff_inspect.refresh()
 	_follow_label.visible = not _inspect.visible and not _staff_inspect.visible
 	_follow_card.sync()
