@@ -30,6 +30,12 @@ func before() -> void:
 		if _accepted == "" and flights.accept_problem(OfferBoard.terms_of(offer)) == "":
 			assert_bool(board.accept(offer["id"], flights)).is_true()
 			_accepted = offer["id"]
+	if board.open_offers().is_empty():
+		var day := GameCalendar.day_of(clock.tick, clock.epoch)
+		(
+			assert_array(board.refill_day(day, clock.rng.seed, 0, flights.runway.size, flights))
+			. is_not_empty()
+		)
 	while not _busy() and clock.tick < LIMIT_TICKS:
 		SaveTestKit.step(_main)
 	_base_snapshot = _taken()
@@ -44,10 +50,18 @@ func after() -> void:
 func _busy() -> bool:
 	var data: Dictionary = _save.snapshot()["passengers"]
 	return (
-		_record_with(data, "station") >= 0
+		_station_record(data) >= 0
 		and _record_with(data, "seat_object") >= 0
 		and not (data["queues"] as Array).is_empty()
 	)
+
+
+static func _station_record(passengers: Dictionary) -> int:
+	var records: Array = passengers["passengers"]
+	for i in records.size():
+		if int(records[i]["station"]) != 0 and int(records[i]["stage"]) != Passenger.Stage.SECURITY:
+			return i
+	return -1
 
 
 static func _record_with(passengers: Dictionary, field: String) -> int:
@@ -163,7 +177,7 @@ func test_a_passenger_on_a_never_issued_occurrence_is_refused() -> void:
 
 func test_a_passenger_at_a_station_that_is_not_there_is_refused() -> void:
 	var bad := _base_snapshot.duplicate(true)
-	var i := _record_with(bad["passengers"], "station")
+	var i := _station_record(bad["passengers"])
 	bad["passengers"]["passengers"][i]["station"] = 99999
 	_assert_refused(bad, "which is not a usable station")
 
