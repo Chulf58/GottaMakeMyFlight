@@ -1,3 +1,4 @@
+# gdlint:disable = max-file-lines
 class_name StaffCharacters
 extends Node3D
 ## Draws hired staff with pooled Toon characters, one model per role, so staff
@@ -1172,6 +1173,40 @@ func _set_ramp_tracking(id: int, shuttle: BaggageShuttle) -> void:
 	_ramp_approach[id] = {"shuttle_id": shuttle.id, "phase": shuttle.phase, "active": false}
 
 
+func _push_attach_pose(
+	id: int,
+	cur_pos: Vector3,
+	target_pose: Dictionary,
+	shuttle: BaggageShuttle,
+	grid: BuildGrid,
+	max_catchup_m: float
+) -> Dictionary:
+	var target_pos: Vector3 = target_pose["pos"]
+	if cur_pos.distance_to(target_pos) <= max_catchup_m:
+		_set_ramp_tracking(id, shuttle)
+		return target_pose
+	_ramp_approach[id] = {
+		"shuttle_id": shuttle.id,
+		"phase": shuttle.phase,
+		"path": [],
+		"idx": 1,
+		"active": true,
+	}
+	var next_pos := cur_pos.move_toward(target_pos, max_catchup_m)
+	next_pos.y = BaggageShuttle.ground_y(grid, next_pos)
+	var dir := Vector2(next_pos.x - cur_pos.x, next_pos.z - cur_pos.z)
+	var yaw := atan2(dir.x, dir.y) if dir.length_squared() > 1e-5 else float(target_pose["yaw"])
+	return {
+		"pos": next_pos,
+		"yaw": yaw,
+		"clip": "walk",
+		"speed":
+		clampf(
+			(dir.length() * SimClock.TICK_RATE) / CLIP_WALK_MPS[StaffMember.Role.RAMP], 0.8, 2.5
+		),
+	}
+
+
 func _shuttle_pose(m: StaffMember, snap := false) -> Dictionary:
 	var bag_sim := _baggage()
 	var shuttle := bag_sim.get_shuttle(m.ramp_shuttle_id) if bag_sim != null else null
@@ -1189,9 +1224,25 @@ func _shuttle_pose(m: StaffMember, snap := false) -> Dictionary:
 	var target_indoor := bag_sim.grid.is_indoor(bag_sim.grid.world_to_cell(target_pos))
 	var hits_wall := BaggageShuttle.segment_hits_wall(bag_sim.grid, cur_pos, target_pos, false)
 	var app: Dictionary = _ramp_approach.get(m.id, {})
-	var tracking := (
-		int(app.get("shuttle_id", 0)) == shuttle.id and not bool(app.get("active", false))
+	var same_shuttle := int(app.get("shuttle_id", 0)) == shuttle.id
+	var tracking := same_shuttle and not bool(app.get("active", false))
+	var push_phase := (
+		shuttle.phase == BaggageShuttle.Phase.OUTBOUND
+		or shuttle.phase == BaggageShuttle.Phase.UNLOADING
+		or shuttle.phase == BaggageShuttle.Phase.RETURNING
 	)
+	if push_phase and not hits_wall and tracking and cur_pos.distance_to(target_pos) <= 3.5:
+		_set_ramp_tracking(m.id, shuttle)
+		return target_pose
+	var ready_to_push := (
+		push_phase
+		and not hits_wall
+		and cur_pos.distance_to(target_pos) <= 3.5
+		and (cur_indoor or (same_shuttle and shuttle.phase == BaggageShuttle.Phase.OUTBOUND))
+	)
+	if ready_to_push:
+		var catchup_m := 0.90 if cur_indoor else 0.65
+		return _push_attach_pose(m.id, cur_pos, target_pose, shuttle, bag_sim.grid, catchup_m)
 	var in_room_transfer := (
 		(
 			shuttle.phase == BaggageShuttle.Phase.TRANSFER_OUT

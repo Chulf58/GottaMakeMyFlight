@@ -405,6 +405,100 @@ func test_ramp_agent_walks_through_bay_door_with_zero_wall_teleport() -> void:
 		assert_int(b.state).is_equal(Bag.State.LOADED)
 
 
+func test_outbound_ramp_agent_locks_behind_cart_handle_through_bay_door() -> void:
+	var m := _boot_main(51208)
+	var clock: SimClock = m.get_node("SimClock")
+	var flights: FlightSim = m.get_node("FlightSim")
+	var pax: PassengerSim = m.get_node("PassengerSim")
+	var bag_sim: BaggageSim = m.get_node("BaggageSim")
+	var staff: StaffSim = m.get_node("Staff")
+	var chars: StaffCharacters = m.get_node("StaffCharacters")
+	var info := _build_claim_and_outbound_in_main(m)
+	var ramp_id := staff.hire(RAMP)
+	var starter := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
+	var at_stand := flights.state_start(starter, FlightSim.State.AT_STAND)
+	while clock.tick < at_stand + 10:
+		SaveTestKit.step(m)
+	while not bag_sim.shuttles().is_empty():
+		SaveTestKit.step(m)
+
+	var end_cell := Vector2i(22, 11) + pax.site.starter_offset
+	for p in 6:
+		var b := bag_sim.check_in(77000 + p, starter, info["desk2_id"], p % 6)
+		b.state = Bag.State.IN_ROOM
+		b.cell = end_cell
+		b.rest_tick = clock.tick
+
+	var dispatched := false
+	for _i in 350:
+		SaveTestKit.step(m)
+		if not bag_sim.shuttles().is_empty() and not bag_sim.shuttles()[0].inbound:
+			dispatched = true
+			break
+	assert_bool(dispatched).is_true()
+
+	var node := chars.node_for(ramp_id)
+	assert_object(node).is_not_null()
+	chars.draw()
+	var prev_pos := chars.tick_position(ramp_id, true)
+	var prev_handle := Vector3.INF
+	var saw_outbound := false
+	var saw_outbound_at_bay_door := false
+	var saw_indoor := false
+	for _i in 350:
+		SaveTestKit.step(m)
+		chars.draw()
+		var agent_cur := chars.tick_position(ramp_id, true)
+		(
+			assert_bool(BaggageShuttle.segment_hits_wall(pax.grid, prev_pos, agent_cur, false))
+			. is_false()
+		)
+		var shuttles_now := bag_sim.shuttles()
+		var s_now: BaggageShuttle = shuttles_now[0] if not shuttles_now.is_empty() else null
+		var handle_step := 0.0
+		if s_now != null:
+			var push_now := (
+				s_now.phase == BaggageShuttle.Phase.OUTBOUND
+				or s_now.phase == BaggageShuttle.Phase.UNLOADING
+				or s_now.phase == BaggageShuttle.Phase.RETURNING
+			)
+			var cur_handle: Vector3 = s_now.agent_pose_at(clock.tick, pax.grid, bag_sim)["pos"]
+			if push_now and prev_handle != Vector3.INF:
+				handle_step = prev_handle.distance_to(cur_handle)
+			prev_handle = cur_handle
+		else:
+			prev_handle = Vector3.INF
+		assert_float(prev_pos.distance_to(agent_cur)).is_less(maxf(1.0, handle_step + 0.15))
+		prev_pos = agent_cur
+		if s_now == null:
+			break
+		var s := s_now
+		if pax.grid.is_indoor(pax.grid.world_to_cell(agent_cur)):
+			saw_indoor = true
+		if s.phase == BaggageShuttle.Phase.OUTBOUND:
+			saw_outbound = true
+			if clock.tick >= s.start_tick + 4:
+				var cart_xf := s.pose_at(clock.tick, pax.grid)
+				var rel := Vector2(agent_cur.x - cart_xf.origin.x, agent_cur.z - cart_xf.origin.z)
+				var fwd := Vector2(cart_xf.basis.z.x, cart_xf.basis.z.z).normalized()
+				assert_float(rel.length()).is_greater_equal(0.95)
+				assert_float(rel.dot(fwd)).is_less_equal(-0.95)
+				if (
+					(
+						Vector2(
+							cart_xf.origin.x - s.bay_door_world.x,
+							cart_xf.origin.z - s.bay_door_world.z,
+						)
+						. length()
+					)
+					< 1.5
+				):
+					saw_outbound_at_bay_door = true
+	assert_bool(saw_indoor).is_true()
+	assert_bool(saw_outbound).is_true()
+	assert_bool(saw_outbound_at_bay_door).is_true()
+
+
 func test_thirty_bags_hand_carry_completes_inside_load_lead_window() -> void:
 	var ctx := _build_ramp_bag_world(600)
 	var w: BagTestWorld = ctx["world"]
