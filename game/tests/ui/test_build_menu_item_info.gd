@@ -42,7 +42,8 @@ func _card_for(tool: BuildMode.Tool) -> ItemCardButton:
 	else:
 		for i in BuildMenu.categories().size():
 			if BuildMenu.categories()[i]["tools"].has(tool):
-				_menu.press_category(i)
+				if _menu.open_category() != i:
+					_menu.press_category(i)
 				break
 	return _menu.card(tool) as ItemCardButton
 
@@ -126,21 +127,22 @@ func _shown_in_popup(card: ItemCardButton) -> PopupPanel:
 	return popup
 
 
-func test_the_real_tooltip_path_places_the_popup_above_the_card_at_ui_scale() -> void:
+func test_the_real_tooltip_path_places_the_popup_in_lower_right_corner() -> void:
 	var card := _card_for(BuildMode.Tool.DESK)
 	await await_idle_frame()
 	var transform := card.get_screen_transform()
 	assert_float(transform.get_scale().y).is_equal_approx(UI_SCALE, 0.001)
 	var popup := await _shown_in_popup(card)
 	assert_int(popup.size.y).is_greater(0)
-	var top := transform.origin
-	assert_int(popup.position.x).is_equal(roundi(top.x))
-	assert_int(popup.position.y + popup.size.y).is_equal(roundi(top.y - ItemCardButton.CARD_GAP))
-	var item_rect := Rect2(top, card.size * UI_SCALE)
-	(
-		assert_bool(Rect2(Vector2(popup.position), Vector2(popup.size)).intersects(item_rect))
-		. is_false()
-	)
+	var popup_rect := Rect2(Vector2(popup.position), Vector2(popup.size))
+	var screen := Rect2(Vector2.ZERO, Vector2(_port.size))
+	var tray_rect := _menu.get_transform() * _menu.tray().get_global_rect()
+	assert_bool(screen.encloses(popup_rect)).is_true()
+	assert_int(popup.position.x + popup.size.x).is_equal(_port.size.x - HudLayout.MARGIN)
+	assert_bool(_menu.is_tray_open()).is_true()
+	assert_bool(popup_rect.intersects(tray_rect)).is_false()
+	var item_rect := Rect2(transform.origin, card.size * UI_SCALE)
+	assert_bool(popup_rect.intersects(item_rect)).is_false()
 
 
 func test_the_popup_stays_inside_the_window_sideways() -> void:
@@ -149,7 +151,59 @@ func test_the_popup_stays_inside_the_window_sideways() -> void:
 	var wide := Vector2(float(_port.size.x) + 400.0, 100.0)
 	assert_int(card.card_screen_position(wide).x).is_equal(0)
 	var narrow := card.card_screen_position(Vector2(100.0, 100.0))
-	assert_int(narrow.x).is_less_equal(_port.size.x - 100)
+	assert_int(narrow.x).is_equal(_port.size.x - HudLayout.MARGIN - 100)
+	assert_int(narrow.y).is_less_equal(_port.size.y - HudLayout.MARGIN - 100)
+
+
+func test_lower_right_popup_clears_tray_and_stacks_above_right_floor_inspect_cards() -> void:
+	var port: SubViewport = auto_free(SubViewport.new())
+	port.size = Vector2i(1536, 864)
+	add_child(port)
+	var mode := BuildMode.new()
+	mode.grid_size = Vector2i(20, 20)
+	port.add_child(mode)
+	mode.set_process(false)
+	var menu := BuildMenu.new()
+	menu.build_mode = mode
+	port.add_child(menu)
+	mode.set_tool(BuildMode.Tool.NONE)
+	menu.press_category(1)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	var card := menu.card(BuildMode.Tool.DESK) as ItemCardButton
+	var card_sz := Vector2(304.0, 220.0)
+	var pos := Vector2(card.card_screen_position(card_sz))
+	var tip_rect := Rect2(pos, card_sz)
+	assert_float(tip_rect.end.x).is_equal_approx(float(1536 - HudLayout.MARGIN), 1.0)
+	assert_float(tip_rect.end.y).is_equal_approx(float(864 - HudLayout.MARGIN), 1.0)
+	assert_bool(tip_rect.intersects(menu.tray().get_global_rect())).is_false()
+	assert_bool(tip_rect.intersects(menu.bar().get_global_rect())).is_false()
+
+	# When a RIGHT_FLOOR_GROUP inspect card is visible bottom-right, tooltip stacks above it.
+	var inspect := PanelContainer.new()
+	inspect.add_to_group(BottomDocks.RIGHT_FLOOR_GROUP)
+	inspect.position = Vector2(float(1536 - HudLayout.MARGIN) - HudLayout.RAIL_W, 560.0)
+	inspect.size = Vector2(HudLayout.RAIL_W, 288.0)
+	port.add_child(inspect)
+	await get_tree().process_frame
+
+	var stacked_pos := Vector2(card.card_screen_position(card_sz))
+	var stacked_rect := Rect2(stacked_pos, card_sz)
+	assert_float(stacked_rect.end.x).is_equal_approx(float(1536 - HudLayout.MARGIN), 1.0)
+	assert_float(stacked_rect.end.y).is_less_equal(
+		inspect.get_global_rect().position.y - float(HudLayout.GAP) + 1.0
+	)
+	assert_bool(stacked_rect.intersects(inspect.get_global_rect())).is_false()
+
+	# TemplatesPage ItemCardButton also docks in the lower-right corner.
+	menu.press_category(BuildMenu.TEMPLATES_PAGE)
+	await get_tree().process_frame
+	var save_card := menu.templates_page.save_card() as ItemCardButton
+	var tpl_rect := Rect2(Vector2(save_card.card_screen_position(card_sz)), card_sz)
+	assert_float(tpl_rect.end.x).is_equal_approx(float(1536 - HudLayout.MARGIN), 1.0)
+	assert_bool(tpl_rect.intersects(inspect.get_global_rect())).is_false()
+	assert_bool(tpl_rect.intersects(menu.tray().get_global_rect())).is_false()
 
 
 func test_an_item_with_no_info_has_no_hover_card() -> void:

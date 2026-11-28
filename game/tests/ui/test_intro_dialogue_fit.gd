@@ -130,3 +130,62 @@ func test_a_small_logical_viewport_caps_the_box_and_scrolls_the_body() -> void:
 	assert_float(button.position.y).is_greater_equal(body.end.y)
 	assert_bool(box.encloses(button)).is_true()
 	dialog.free()
+
+
+func test_wrapped_long_chips_and_inline_tip_reserve_height_above_footer_and_buttons() -> void:
+	var chips := [
+		{
+			"label":
+			"Reward: every extra passenger pays the usual fee when they check in at the terminal.",
+			"tint": Color(0.22, 0.58, 0.34, 1.0),
+			"tooltip": "Full reward details for wrapped chip one.",
+		},
+		{
+			"label":
+			"If it fails: queues grow and passengers who miss their flight lower your rating.",
+			"tint": Color(0.76, 0.28, 0.24, 1.0),
+			"tooltip": "Full failure details for wrapped chip two.",
+		},
+	]
+	for screen_size in [Vector2i(1280, 720), Vector2i(1536, 864)]:
+		_port.size = screen_size
+		var dialog := (
+			IntroDialogue
+			. new(
+				"Holiday rush tomorrow",
+				"",
+				340.0,
+				false,
+				IntroDialogue.Speaker.TERMINAL_MANAGER,
+				{
+					"beats": ["Tomorrow is a holiday."],
+					"chips": chips,
+					"footer": "The clock goes on when you close this.",
+				}
+			)
+		)
+		_port.add_child(dialog)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var box: Rect2 = dialog.part_rects()["box"]
+		var chips_rect := dialog.chips_row().get_global_rect()
+		var footer_rect := (dialog.find_child("Footer", true, false) as Label).get_global_rect()
+		var btn_rect := dialog.continue_button().get_global_rect()
+		assert_bool(box.grow(0.5).encloses(chips_rect)).is_true()
+		assert_bool(chips_rect.intersects(footer_rect)).is_false()
+		assert_bool(chips_rect.intersects(btn_rect)).is_false()
+		var first_chip := dialog.chips_row().get_child(0) as Button
+		first_chip.pressed.emit()
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var tip_rect := dialog.chip_tip().get_global_rect()
+		chips_rect = dialog.chips_row().get_global_rect()
+		footer_rect = (dialog.find_child("Footer", true, false) as Label).get_global_rect()
+		btn_rect = dialog.continue_button().get_global_rect()
+		assert_bool(dialog.chip_tip().visible).is_true()
+		var after_box: Rect2 = dialog.part_rects()["box"]
+		assert_bool(after_box.grow(0.5).encloses(tip_rect)).is_true()
+		assert_bool(tip_rect.intersects(chips_rect)).is_false()
+		assert_bool(tip_rect.intersects(footer_rect)).is_false()
+		assert_bool(tip_rect.intersects(btn_rect)).is_false()
+		dialog.free()

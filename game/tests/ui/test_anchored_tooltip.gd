@@ -60,3 +60,41 @@ func test_a_card_wider_than_the_screen_starts_at_the_margin() -> void:
 	var wide := Vector2(2000.0, 40.0)
 	var at := AnchoredTooltip.place(ANCHOR, wide, SCREEN, [])
 	assert_float(at.x).is_equal(float(HudLayout.MARGIN))
+
+
+func test_place_bottom_right_docks_in_lower_right_and_clamps() -> void:
+	var at := AnchoredTooltip.place_bottom_right(CARD, SCREEN)
+	var card := Rect2(at, CARD)
+	assert_float(card.end.x).is_equal(SCREEN.end.x - float(HudLayout.MARGIN))
+	assert_float(card.end.y).is_equal(SCREEN.end.y - float(HudLayout.MARGIN))
+	assert_bool(_inside(card)).is_true()
+
+	var lifted := AnchoredTooltip.place_bottom_right(CARD, SCREEN, 120.0)
+	assert_float(lifted.y + CARD.y).is_equal(SCREEN.end.y - 120.0)
+
+	var wide := Vector2(2000.0, 2000.0)
+	var clamped := AnchoredTooltip.place_bottom_right(wide, SCREEN)
+	assert_vector(clamped).is_equal(Vector2.ZERO)
+
+
+func test_show_bottom_right_stacks_above_right_floor_inspect_card() -> void:
+	var port: SubViewport = auto_free(SubViewport.new())
+	port.size = Vector2i(1536, 864)
+	add_child(port)
+	var inspect := PanelContainer.new()
+	inspect.add_to_group(BottomDocks.RIGHT_FLOOR_GROUP)
+	inspect.position = Vector2(float(1536 - HudLayout.MARGIN) - HudLayout.RAIL_W, 600.0)
+	inspect.size = Vector2(HudLayout.RAIL_W, 248.0)
+	port.add_child(inspect)
+	var tip := AnchoredTooltip.new()
+	port.add_child(tip)
+	await get_tree().process_frame
+
+	tip.show_bottom_right("Check-in Desk: serves departing passengers.")
+	var tip_rect := tip.get_global_rect()
+	assert_bool(tip.visible).is_true()
+	assert_float(tip_rect.end.x).is_equal_approx(float(1536 - HudLayout.MARGIN), 1.0)
+	assert_float(tip_rect.end.y).is_less_equal(
+		inspect.get_global_rect().position.y - float(HudLayout.GAP) + 1.0
+	)
+	assert_bool(tip_rect.intersects(inspect.get_global_rect())).is_false()

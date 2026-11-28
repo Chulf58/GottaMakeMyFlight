@@ -99,10 +99,18 @@ func test_an_offer_names_its_reward_and_its_failure() -> void:
 	_k.offer()
 	var body := _panel.dialog().body_text()
 	var chips := "\n".join(_panel.dialog().chip_texts())
-	print("offer body: %s | chips: %s" % [body, chips])
+	var tips := PackedStringArray()
+	for child in _panel.dialog().chips_row().get_children():
+		var btn := child as Button
+		if btn != null:
+			tips.append(btn.tooltip_text)
+	var tips_text := "\n".join(tips)
+	print("offer body: %s | chips: %s | tips: %s" % [body, chips, tips_text])
 	assert_str(body).contains("A test crew")
-	assert_str(chips).contains("Reward: Two stars of goodwill.")
-	assert_str(chips).contains("If it fails: They leave and tell their friends.")
+	assert_str(chips).contains("Reward: Two stars")
+	assert_str(chips).contains("Risk: They leave")
+	assert_str(tips_text).contains("Reward: Two stars of goodwill.")
+	assert_str(tips_text).contains("If it fails: They leave and tell their friends.")
 
 
 func test_an_offer_without_a_reward_or_a_failure_is_not_shown() -> void:
