@@ -129,6 +129,7 @@ enum Tool {
 	REMOTE_STAND,
 	BAGGAGE_CLAIM,
 	CLAIM_CAROUSEL,
+	BAY_DOOR,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They
@@ -181,6 +182,7 @@ const ROOM_FOCUS_TOOLS := [
 	Tool.COUNTER,
 	Tool.TABLE,
 	Tool.BAG_ROOM,
+	Tool.BAY_DOOR,
 	Tool.BAGGAGE_CLAIM,
 	Tool.CLAIM_CAROUSEL,
 	Tool.BELT,
@@ -213,7 +215,7 @@ const TOOL_WALL_KINDS := {
 	Tool.DOOR: BuildGrid.WallKind.DOOR,
 }
 ## The door tools by the name the status line uses for them.
-const DOOR_NAMES := {Tool.ENTRANCE: "entrance", Tool.EXIT: "exit"}
+const DOOR_NAMES := {Tool.ENTRANCE: "entrance", Tool.EXIT: "exit", Tool.BAY_DOOR: "bay door"}
 ## What the status line tells the player to do when a door tool is refused.
 const DOOR_HINTS := {
 	BuildResult.Reason.NO_FLOOR: "Put the %s on a floor tile at the outside edge",
@@ -710,7 +712,10 @@ static func object_anchor(
 	var c_off := BuildObjectDef.rotate_point(
 		Vector2((def.size.x - 1) * 0.5, (def.size.y - 1) * 0.5), turn
 	)
-	return on_grid.world_to_cell(point - Vector3(c_off.x, 0.0, c_off.y))
+	var shifted := point - Vector3(c_off.x, 0.0, c_off.y)
+	if BuildCatalog.is_bay_door(def_id):
+		return DoorPlacement.cell_under(on_grid, shifted)
+	return on_grid.world_to_cell(shifted)
 
 
 ## The edit the current tool would make at a ground point, or null for none.

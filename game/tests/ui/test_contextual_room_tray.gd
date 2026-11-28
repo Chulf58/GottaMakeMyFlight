@@ -219,16 +219,31 @@ func test_piece_with_front_outside_room_does_not_tick_mandatory_checkmark() -> v
 
 
 func test_bag_room_context_ticks_belt_when_belt_end_is_inside_and_keeps_cart_optional() -> void:
-	var room_id := _mode.grid.apply(BuildEdit.place_room(Rect2i(8, 4, 3, 3), &"bag_room")).room_id
+	var room_id := _mode.grid.apply(BuildEdit.place_room(Rect2i(8, 2, 3, 3), &"bag_room")).room_id
 	_menu.enter_room_context(&"bag_room", room_id)
 	await await_idle_frame()
-	assert_array(_visible_room_tools()).is_equal(
-		[BuildMode.Tool.BELT, BuildMode.Tool.CART, BuildMode.Tool.DOOR, BuildMode.Tool.BAG_ROOM]
+	(
+		assert_array(_visible_room_tools())
+		. is_equal(
+			[
+				BuildMode.Tool.BAY_DOOR,
+				BuildMode.Tool.BELT,
+				BuildMode.Tool.CART,
+				BuildMode.Tool.DOOR,
+				BuildMode.Tool.BAG_ROOM,
+			]
+		)
 	)
+	assert_str(_badge_text(_menu.card(BuildMode.Tool.BAY_DOOR))).is_equal("★")
 	assert_str(_badge_text(_menu.card(BuildMode.Tool.BELT))).is_equal("★")
 	assert_str(_badge_text(_menu.card(BuildMode.Tool.CART))).is_empty()
+	_menu.card(BuildMode.Tool.BAY_DOOR).pressed.emit()
+	_mode.facing = 0
+	assert_bool(_mode.apply_at(_at(Vector2i(9, 2))).ok).is_true()
+	await await_idle_frame()
+	assert_str(_badge_text(_menu.card(BuildMode.Tool.BAY_DOOR))).is_equal("✓")
 	_menu.card(BuildMode.Tool.BELT).pressed.emit()
-	assert_bool(_mode.lay_belt(Vector2i(6, 5), Vector2i(9, 5)).ok).is_true()
+	assert_bool(_mode.lay_belt(Vector2i(6, 3), Vector2i(9, 3)).ok).is_true()
 	await await_idle_frame()
 	assert_str(_badge_text(_menu.card(BuildMode.Tool.BELT))).is_equal("✓")
 	assert_str(_menu.room_summary_label().text).is_equal("Ready")

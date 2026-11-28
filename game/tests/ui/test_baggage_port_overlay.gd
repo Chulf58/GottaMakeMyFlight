@@ -19,7 +19,7 @@ func before_test() -> void:
 	_port.add_child(_mode)
 	_mode.set_process(false)
 	var edits: Array[BuildEdit] = []
-	for y in range(2, 14):
+	for y in range(3, 14):
 		for x in range(2, 16):
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	_mode.grid.apply_batch(edits)
@@ -72,7 +72,13 @@ func test_overlay_is_hidden_outside_belt_bag_room_and_bag_room_selection() -> vo
 
 
 func test_overlay_colors_connected_desk_and_end_green_and_unconnected_amber() -> void:
-	_mode.grid.apply(BuildEdit.place_room(Rect2i(10, 4, 3, 3), &"bag_room"))
+	_mode.grid.apply(BuildEdit.place_room(Rect2i(10, 3, 3, 3), &"bag_room"))
+	(
+		assert_bool(
+			_mode.grid.apply(BuildEdit.place_object(&"baggage_bay_door", Vector2i(11, 3), 0)).ok
+		)
+		. is_true()
+	)
 	var desk1 := PassengerTestWorld.place(_mode.grid, &"checkin_desk", Vector2i(3, 9), 0)
 	var desk2 := PassengerTestWorld.place(_mode.grid, &"checkin_desk", Vector2i(6, 9), 0)
 	var seg1 := BeltShaper.plan_line(_mode.grid, Vector2i(4, 8), Vector2i(4, 5), 0)

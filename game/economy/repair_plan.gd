@@ -592,7 +592,7 @@ func _refresh_sets(leg: int) -> void:
 	_label_regions()
 	_forbidden = LAND if leg == Leg.EXIT else AIR
 	_no_floor = _unowned.duplicate()
-	for way in DoorPlacement.ways_out(_grid):
+	for way in DoorPlacement.enclosure_ways(_grid):
 		_no_floor[way[0] + way[1]] = true
 	_reserved.clear()
 	for id in _grid.object_ids():

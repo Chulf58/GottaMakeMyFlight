@@ -87,6 +87,10 @@ func _build_claim_facility(grid: BuildGrid, offset: Vector2i) -> Dictionary:
 	)
 	var bag_room_res := grid.apply(BuildEdit.place_room(bag_room_rect, BeltShaper.BAG_ROOM))
 	assert_bool(bag_room_res.ok).is_true()
+	for edit: BuildEdit in DoorPlacement.edits_for(
+		grid, BuildEdit.place_object(BuildCatalog.BAY_DOOR_ID, Vector2i(25, 12) + offset, 1)
+	):
+		assert_bool(grid.apply(edit).ok).is_true()
 
 	var claim_rect := Rect2i(Vector2i(12, 13) + offset, Vector2i(6, 4))
 	var claim_res := grid.apply(BuildEdit.place_room(claim_rect, BeltShaper.BAGGAGE_CLAIM))
@@ -689,8 +693,12 @@ func test_adjacent_bag_room_end_directly_on_carousel_inlet_delivers_bags() -> vo
 	)
 	assert_bool(carousel_res.ok).is_true()
 
-	var bag_room_rect := Rect2i(Vector2i(15, 12) + offset, Vector2i(4, 2))
+	var bag_room_rect := Rect2i(Vector2i(15, 12) + offset, Vector2i(7, 2))
 	assert_bool(grid.apply(BuildEdit.place_room(bag_room_rect, BeltShaper.BAG_ROOM)).ok).is_true()
+	for edit: BuildEdit in DoorPlacement.edits_for(
+		grid, BuildEdit.place_object(BuildCatalog.BAY_DOOR_ID, Vector2i(21, 12) + offset, 1)
+	):
+		assert_bool(grid.apply(edit).ok).is_true()
 	var end_cell := Vector2i(15, 13) + offset
 	assert_bool(grid.apply(BuildEdit.place_object(BeltShaper.END, end_cell, 0)).ok).is_true()
 	(

@@ -888,12 +888,16 @@ func _commit(edit: BuildEdit) -> BuildResult:
 			result.dirty_cells = _insert_object(
 				result.object_id, edit.def_id, edit.cell, edit.facing, edit.paid
 			)
-			# A door object's back edge closes the wall line it stands in.
-			var is_door := BuildCatalog.is_door(edit.def_id)
-			_enclosure_stale = _enclosure_stale or is_door
-			if is_door:
+			# A door or bay door object's back edge closes the wall line it stands in.
+			var closes := BuildCatalog.closes_enclosure(edit.def_id)
+			_enclosure_stale = _enclosure_stale or closes
+			if closes:
 				_enclosure_version += 1
-			if _touches_unfloored(result.dirty_cells) or BuildCatalog.is_airside_exit(edit.def_id):
+			if (
+				_touches_unfloored(result.dirty_cells)
+				or BuildCatalog.is_airside_exit(edit.def_id)
+				or BuildCatalog.is_bay_door(edit.def_id)
+			):
 				_route_version += 1
 			_lanes = null
 			if _object_affects_divider_doors(
@@ -906,9 +910,9 @@ func _commit(edit: BuildEdit) -> BuildResult:
 			var def_id: StringName = removed["def"]
 			var anchor: Vector2i = removed["anchor"]
 			var facing: int = removed["facing"]
-			var is_door := BuildCatalog.is_door(def_id)
-			_enclosure_stale = _enclosure_stale or is_door
-			if is_door:
+			var closes := BuildCatalog.closes_enclosure(def_id)
+			_enclosure_stale = _enclosure_stale or closes
+			if closes:
 				_enclosure_version += 1
 			result.dirty_cells = _erase_object(edit.object_id)
 			if BuildCatalog.is_belt(def_id):
@@ -919,7 +923,11 @@ func _commit(edit: BuildEdit) -> BuildResult:
 						for edge_cell in _edge_cells(anchor, side):
 							if not result.dirty_cells.has(edge_cell):
 								result.dirty_cells.append(edge_cell)
-			if _touches_unfloored(result.dirty_cells) or BuildCatalog.is_airside_exit(def_id):
+			if (
+				_touches_unfloored(result.dirty_cells)
+				or BuildCatalog.is_airside_exit(def_id)
+				or BuildCatalog.is_bay_door(def_id)
+			):
 				_route_version += 1
 			_lanes = null
 			if _object_affects_divider_doors(def_id, result.dirty_cells, anchor, facing):

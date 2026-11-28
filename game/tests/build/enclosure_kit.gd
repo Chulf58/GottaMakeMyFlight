@@ -11,7 +11,7 @@ extends RefCounted
 ## Returns how many walls it placed.
 static func close_floor(grid: BuildGrid) -> int:
 	var backs := {}
-	for way in DoorPlacement.ways_out(grid):
+	for way in DoorPlacement.enclosure_ways(grid):
 		var anchor: Vector2i = way[0]
 		backs[Vector3i(anchor.x, anchor.y, BuildGrid.SIDE_STEP.find(way[1]))] = true
 	var edits: Array[BuildEdit] = []
@@ -49,7 +49,7 @@ static func all_indoor(grid: BuildGrid) -> bool:
 ## how many walls it placed.
 static func wall_border(grid: BuildGrid) -> int:
 	var backs := {}
-	for way in DoorPlacement.ways_out(grid):
+	for way in DoorPlacement.enclosure_ways(grid):
 		var anchor: Vector2i = way[0]
 		backs[Vector3i(anchor.x, anchor.y, BuildGrid.SIDE_STEP.find(way[1]))] = true
 	var edits: Array[BuildEdit] = []

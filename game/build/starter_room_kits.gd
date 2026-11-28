@@ -62,12 +62,13 @@ const KITS := {
 		"name": "Starter Bag room",
 		"room_type": &"bag_room",
 		"thumbnail": "bag_room",
-		"size": Vector2i(3, 3),
+		"size": Vector2i(4, 3),
 		"door": {"cell": Vector2i(1, 2), "side": BuildGrid.Side.SOUTH},
 		"pieces":
 		[
-			{"def": &"baggage_belt_end", "anchor": Vector2i(0, 0), "facing": 0},
-			{"def": &"baggage_cart", "anchor": Vector2i(2, 0), "facing": 0},
+			{"def": &"baggage_bay_door", "anchor": Vector2i(1, 0), "facing": 0},
+			{"def": &"baggage_cart", "anchor": Vector2i(3, 0), "facing": 0},
+			{"def": &"baggage_belt_end", "anchor": Vector2i(0, 1), "facing": 0},
 		],
 	},
 	&"kiosk":
@@ -262,10 +263,29 @@ static func door_edge(kit_id: StringName, centre: Vector2i, turns: int) -> Dicti
 	}
 
 
-## Refusal when the doorway's outside threshold is out of bounds, lacks indoor
-## floor (outer wall / outdoor ground), or holds a non-walk-through object;
-## null when the doorway opens onto walkable indoor floor.
-static func door_problem(
+## Returns the rotated bay door {"anchor", "facing", "edges"} for kits that carry
+## a Roll-Up Bay Door, or {} otherwise.
+static func bay_door_edge(kit_id: StringName, centre: Vector2i, turns: int) -> Dictionary:
+	var kit := get_kit(kit_id)
+	if kit.is_empty():
+		return {}
+	var sz: Vector2i = kit["size"]
+	var rect := rect_at(kit_id, centre, turns)
+	var shift := rect.position + _turn_offset(sz, turns)
+	for piece: Dictionary in kit["pieces"]:
+		if not BuildCatalog.is_bay_door(piece["def"]):
+			continue
+		var anchor := shift + BuildObjectDef.rotate_offset(piece["anchor"], turns)
+		var facing := posmod(int(piece["facing"]) + turns, 4)
+		return {
+			"anchor": anchor,
+			"facing": facing,
+			"edges": DoorPlacement.door_edges(piece["def"], anchor, facing),
+		}
+	return {}
+
+
+static func interior_door_problem(
 	grid: BuildGrid, kit_id: StringName, centre: Vector2i, turns: int
 ) -> BuildResult:
 	if grid == null:
@@ -289,6 +309,35 @@ static func door_problem(
 	return null
 
 
+static func bay_door_problem(
+	grid: BuildGrid, kit_id: StringName, centre: Vector2i, turns: int
+) -> BuildResult:
+	if grid == null:
+		return null
+	var bay := bay_door_edge(kit_id, centre, turns)
+	if bay.is_empty():
+		return null
+	var check := DoorPlacement.bay_door_problem(grid, bay["anchor"], bay["facing"])
+	if check.ok:
+		return null
+	if (
+		check.reason == BuildResult.Reason.DOOR_NOT_ON_EDGE
+		or check.reason == BuildResult.Reason.BAY_DOOR_NEEDS_APRON
+	):
+		return BuildResult.refused(BuildResult.Reason.KIT_NEEDS_APRON_WALL)
+	return check
+
+
+## Refusal when the kit's doorways violate edge/apron/floor rules, else null.
+static func door_problem(
+	grid: BuildGrid, kit_id: StringName, centre: Vector2i, turns: int
+) -> BuildResult:
+	var bay := bay_door_problem(grid, kit_id, centre, turns)
+	if bay != null:
+		return bay
+	return interior_door_problem(grid, kit_id, centre, turns)
+
+
 ## Extra composite validation rule enforcing door_problem() during staging
 ## and commit while keeping plan() usable for ghost rendering.
 static func placement_rule(kit_id: StringName, centre: Vector2i, turns: int) -> Callable:
@@ -300,7 +349,7 @@ static func placement_rule(kit_id: StringName, centre: Vector2i, turns: int) -> 
 
 ## Builds the atomic composite edit list for placing `kit_id` centred at
 ## `centre` rotated by `turns` quarter turns: missing floors, missing perimeter
-## plain walls, the rotated doorway, PLACE_ROOM, and all mandatory pieces.
+## plain walls, bay-edge wall removals, the rotated doorway, PLACE_ROOM, and pieces.
 static func plan(
 	grid: BuildGrid, kit_id: StringName, centre: Vector2i, turns: int
 ) -> Array[BuildEdit]:
@@ -326,10 +375,19 @@ static func plan(
 	var door_cell: Vector2i = door["cell"]
 	var door_side: int = door["side"]
 	var door_key := _edge_key(door_cell, door_side)
+	var bay := bay_door_edge(kit_id, centre, turns)
+	var bay_keys := {}
+	if not bay.is_empty():
+		for edge: Array in bay["edges"]:
+			var key := _edge_key(edge[0], edge[1])
+			bay_keys[key] = true
+			if grid != null and grid.wall_kind(edge[0], edge[1]) == BuildGrid.WallKind.PLAIN:
+				edits.append(BuildEdit.remove_wall(edge[0], edge[1]))
 	for edge in RoomTool.perimeter_edges(rect):
 		var cell: Vector2i = edge[0]
 		var side: int = edge[1]
-		if _edge_key(cell, side) == door_key:
+		var key := _edge_key(cell, side)
+		if key == door_key or bay_keys.has(key):
 			continue
 		if grid != null and grid.wall_kind(cell, side) != BuildGrid.WallKind.NONE:
 			continue
@@ -354,7 +412,11 @@ static func base_price(kit_id: StringName) -> int:
 	var sz: Vector2i = kit["size"]
 	var total := sz.x * sz.y * PriceTable.price_of_floor()
 	var perimeter := 2 * (sz.x + sz.y)
-	total += (perimeter - 1) * PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN)
+	var bay_edges := 0
+	for piece: Dictionary in kit["pieces"]:
+		if BuildCatalog.is_bay_door(piece["def"]):
+			bay_edges += 2
+	total += (perimeter - 1 - bay_edges) * PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN)
 	total += PriceTable.price_of_wall(BuildGrid.WallKind.DOOR)
 	for piece: Dictionary in kit["pieces"]:
 		var each := BuildCatalog.object_price(piece["def"])

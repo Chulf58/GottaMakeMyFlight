@@ -192,9 +192,14 @@ func test_a_dirty_terminal_is_a_cause_pointing_at_the_dirtiest_mess() -> void:
 
 func test_baggage_connect_alert_shows_when_bag_room_has_no_connected_desk_and_clears() -> void:
 	var grid := PassengerTestWorld.floored(Vector2i(14, 12))
+	for y in range(0, 4):
+		grid.apply(BuildEdit.remove_floor(Vector2i(10, y)))
+		grid.apply(BuildEdit.remove_floor(Vector2i(11, y)))
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 11), 3)
 	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(2, 9), 0)
 	grid.apply(BuildEdit.place_room(Rect2i(9, 4, 3, 3), &"bag_room"))
+	var bay := grid.apply(BuildEdit.place_object(&"baggage_bay_door", Vector2i(10, 4), 0))
+	assert_bool(bay.ok).is_true()
 	PassengerTestWorld.place(grid, &"baggage_belt_end", Vector2i(9, 5), 0)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
 	var causes := AlertSources.baggage_connect(_world.sim)

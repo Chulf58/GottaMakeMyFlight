@@ -10,6 +10,8 @@ const SECURITY_IDS: Array[StringName] = [&"security_scanner", &"security_arch"]
 const DOOR_IDS: Array[StringName] = [&"entrance_door", &"exit_door"]
 ## One-way airside-to-landside exit door placed on an interior divider wall.
 const AIRSIDE_EXIT_ID: StringName = &"airside_exit_door"
+## Exterior apron-facing two-cell roll-up bay door for Bag Rooms.
+const BAY_DOOR_ID: StringName = &"baggage_bay_door"
 
 ## Where a baggage belt piece joins its neighbours, in the piece's frame at
 ## facing 0, from BAGGAGE_DATA (tools/blender/interior/build_baggage_kit.py).
@@ -89,8 +91,22 @@ static func is_airside_exit(id: StringName) -> bool:
 	return id == AIRSIDE_EXIT_ID
 
 
-static func is_any_door(id: StringName) -> bool:
+static func is_bay_door(id: StringName) -> bool:
+	return id == BAY_DOOR_ID
+
+
+static func is_passenger_door(id: StringName) -> bool:
 	return DOOR_IDS.has(id) or id == AIRSIDE_EXIT_ID
+
+
+static func is_any_door(id: StringName) -> bool:
+	return DOOR_IDS.has(id) or id == AIRSIDE_EXIT_ID or id == BAY_DOOR_ID
+
+
+## Whether an exterior door object replaces plain walls along its back edge
+## to close the terminal's envelope (both passenger doors and bay doors).
+static func closes_enclosure(id: StringName) -> bool:
+	return DOOR_IDS.has(id) or id == BAY_DOOR_ID
 
 
 static func is_belt(id: StringName) -> bool:
@@ -169,6 +185,10 @@ static func _build() -> void:
 	_add_door(&"entrance_door", "Entrance", Color(0.35, 0.7, 0.4))
 	_add_door(&"exit_door", "Exit to the plane", Color(0.3, 0.55, 0.85))
 	_add_door(AIRSIDE_EXIT_ID, "Airside exit door", Color(0.28, 0.72, 0.42))
+	var bay_door := _add(
+		BAY_DOOR_ID, "Roll-Up Bay Door", Vector2i(2, 1), Color(0.85, 0.65, 0.18), 2.5
+	)
+	bay_door.walk_through = true
 	# The gate desk (decision gates-technical-design-gate-desks-link-to-north-
 	# exits-one-st, point 1; ruling 17fe639a): a 2x1 counter that makes a gate
 	# of the nearest free exit facing the planes (GateDesks), staffed by a

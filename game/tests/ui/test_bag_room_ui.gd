@@ -23,7 +23,7 @@ func before_test() -> void:
 	_menu.build_mode = _mode
 	_port.add_child(_menu)
 	var edits: Array[BuildEdit] = []
-	for y in range(2, 12):
+	for y in range(3, 12):
 		for x in range(2, 14):
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	_mode.grid.apply_batch(edits)
@@ -44,6 +44,12 @@ func _texts(control: Control) -> Array:
 func _bag_room(with_end: bool, connected := false) -> int:
 	var room_id := _mode.grid.apply(BuildEdit.place_room(ROOM, &"bag_room")).room_id
 	if with_end:
+		(
+			assert_bool(
+				_mode.grid.apply(BuildEdit.place_object(&"baggage_bay_door", Vector2i(4, 3), 0)).ok
+			)
+			. is_true()
+		)
 		PassengerTestWorld.place(_mode.grid, &"baggage_belt_end", ROOM.position, 0)
 	if connected:
 		PassengerTestWorld.place(_mode.grid, &"checkin_desk", Vector2i(2, 6), 0)
@@ -105,7 +111,7 @@ func test_the_panel_warns_when_a_cart_is_placed_with_no_ramp_agent() -> void:
 	var staff: StaffSim = auto_free(StaffSim.new())
 	_menu.room_panel().staff = staff
 	_bag_room(true, true)
-	PassengerTestWorld.place(_mode.grid, &"baggage_cart", Vector2i(4, 3), 0)
+	PassengerTestWorld.place(_mode.grid, &"baggage_cart", Vector2i(4, 4), 0)
 	_menu.room_panel().show_room(_mode.grid.room_at(Vector2i(4, 4)))
 	assert_array(_texts(_menu.room_panel())).contains(["Needs a Ramp Agent (Staff)"])
 	staff.hire(StaffMember.Role.RAMP)

@@ -67,6 +67,9 @@ enum Reason {
 	REMOTE_STAND_OVERLAP,
 	REMOTE_STAND_NO_ROOM,
 	REMOTE_STAND_IN_USE,
+	BAY_DOOR_NEEDS_APRON,
+	BAY_DOOR_APPROACH_BLOCKED,
+	KIT_NEEDS_APRON_WALL,
 }
 
 const REASON_TEXT := {
@@ -143,6 +146,9 @@ const REASON_TEXT := {
 	Reason.REMOTE_STAND_NO_ROOM: "Needs clear apron space for aircraft and taxiway access",
 	Reason.REMOTE_STAND_IN_USE:
 	"A flight is still due at this remote stand. Remove it after the flight leaves",
+	Reason.BAY_DOOR_NEEDS_APRON: "Bay doors must face open apron ground outside the terminal",
+	Reason.BAY_DOOR_APPROACH_BLOCKED: "Keep the 2 apron cells outside a bay door clear",
+	Reason.KIT_NEEDS_APRON_WALL: "Place Bag Room kit against an apron-facing exterior wall",
 }
 
 var ok: bool = true

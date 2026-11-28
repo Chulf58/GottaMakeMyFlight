@@ -59,9 +59,9 @@ static func trial_copy_of(grid: BuildGrid) -> BuildGrid:
 ## (DoorPlacement.edits_for()) is not taken down by an undo.
 static func rule_problem(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	if edit.kind == BuildEdit.Kind.PLACE_OBJECT and BuildCatalog.is_any_door(edit.def_id):
-		var side := BuildGrid.SIDE_STEP.find(DoorPlacement.back_step(edit.facing))
-		if grid.wall_kind(edit.cell, side) != BuildGrid.WallKind.NONE:
-			return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
+		for edge: Array in DoorPlacement.door_edges(edit.def_id, edit.cell, edit.facing):
+			if grid.wall_kind(edge[0], edge[1]) != BuildGrid.WallKind.NONE:
+				return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
 	var problem := DoorPlacement.edge_problem(grid, edit)
 	if problem == null:
 		problem = BeltShaper.crossing_problem(grid, edit)

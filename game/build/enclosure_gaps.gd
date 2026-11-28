@@ -59,7 +59,7 @@ static func _compute_edges(grid: BuildGrid) -> Array[Vector3i]:
 	var edges: Array[Vector3i] = []
 	var in_building := _building_cells(grid)
 	var backs := {}
-	for way in DoorPlacement.ways_out(grid):
+	for way in DoorPlacement.enclosure_ways(grid):
 		var anchor: Vector2i = way[0]
 		backs[Vector3i(anchor.x, anchor.y, BuildGrid.SIDE_STEP.find(way[1]))] = true
 	for y in grid.size.y:

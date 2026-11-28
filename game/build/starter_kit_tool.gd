@@ -332,15 +332,19 @@ func _ghost_piece(edit: BuildEdit, material: Material) -> void:
 
 func _ghost_door_entry(cell: Vector2i) -> void:
 	var door := StarterRoomKits.door_edge(armed, cell, turns)
-	if door.is_empty():
-		return
-	var door_cell: Vector2i = door["cell"]
-	var door_side: int = door["side"]
-	var outside: Vector2i = door["outside"]
-	var blocked := StarterRoomKits.door_problem(_mode.grid, armed, cell, turns) != null
-	StationUseCells.draw_door_entry(_ghost, _mode.grid, outside, door_cell, door_side, blocked)
-	if blocked:
-		_ghost_wall_block(door_cell, door_side)
+	if not door.is_empty():
+		var door_cell: Vector2i = door["cell"]
+		var door_side: int = door["side"]
+		var outside: Vector2i = door["outside"]
+		var blocked := StarterRoomKits.interior_door_problem(_mode.grid, armed, cell, turns) != null
+		StationUseCells.draw_door_entry(_ghost, _mode.grid, outside, door_cell, door_side, blocked)
+		if blocked:
+			_ghost_wall_block(door_cell, door_side)
+	var bay := StarterRoomKits.bay_door_edge(armed, cell, turns)
+	if not bay.is_empty():
+		if StarterRoomKits.bay_door_problem(_mode.grid, armed, cell, turns) != null:
+			for edge: Array in bay["edges"]:
+				_ghost_wall_block(edge[0], edge[1])
 
 
 func _ghost_wall_block(cell: Vector2i, side: int) -> void:

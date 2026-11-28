@@ -105,16 +105,22 @@ func test_passenger_checked_suitcase_color_handoff_to_belt_and_views() -> void:
 
 
 func test_missed_unchecked_passenger_keeps_suitcase_until_retired() -> void:
-	var grid := PassengerTestWorld.floored(Vector2i(10, 10))
+	var grid := BuildGrid.new(Vector2i(10, 10))
+	var floor_edits: Array[BuildEdit] = []
+	for y in range(2, 10):
+		for x in 10:
+			floor_edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	grid.apply_batch(floor_edits)
+	EnclosureKit.close_floor(grid)
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 8), 3)
 	var desk_id := PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(2, 6), 0)
 	var cells: Array[Vector2i] = []
 	for port in BuildCatalog.belt_ports(&"checkin_desk", Vector2i(2, 6), 0):
 		cells.append(port["cell"] + port["side"])
 	grid.apply_batch(BeltShaper.reshape_edits(grid, cells))
-	BagRoomKit.add(grid, Rect2i(2, 2, 3, 3))
-	var plan := BeltShaper.plan_line(grid, Vector2i(3, 5), Vector2i(2, 2), 0)
-	assert_bool(plan.result.ok).is_true()
+	BagRoomKit.add(grid, Rect2i(3, 2, 3, 3))
+	var plan := BeltShaper.plan_line(grid, Vector2i(3, 5), Vector2i(3, 2), 0)
+	assert_bool(plan.result.ok).override_failure_message(plan.result.reason_text()).is_true()
 	for r in grid.apply_batch(plan.edits):
 		assert_bool(r.ok).is_true()
 	assert_int(desk_id).is_greater(0)

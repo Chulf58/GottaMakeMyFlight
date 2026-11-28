@@ -24,7 +24,7 @@ static func walls_for(grid: BuildGrid, seeds: Array) -> Array[BuildEdit]:
 	var out: Array[BuildEdit] = []
 	# Door objects' back edges (edge_key()), which the doors close.
 	var backs := {}
-	for way in DoorPlacement.ways_out(grid):
+	for way in DoorPlacement.enclosure_ways(grid):
 		backs[edge_key(way[0], BuildGrid.SIDE_STEP.find(way[1]))] = true
 	var joined := _joined_floor(grid, seeds)
 	var outside := _outside(grid, joined, backs)

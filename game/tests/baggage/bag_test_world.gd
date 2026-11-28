@@ -11,7 +11,7 @@ extends RefCounted
 ## centre on tick 150 (10 ticks, then 7 cells of 20).
 
 const FLIGHT := "GMF101"
-const SIZE := Vector2i(16, 12)
+const SIZE := Vector2i(17, 12)
 const DESK := Vector2i(2, 8)
 const ENTRY := Vector2i(3, 7)
 const END := Vector2i(10, 7)
@@ -39,6 +39,10 @@ static func make(suite: GdUnitTestSuite, doors := 4000) -> BagTestWorld:
 	world.flights.bind_clock(world.clock)
 	world.flights.add_flight(FLIGHT, PassengerTestWorld.starts_with(doors - 100, doors))
 	world.grid = PassengerTestWorld.floored(SIZE)
+	for x in SIZE.x:
+		world.grid.apply(BuildEdit.remove_floor(Vector2i(x, 0)))
+	for y in SIZE.y:
+		world.grid.apply(BuildEdit.remove_floor(Vector2i(SIZE.x - 1, y)))
 	world.sim = suite.auto_free(BaggageSim.new())
 	world.sim.bind(world.clock, world.flights, world.grid)
 	world.sim.bag_settled.connect(
@@ -79,7 +83,37 @@ func desk(anchor: Vector2i, facing := 0) -> int:
 func room(area: Rect2i) -> int:
 	var result := grid.apply(BuildEdit.place_room(area, &"bag_room"))
 	assert(result.ok, "test bag room refused: %s" % result.reason_text())
+	if RoomRules.has_bay_door(grid, area):
+		return grid.room_at(area.position)
+	var bay_anchor := Vector2i(area.end.x - 2, area.position.y)
+	var bay_facing := 0
+	if area.position.y <= 2:
+		_clear_bay_apron_north(bay_anchor.x, area.position.y)
+	else:
+		var east_anchor := Vector2i(area.end.x - 1, area.position.y)
+		for y in range(east_anchor.y, east_anchor.y + 2):
+			for x in range(area.end.x, SIZE.x):
+				if grid.floor_at(Vector2i(x, y)) != BuildGrid.FLOOR_NONE:
+					grid.apply(BuildEdit.remove_floor(Vector2i(x, y)))
+		var east_edit := BuildEdit.place_object(&"baggage_bay_door", east_anchor, 1)
+		if DoorPlacement.check(grid, east_edit).ok:
+			bay_anchor = east_anchor
+			bay_facing = 1
+		else:
+			_clear_bay_apron_north(bay_anchor.x, area.position.y)
+	var bay_edit := BuildEdit.place_object(&"baggage_bay_door", bay_anchor, bay_facing)
+	var check := DoorPlacement.check(grid, bay_edit)
+	assert(check.ok, "test bag bay door refused: %s" % check.reason_text())
+	for edit in DoorPlacement.edits_for(grid, bay_edit):
+		assert(grid.apply(edit).ok, "test bag bay door edit refused")
 	return grid.room_at(area.position)
+
+
+func _clear_bay_apron_north(x_start: int, y_end: int) -> void:
+	for y in range(0, y_end):
+		for x in range(x_start, x_start + 2):
+			if grid.floor_at(Vector2i(x, y)) != BuildGrid.FLOOR_NONE:
+				grid.apply(BuildEdit.remove_floor(Vector2i(x, y)))
 
 
 func cart(cell := Vector2i(11, 7), facing := 0) -> int:

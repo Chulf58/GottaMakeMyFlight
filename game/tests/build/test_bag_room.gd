@@ -9,6 +9,7 @@ extends GdUnitTestSuite
 
 const NEEDS_END := "Needs a belt end"
 const NEEDS_OPENING := "Needs entrance"
+const NEEDS_BAY_DOOR := RoomRules.NO_BAY_DOOR
 const ROOM := Rect2i(3, 3, 3, 3)
 
 var _mode: BuildMode
@@ -19,7 +20,7 @@ func before_test() -> void:
 	_mode.grid_size = Vector2i(20, 20)
 	add_child(_mode)
 	var edits: Array[BuildEdit] = []
-	for y in range(2, 12):
+	for y in range(3, 12):
 		for x in range(2, 14):
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	_mode.grid.apply_batch(edits)
@@ -75,10 +76,10 @@ func test_a_bag_room_without_an_end_is_not_ready() -> void:
 	assert_int(room_id).is_greater(0)
 	var status := RoomRules.status(_mode.grid, room_id)
 	assert_bool(status.ok).is_false()
-	assert_array(_notes(room_id)).is_equal([NEEDS_END, NEEDS_OPENING])
+	assert_array(_notes(room_id)).is_equal([NEEDS_BAY_DOOR, NEEDS_END, NEEDS_OPENING])
 	assert_str(status.type_name).is_equal("Bag room")
 	assert_int(status.seats).is_equal(0)
-	assert_str(_mode.status_text()).is_equal("Bag room marked: Needs a belt end")
+	assert_str(_mode.status_text()).is_equal("Bag room marked: %s" % NEEDS_BAY_DOOR)
 
 
 func test_a_belt_end_inside_makes_the_bag_room_ready() -> void:
@@ -86,6 +87,8 @@ func test_a_belt_end_inside_makes_the_bag_room_ready() -> void:
 	_mode.grid.apply(
 		BuildEdit.place_wall(Vector2i(4, 5), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR)
 	)
+	var bay := _mode.grid.apply(BuildEdit.place_object(&"baggage_bay_door", Vector2i(4, 3), 0))
+	assert_bool(bay.ok).is_true()
 	assert_bool(_lay(Vector2i(4, 4), Vector2i(4, 4)).ok).is_true()
 	assert_str(_def_at(Vector2i(4, 4))).is_equal("baggage_belt_end")
 	var status := RoomRules.status(_mode.grid, room_id)
@@ -97,7 +100,7 @@ func test_a_belt_dead_end_outside_the_room_is_a_plain_belt() -> void:
 	var room_id := _mark_bag_room(ROOM)
 	assert_bool(_lay(Vector2i(8, 8), Vector2i(8, 8)).ok).is_true()
 	assert_str(_def_at(Vector2i(8, 8))).is_equal("baggage_belt")
-	assert_array(_notes(room_id)).is_equal([NEEDS_END, NEEDS_OPENING])
+	assert_array(_notes(room_id)).is_equal([NEEDS_BAY_DOOR, NEEDS_END, NEEDS_OPENING])
 
 
 func test_a_real_belt_end_outside_the_room_does_not_count() -> void:
@@ -107,11 +110,13 @@ func test_a_real_belt_end_outside_the_room_does_not_count() -> void:
 	var end := _mode.grid.apply(BuildEdit.place_object(&"baggage_belt_end", Vector2i(8, 8), 0))
 	assert_bool(end.ok).is_true()
 	assert_str(_def_at(Vector2i(8, 8))).is_equal("baggage_belt_end")
-	assert_array(_notes(room_id)).is_equal([NEEDS_END, NEEDS_OPENING])
+	assert_array(_notes(room_id)).is_equal([NEEDS_BAY_DOOR, NEEDS_END, NEEDS_OPENING])
 	var saved := _mode.grid.to_snapshot()
 	assert_bool(_mode.load_snapshot(saved)).is_true()
 	assert_str(_def_at(Vector2i(8, 8))).is_equal("baggage_belt_end")
-	assert_array(_notes(_mode.grid.room_at(ROOM.position))).is_equal([NEEDS_END, NEEDS_OPENING])
+	assert_array(_notes(_mode.grid.room_at(ROOM.position))).is_equal(
+		[NEEDS_BAY_DOOR, NEEDS_END, NEEDS_OPENING]
+	)
 
 
 func test_belts_a_corner_a_merge_and_a_cart_do_not_stand_in_for_the_end() -> void:
@@ -140,14 +145,19 @@ func test_belts_a_corner_a_merge_and_a_cart_do_not_stand_in_for_the_end() -> voi
 	assert_int(pieces.get(&"baggage_belt_feed", 0)).is_equal(1)
 	assert_int(pieces.get(&"baggage_belt_corner", 0)).is_equal(1)
 	assert_int(pieces.get(&"baggage_belt_end", 0)).is_equal(0)
-	assert_array(_notes(room_id)).is_equal([NEEDS_END])
+	assert_array(_notes(room_id)).is_equal([NEEDS_BAY_DOOR, NEEDS_END])
 
 
 func test_a_walled_bag_room_needs_an_opening_even_with_an_end() -> void:
 	var room_id := _mark_bag_room(ROOM)
 	_lay(Vector2i(4, 4), Vector2i(4, 4))
+	var bay := _mode.grid.apply(BuildEdit.place_object(&"baggage_bay_door", Vector2i(4, 3), 0))
+	assert_bool(bay.ok).is_true()
 	for x in range(ROOM.position.x, ROOM.end.x):
-		_mode.grid.apply(BuildEdit.place_wall(Vector2i(x, ROOM.position.y), BuildGrid.Side.NORTH))
+		if x == ROOM.position.x:
+			_mode.grid.apply(
+				BuildEdit.place_wall(Vector2i(x, ROOM.position.y), BuildGrid.Side.NORTH)
+			)
 		_mode.grid.apply(BuildEdit.place_wall(Vector2i(x, ROOM.end.y - 1), BuildGrid.Side.SOUTH))
 	for y in range(ROOM.position.y, ROOM.end.y):
 		_mode.grid.apply(BuildEdit.place_wall(Vector2i(ROOM.position.x, y), BuildGrid.Side.WEST))
@@ -204,6 +214,8 @@ func test_bag_room_dispatch_ready_requires_placed_baggage_cart() -> void:
 	_mode.grid.apply(
 		BuildEdit.place_wall(Vector2i(4, 5), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR)
 	)
+	var bay := _mode.grid.apply(BuildEdit.place_object(&"baggage_bay_door", Vector2i(4, 3), 0))
+	assert_bool(bay.ok).is_true()
 	_lay(Vector2i(4, 4), Vector2i(4, 4))
 	assert_bool(RoomRules.status(_mode.grid, room_id).ok).is_true()
 	assert_bool(RoomRules.bag_room_dispatch_ready(_mode.grid, room_id)).is_false()

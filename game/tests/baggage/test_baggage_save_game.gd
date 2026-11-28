@@ -24,8 +24,12 @@ func before() -> void:
 	# bag room on owned starter floor so checked bags activate (17e414be).
 	var mode := _main.get_node("BuildMode") as BuildMode
 	var offset := ReferenceTerminal.offset_on(mode.grid)
-	var room := Rect2i(Vector2i(16, 13) + offset, Vector2i(3, 3))
+	var room := Rect2i(Vector2i(16, 13) + offset, Vector2i(6, 3))
 	assert_bool(mode.grid.apply(BuildEdit.place_room(room, &"bag_room")).ok).is_true()
+	for edit in DoorPlacement.edits_for(
+		mode.grid, BuildEdit.place_object(&"baggage_bay_door", Vector2i(21, 13) + offset, 1)
+	):
+		assert_bool(mode.grid.apply(edit).ok).is_true()
 	for seg in [[Vector2i(15, 10), Vector2i(16, 10)], [Vector2i(16, 10), Vector2i(16, 13)]]:
 		var plan := BeltShaper.plan_line(mode.grid, seg[0] + offset, seg[1] + offset, 0)
 		assert_bool(plan.result.ok).is_true()

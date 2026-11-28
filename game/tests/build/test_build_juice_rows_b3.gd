@@ -225,6 +225,7 @@ func test_every_room_type_has_valid_rotatable_starter_kit_and_pot_entry() -> voi
 	var room_ids := RoomTypes.ids()
 	assert_int(room_ids.size()).is_equal(14)
 	var centre := Vector2i(10, 10)
+	var bag_centres := {0: Vector2i(10, 3), 1: Vector2i(18, 10), 3: Vector2i(3, 10)}
 	for room_type: StringName in room_ids:
 		(
 			assert_bool(StarterRoomKits.has_kit(room_type))
@@ -238,12 +239,20 @@ func test_every_room_type_has_valid_rotatable_starter_kit_and_pot_entry() -> voi
 			. is_equal(1)
 		)
 		for turns in 4:
+			if room_type == &"bag_room" and turns == 2:
+				_mode.starter_kit.arm(room_type)
+				_mode.starter_kit.turns = turns
+				var south_refusal := _mode.starter_kit.place_at(Vector2i(10, 18))
+				assert_bool(south_refusal.ok).is_false()
+				assert_int(south_refusal.reason).is_equal(BuildResult.Reason.KIT_NEEDS_APRON_WALL)
+				continue
+			var kit_centre: Vector2i = bag_centres[turns] if room_type == &"bag_room" else centre
 			var before_bal := _finances.wallet.balance
 			_mode.starter_kit.arm(room_type)
 			_mode.starter_kit.turns = turns
-			var preview := _mode.starter_kit.preview_price_at(centre)
+			var preview := _mode.starter_kit.preview_price_at(kit_centre)
 			assert_int(preview.x).is_greater(0)
-			var res := _mode.starter_kit.place_at(centre)
+			var res := _mode.starter_kit.place_at(kit_centre)
 			var tag := "%s turn=%d" % [room_type, turns]
 			(
 				assert_bool(res.ok)

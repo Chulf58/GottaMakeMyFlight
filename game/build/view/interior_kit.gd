@@ -48,6 +48,7 @@ const OBJECT_PIECES := {
 	&"entrance_door": "wall_door",
 	&"exit_door": "wall_door",
 	&"airside_exit_door": "wall_door",
+	&"baggage_bay_door": "baggage_bay_door",
 	# The gate desk's own podium with its gate board (gates 2/4,
 	# tools/blender/interior/build_gate_kit.py) and the shuttle-accented bus gate desk.
 	&"gate_desk": "gate_desk",
@@ -121,6 +122,7 @@ const OBJECT_OFFSETS := {
 	&"entrance_door": Vector3(0.0, 0.0, -0.5),
 	&"exit_door": Vector3(0.0, 0.0, -0.5),
 	&"airside_exit_door": Vector3(0.0, 0.0, -0.5),
+	&"baggage_bay_door": Vector3(0.0, 0.0, -0.5),
 	# A chain is three cells in a row with a post in each outer cell: its piece
 	# starts on one post and runs 2 m to the next, so it sits 1 m back of the
 	# centre, and the node adds the two posts (OBJECT_POSTS).
