@@ -102,22 +102,6 @@ static func place_sheet(sheet: Control, host: Node) -> void:
 	_anchor_top_left(sheet, extent.x, SHEET_TOP, Vector2(extent.y, 0.0))
 
 
-## Places PhoneRingCue beside Offers in the top-centre bar when space allows,
-## or tucked cleanly under the Offers-to-rail gap on narrow layouts.
-static func place_ring_cue(
-	cue: Control, host: Node, cue_size: float = float(HudLayout.BUTTON_H)
-) -> void:
-	var width := _layer_width(host)
-	var offers_right := slot_left(OFFERS_SLOT, width) + slot_width(width)
-	var rail_left := _span_right(width)
-	var left := offers_right + float(HudLayout.GAP)
-	var top := TOP
-	if left + cue_size > rail_left:
-		left = rail_left - cue_size
-		top = SHEET_TOP
-	_anchor_top_left(cue, left, top, Vector2(cue_size, cue_size))
-
-
 ## Closes every other sheet of the row; call before showing `opening`.
 static func close_others(opening: Node) -> void:
 	if not opening.is_inside_tree():

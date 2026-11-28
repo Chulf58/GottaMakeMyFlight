@@ -789,17 +789,18 @@ func _place() -> void:
 	)
 
 
-## Top-centre ringing-phone badge beside Offers shared by New Airport intro and
+## Bottom-centre ringing-phone badge shared by New Airport intro and
 ## UnlockGuide calls (decisions phone-ring-pop-up-for-big-moments and
-## hud-4-zone-enforcement-alertstack-toasts-bottom-right-inspect-staffpanel-cleanup).
+## phone-ring-cue-bottom-center-128px-amending-hud-4-zone).
 class PhoneRingCue:
 	extends PanelContainer
 
 	signal answered
 
 	const RING_DURATION_S := 2.05
-	const CUE_SIZE := float(HudLayout.BUTTON_H)
-	const ICON_SIZE := 28.0
+	const CUE_SIZE := 128.0
+	const ICON_SIZE := 88.0
+	const CUE_BOTTOM := BuildMenu.MARGIN + BuildMenu.BAR_H + HudLayout.GAP
 	const PHONE_SVG := (
 		'<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">'
 		+ '<path d="M18 14c-4 0-7 3-7 8 0 17 14 31 31 31 5 0 8-3 8-7l-2-8-10-3-4 5'
@@ -814,11 +815,15 @@ class PhoneRingCue:
 
 	static var _cached_texture: Texture2D
 
+	## Optional callable returning bottom offset in px above viewport bottom.
+	var bottom_provider := Callable()
+
 	var _button := Button.new()
 	var _icon := TextureRect.new()
 	var _ringing := false
 	var _answer_on_key := false
 	var _tween: Tween
+	var _last_bottom := -1.0
 
 	func _init() -> void:
 		name = "PhoneRingCue"
@@ -857,6 +862,12 @@ class PhoneRingCue:
 			vp.size_changed.connect(_place)
 		_place()
 
+	func _process(_delta: float) -> void:
+		if visible:
+			var next_bottom := _current_bottom()
+			if not is_equal_approx(next_bottom, _last_bottom):
+				_place()
+
 	func _exit_tree() -> void:
 		var vp := get_viewport()
 		if vp != null and vp.size_changed.is_connected(_place):
@@ -866,9 +877,69 @@ class PhoneRingCue:
 		_ringing = false
 		_kill_tween()
 
+	func _current_bottom() -> float:
+		if bottom_provider.is_valid():
+			return float(bottom_provider.call())
+		return bottom_clearance(get_parent())
+
 	func _place() -> void:
-		if is_inside_tree() and get_viewport() != null:
-			TopRow.place_ring_cue(self, self, CUE_SIZE)
+		if not is_inside_tree() or get_viewport() == null:
+			return
+		var bottom := _current_bottom()
+		_last_bottom = bottom
+		anchor_left = 0.5
+		anchor_right = 0.5
+		anchor_top = 1.0
+		anchor_bottom = 1.0
+		offset_left = -CUE_SIZE * 0.5
+		offset_right = CUE_SIZE * 0.5
+		offset_top = -bottom - CUE_SIZE
+		offset_bottom = -bottom
+		grow_horizontal = Control.GROW_DIRECTION_BOTH
+		grow_vertical = Control.GROW_DIRECTION_BEGIN
+
+	## Bottom clearance in px above viewport bottom for `hud` (sibling of BuildMenu/StaffPanel).
+	static func bottom_clearance(hud: Node) -> float:
+		if hud == null or not hud.is_inside_tree():
+			return CUE_BOTTOM
+		var menu := hud.get_node_or_null("../BuildMenu") as BuildMenu
+		if menu != null and menu.is_node_ready():
+			if menu.is_tray_open() or menu.status_card().visible:
+				return menu.stack_top() + HudLayout.GAP
+		var staff := hud.get_node_or_null("../StaffPanel") as StaffPanel
+		if staff != null and staff.is_node_ready():
+			var staff_card := staff.get_node_or_null("StaffCard") as Control
+			if staff_card != null and staff_card.visible:
+				var staff_h := maxf(staff_card.size.y, staff_card.get_combined_minimum_size().y)
+				return BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP + staff_h + HudLayout.GAP
+		return CUE_BOTTOM
+
+	## Highest top edge (distance from viewport bottom) of any visible PhoneRingCue
+	## owned by `hud`, or 0.0 when none is visible.
+	static func visible_top(
+		hud: Node, base_bottom: float, intro_ring: PhoneRingCue, guide: UnlockGuide
+	) -> float:
+		var top := 0.0
+		var cues: Array[PhoneRingCue] = []
+		if is_instance_valid(intro_ring):
+			cues.append(intro_ring)
+		if guide != null and is_instance_valid(guide.ring_cue()):
+			cues.append(guide.ring_cue())
+		for child in hud.get_children():
+			var cue := child as PhoneRingCue
+			if cue != null and not cues.has(cue):
+				cues.append(cue)
+		for cue in cues:
+			if not cue.visible:
+				continue
+			var cue_bottom := (
+				float(cue.bottom_provider.call())
+				if cue.bottom_provider.is_valid()
+				else maxf(base_bottom, bottom_clearance(cue.get_parent()))
+			)
+			var cue_h := maxf(CUE_SIZE, cue.size.y)
+			top = maxf(top, cue_bottom + cue_h)
+		return top
 
 	func _input(event: InputEvent) -> void:
 		if not _ringing or not _answer_on_key or not visible:
@@ -985,6 +1056,6 @@ class PhoneRingCue:
 		if _cached_texture != null:
 			return _cached_texture
 		var img := Image.new()
-		if img.load_svg_from_string(PHONE_SVG, 2.0) == OK:
+		if img.load_svg_from_string(PHONE_SVG, 3.0) == OK:
 			_cached_texture = ImageTexture.create_from_image(img)
 		return _cached_texture

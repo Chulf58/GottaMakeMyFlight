@@ -1,9 +1,10 @@
 class_name TestHudFourZoneAndOffers
 extends GdUnitTestSuite
 ## Acceptance tests for:
-## - HUD 4-zone enforcement (8f51e09c parts 1-4): AlertStack toasts,
-##   Offers-beside PhoneRingCue + PaTicker/StatusCard clearance, Pause/Settings
-##   Reset hints, and bottom-right PassengerInspect / BuiltItemCard docking.
+## - HUD 4-zone enforcement (8f51e09c parts 1-4, amended by fa6e54ab):
+##   AlertStack toasts, bottom-center 128x128 PhoneRingCue + BuildMenu/StatusCard/
+##   PaTicker clearance, Pause/Settings Reset hints, and bottom-right
+##   PassengerInspect / BuiltItemCard docking.
 ## - Airline Offers Day-1 auto-pop once + disabled stretch-card gating (944a44c9).
 
 const SEED := 4_070_093
@@ -124,7 +125,9 @@ func test_toasts_route_into_top_right_alert_stack_with_auto_dismiss_and_history(
 	assert_object(cert_layer).is_null()
 
 
-func test_phone_ring_cue_sits_beside_offers_and_pa_ticker_clears_status_at_both_sizes() -> void:
+func test_phone_ring_cue_bottom_center_128_clears_build_menu_and_pa_ticker() -> void:
+	assert_float(IntroDialogue.PhoneRingCue.CUE_SIZE).is_equal(128.0)
+	assert_float(IntroDialogue.PhoneRingCue.ICON_SIZE).is_equal(88.0)
 	var flights := _main.get_node("FlightSim") as FlightSim
 	if flights.opened_tick < 0:
 		flights.open_airport()
@@ -140,32 +143,52 @@ func test_phone_ring_cue_sits_beside_offers_and_pa_ticker_clears_status_at_both_
 		_hud.add_child(cue)
 		cue.start_ring(false, false, 0.0)
 		ticker.show_announcement("PA: Boarding now at Gate C.")
+		await _settle()
+
+		# Collapsed BuildMenu bar: PhoneRingCue sits bottom-center 76 px above bottom.
+		var cue_rect := cue.get_global_rect()
+		var bar_rect := bar.get_global_rect()
+		var ticker_rect := ticker.get_global_rect()
+		var offers_rect := offers_btn.get_global_rect()
+		var panel_rect := flight_panel.get_global_rect()
+		assert_bool(cue.is_visible_in_tree()).is_true()
+		assert_float(cue.size.x).is_equal_approx(128.0, 0.5)
+		assert_float(cue.size.y).is_equal_approx(128.0, 0.5)
+		assert_float(absf(cue_rect.get_center().x - float(layout.x) * 0.5)).is_less_equal(1.0)
+		assert_float(-cue.offset_bottom).is_equal_approx(IntroDialogue.PhoneRingCue.CUE_BOTTOM, 0.5)
+		assert_bool(cue_rect.intersects(bar_rect)).is_false()
+		assert_bool(cue_rect.intersects(ticker_rect)).is_false()
+		assert_bool(cue_rect.intersects(offers_rect)).is_false()
+		assert_bool(cue_rect.intersects(panel_rect)).is_false()
+
+		# With StatusCard visible: PhoneRingCue lifts above StatusCard and PaTicker lifts above cue.
 		build_menu._on_wages_paid(60, 0)
 		build_menu.refresh_preview()
 		await _settle()
 
-		var cue_rect := cue.get_global_rect()
-		var offers_rect := offers_btn.get_global_rect()
-		var panel_rect := flight_panel.get_global_rect()
-		var ticker_rect := ticker.get_global_rect()
+		cue_rect = cue.get_global_rect()
+		offers_rect = offers_btn.get_global_rect()
+		panel_rect = flight_panel.get_global_rect()
+		ticker_rect = ticker.get_global_rect()
 		var status_rect := build_menu.status_card().get_global_rect()
-		var bar_rect := bar.get_global_rect()
+		bar_rect = bar.get_global_rect()
 
 		assert_bool(cue.is_visible_in_tree()).is_true()
+		assert_float(cue.size.x).is_equal_approx(128.0, 0.5)
+		assert_float(cue.size.y).is_equal_approx(128.0, 0.5)
+		assert_float(absf(cue_rect.get_center().x - float(layout.x) * 0.5)).is_less_equal(1.0)
 		assert_bool(cue_rect.intersects(offers_rect)).is_false()
 		assert_bool(cue_rect.intersects(panel_rect)).is_false()
 		assert_bool(cue_rect.intersects(ticker_rect)).is_false()
+		assert_bool(cue_rect.intersects(status_rect)).is_false()
 		assert_bool(cue_rect.intersects(bar_rect)).is_false()
-		assert_float(cue_rect.position.y).is_less_equal(TopRow.SHEET_TOP + 0.5)
-		if layout.x >= 1536:
-			assert_float(cue.offset_top).is_equal_approx(offers_btn.offset_top, 0.5)
-			assert_float(cue.offset_left - offers_btn.offset_right).is_equal_approx(
-				float(HudLayout.GAP), 0.5
-			)
 		assert_bool(ticker_rect.intersects(status_rect)).is_false()
 		assert_bool(ticker_rect.intersects(bar_rect)).is_false()
 		assert_bool(status_rect.intersects(bar_rect)).is_false()
+		assert_float(cue_rect.end.y).is_less_equal(status_rect.position.y + 0.5)
+		assert_float(ticker_rect.end.y).is_less_equal(cue_rect.position.y + 0.5)
 
+		build_menu.end_grant_hold()
 		cue.stop_ring()
 		cue.free()
 		ticker.clear_now()
