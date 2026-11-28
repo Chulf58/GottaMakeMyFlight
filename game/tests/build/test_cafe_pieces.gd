@@ -96,11 +96,16 @@ func test_each_seat_sits_in_its_chair_cell_and_faces_the_table_cell() -> void:
 		for seat in def.seat_descriptors(ANCHOR, facing):
 			var cell: Vector2i = seat["cell"]
 			var approach: Vector2i = seat["approach"]
+			var approaches: Array = seat["approaches"]
 			assert_bool(footprint.has(cell)).is_true()
 			assert_vector(cell + (seat["facing"] as Vector2i)).is_equal(middle)
-			assert_bool(footprint.has(approach)).is_false()
-			# The approach cell is beside the chair, not across the table.
-			assert_int(absi(approach.x - cell.x) + absi(approach.y - cell.y)).is_equal(1)
+			assert_int(approaches.size()).is_equal(2)
+			assert_vector(approaches[0] as Vector2i).is_equal(approach)
+			assert_vector(approaches[0] as Vector2i).is_not_equal(approaches[1] as Vector2i)
+			for candidate: Vector2i in approaches:
+				assert_bool(footprint.has(candidate)).is_false()
+				# Both approach cells are beside the chair, not across the table.
+				assert_int(absi(candidate.x - cell.x) + absi(candidate.y - cell.y)).is_equal(1)
 
 
 func test_the_counter_order_spot_matches_its_mount_at_every_facing() -> void:

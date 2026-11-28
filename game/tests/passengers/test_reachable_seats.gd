@@ -176,6 +176,161 @@ func test_the_walled_booths_info_says_two_of_four_seats_reachable() -> void:
 	card.free()
 
 
+func _card_seats_text(sim: PassengerSim, mode: BuildMode, object_id: int) -> String:
+	var card := BuiltItemCard.new()
+	card.sim = sim
+	card.build_mode = mode
+	card.selection = BuiltSelection.new()
+	card.selection.kind = BuiltSelection.Kind.OBJECT
+	card.selection.id = object_id
+	add_child(card)
+	card.refresh()
+	var text := card.field_text("seats")
+	card.free()
+	return text
+
+
+func _build_5x5_cafe_beside_counter() -> Dictionary:
+	var grid := BuildGrid.new()
+	assert(ReferenceTerminal.build(grid), "reference terminal refused")
+	var at := ReferenceTerminal.offset_on(grid)
+	var room_rect := Rect2i(Vector2i(22, 3) + at, Vector2i(5, 5))
+	var edits: Array[BuildEdit] = []
+	for y in range(room_rect.position.y, room_rect.end.y):
+		for x in range(room_rect.position.x, room_rect.end.x):
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	for y in range(4, 8):
+		edits.append(BuildEdit.remove_wall(Vector2i(21, y) + at, BuildGrid.Side.EAST))
+	for res in grid.apply_batch(edits):
+		assert_bool(res.ok).override_failure_message(res.reason_text()).is_true()
+	EnclosureKit.close_floor(grid)
+	var room := grid.apply(BuildEdit.place_room(room_rect, &"cafe"))
+	assert_bool(room.ok).override_failure_message(room.reason_text()).is_true()
+	var counter := grid.apply(BuildEdit.place_object(&"cafe_counter", Vector2i(23, 4) + at, 0))
+	assert_bool(counter.ok).override_failure_message(counter.reason_text()).is_true()
+	var table := grid.apply(BuildEdit.place_object(&"cafe_table", Vector2i(25, 4) + at, 1))
+	assert_bool(table.ok).override_failure_message(table.reason_text()).is_true()
+	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(1500, 4000))
+	world.sim.cafes.refresh()
+	return {
+		"grid": grid,
+		"world": world,
+		"room": room.room_id,
+		"counter": counter.object_id,
+		"table": table.object_id,
+		"at": at,
+	}
+
+
+func test_cafe_table_beside_counter_uses_opposite_open_side_and_serves_guests() -> void:
+	var built := _build_5x5_cafe_beside_counter()
+	var grid: BuildGrid = built["grid"]
+	var world: PassengerTestWorld = built["world"]
+	var table_id: int = built["table"]
+	var at: Vector2i = built["at"]
+	var seats := RoomRules.reachable_seats(grid, table_id)
+	assert_int(seats.size()).is_equal(2)
+	assert_int(RoomRules.status(grid, built["room"]).seats).is_equal(2)
+	assert_vector(Vector2(seats[0]["approach"])).is_equal(Vector2(Vector2i(26, 4) + at))
+	assert_str(_card_seats_text(world.sim, _mode, table_id)).is_empty()
+
+	# Two guests use both seats; the second takes seat 0 via its alternate approach (26, 4).
+	world.sim.cafes.hunger_enabled = true
+	var waiting: Array[Passenger] = []
+	for i in 2:
+		var p := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.hunger = 0
+		p.cafe_cooldown = 1000000
+		waiting.append(p)
+	var guests: Array[Passenger] = []
+	while not waiting.is_empty() and world.clock.tick < 900:
+		world.step()
+		for p in waiting.duplicate():
+			if p.stage == Passenger.Stage.TO_GATE:
+				waiting.erase(p)
+				assert_bool(world.sim.cafes.try_visit(p)).is_true()
+				guests.append(p)
+	assert_int(guests.size()).is_equal(2)
+	var seen_stages := {}
+	var alt_guest: Passenger = null
+	for p in guests:
+		var v := world.sim.cafes.visit_of(p.id)
+		if v != null and v.seat.get("index", -1) == 0:
+			alt_guest = p
+			seen_stages[p.id] = []
+	assert_object(alt_guest).is_not_null()
+	var alt_visit := world.sim.cafes.visit_of(alt_guest.id)
+	assert_vector(Vector2(alt_visit.seat["approach"])).is_equal(Vector2(Vector2i(26, 4) + at))
+	while world.sim.cafes.visit_of(alt_guest.id) != null and world.clock.tick < 3000:
+		(seen_stages[alt_guest.id] as Array).append(alt_guest.stage)
+		world.step()
+	(
+		assert_array(seen_stages[alt_guest.id])
+		. contains(
+			[
+				Passenger.Stage.CAFE_TO_SEAT,
+				Passenger.Stage.CAFE_SITTING_DOWN,
+				Passenger.Stage.CAFE_SEATED,
+				Passenger.Stage.CAFE_STANDING_UP,
+			]
+		)
+	)
+	assert_int(alt_visit.outcome).is_equal(CafeVisit.Outcome.COMPLETE)
+	assert_int(alt_guest.stage).is_equal(Passenger.Stage.TO_GATE)
+	world.free_all()
+
+
+func test_cafe_table_wedged_on_both_sides_reports_unreachable_seats() -> void:
+	var built := _build_5x5_cafe_beside_counter()
+	var grid: BuildGrid = built["grid"]
+	var world: PassengerTestWorld = built["world"]
+	var table_id: int = built["table"]
+	var at: Vector2i = built["at"]
+	var north_chair := Vector2i(25, 4) + at
+	assert_bool(grid.apply(BuildEdit.place_wall(north_chair, BuildGrid.Side.EAST)).ok).is_true()
+	assert_int(RoomRules.reachable_seats(grid, table_id).size()).is_equal(1)
+	assert_str(_card_seats_text(world.sim, _mode, table_id)).is_equal("1 of 2 seats reachable")
+	var south_chair := Vector2i(25, 6) + at
+	assert_bool(grid.apply(BuildEdit.place_wall(south_chair, BuildGrid.Side.WEST)).ok).is_true()
+	assert_bool(grid.apply(BuildEdit.place_wall(south_chair, BuildGrid.Side.EAST)).ok).is_true()
+	assert_int(RoomRules.reachable_seats(grid, table_id).size()).is_equal(0)
+	assert_str(_card_seats_text(world.sim, _mode, table_id)).is_equal("0 of 2 seats reachable")
+	world.free_all()
+
+
+func test_restaurant_table_against_north_wall_uses_outer_sides_and_booth_keeps_open_end() -> void:
+	var grid := BuildGrid.new()
+	var edits: Array[BuildEdit] = []
+	for y in range(1, 9):
+		for x in range(1, 9):
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	for res in grid.apply_batch(edits):
+		assert_bool(res.ok).override_failure_message(res.reason_text()).is_true()
+	EnclosureKit.close_floor(grid)
+	var room := grid.apply(BuildEdit.place_room(Rect2i(1, 1, 6, 6), &"restaurant"))
+	assert_bool(room.ok).override_failure_message(room.reason_text()).is_true()
+	# Anchor at (3, 1) puts row 0 chairs (3, 1) and (4, 1) flush against the north wall.
+	var table := grid.apply(BuildEdit.place_object(&"restaurant_table", Vector2i(3, 1), 0))
+	assert_bool(table.ok).override_failure_message(table.reason_text()).is_true()
+	var seats := RoomRules.reachable_seats(grid, table.object_id)
+	assert_int(seats.size()).is_equal(4)
+	assert_vector(Vector2(seats[0]["approach"])).is_equal(Vector2(Vector2i(2, 1)))
+	assert_vector(Vector2(seats[1]["approach"])).is_equal(Vector2(Vector2i(5, 1)))
+	# Blocking one north chair's outer side drops that seat (3 of 4 reachable).
+	var block := Vector2i(3, 1)
+	assert_bool(grid.apply(BuildEdit.place_wall(block, BuildGrid.Side.WEST)).ok).is_true()
+	assert_int(RoomRules.reachable_seats(grid, table.object_id).size()).is_equal(3)
+	assert_bool(grid.apply(BuildEdit.remove_wall(block, BuildGrid.Side.WEST)).ok).is_true()
+	assert_bool(grid.apply(BuildEdit.remove_object(table.object_id)).ok).is_true()
+	# A booth in a corner (north + west wall) never routes through its solid back panel.
+	var booth := grid.apply(BuildEdit.place_object(&"restaurant_booth", Vector2i(1, 1), 0))
+	assert_bool(booth.ok).override_failure_message(booth.reason_text()).is_true()
+	var booth_seats := RoomRules.reachable_seats(grid, booth.object_id)
+	assert_int(booth_seats.size()).is_equal(2)
+	for seat in booth_seats:
+		assert_int(seat["approach"].x).is_equal(3)
+
+
 func _texts(control: Control) -> Array:
 	var out := []
 	for label in control.find_children("*", "Label", true, false):

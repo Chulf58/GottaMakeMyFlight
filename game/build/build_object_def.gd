@@ -21,7 +21,9 @@ const NO_CELL := Vector2i(-1, -1)
 @export var height := 1.0
 @export var color := Color.WHITE
 ## Seats in the object's frame at facing 0, in seat-id order: each
-## {"cell": Vector2i, "approach": Vector2i, "root": Vector2, "facing": Vector2i}.
+## {"cell": Vector2i, "approach": Vector2i, "root": Vector2, "facing": Vector2i},
+## with optional "alt_approaches": Array[Vector2i] of fallback cells tried in
+## order when the primary "approach" is blocked.
 ## "cell" is the chair's footprint cell, "approach" the free cell next to it a
 ## guest walks to before sitting, "root" where the seated guest's feet are,
 ## in cells from the chair cell's centre, and "facing" the way the guest looks.
@@ -73,18 +75,23 @@ func interaction_cell(anchor: Vector2i, facing: int) -> Vector2i:
 
 
 ## The seats on the grid, turned with the object: each seat's "index" (its
-## seat id within the object), "cell", "approach", "root" and "facing".
+## seat id within the object), "cell", "approach", "approaches", "root" and
+## "facing".
 func seat_descriptors(anchor: Vector2i, facing: int) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for i in seats.size():
 		var seat: Dictionary = seats[i]
+		var approaches: Array[Vector2i] = [anchor + rotate_offset(seat["approach"], facing)]
+		for alt: Vector2i in seat.get("alt_approaches", []):
+			approaches.append(anchor + rotate_offset(alt, facing))
 		(
 			out
 			. append(
 				{
 					"index": i,
 					"cell": anchor + rotate_offset(seat["cell"], facing),
-					"approach": anchor + rotate_offset(seat["approach"], facing),
+					"approach": approaches[0],
+					"approaches": approaches,
 					"root": rotate_point(seat["root"], facing),
 					"facing": rotate_offset(seat["facing"], facing),
 				}
