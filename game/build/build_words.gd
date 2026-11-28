@@ -156,6 +156,32 @@ static func item_row_placed(item: String, outcome: AreaDrag.Outcome) -> String:
 	return _words.item_row_placed(item, outcome)
 
 
+## Refusal text when a Foundation drag would seal an entrance, exit, or bay door.
+static func foundation_door_seal() -> String:
+	return _words.foundation_door_seal()
+
+
+## "Nothing to place" for Foundation drag over already-floored tiles.
+static func foundation_nothing() -> String:
+	return _words.foundation_nothing()
+
+
+## Status line during Foundation drag (`WxH · $cost`, refusal, or skipped suffix).
+static func foundation_drag_label(
+	width: int,
+	height: int,
+	net_cost: int,
+	has_wallet: bool,
+	nothing: bool,
+	refusal: String,
+	skipped: int,
+	first_reason: String
+) -> String:
+	return _words.foundation_drag_label(
+		width, height, net_cost, has_wallet, nothing, refusal, skipped, first_reason
+	)
+
+
 ## Every English msgid, for the test that checks the list against the data.
 static func msgids() -> Array[String]:
 	return _words.msgids()
@@ -331,6 +357,51 @@ class Words:
 		if outcome.money != 0:
 			return tr("Placed {count} {item} for {cost}", "build status").format(args)
 		return tr("Placed {count} {item}", "build status").format(args)
+
+	func foundation_door_seal() -> String:
+		return tr(
+			"Move the entrance, exit, or bay door before expanding through it", "build refusal"
+		)
+
+	func foundation_nothing() -> String:
+		return tr("Nothing to place", "build status")
+
+	func foundation_drag_label(
+		width: int,
+		height: int,
+		net_cost: int,
+		has_wallet: bool,
+		nothing: bool,
+		refusal: String,
+		skipped: int,
+		first_reason: String
+	) -> String:
+		if refusal != "":
+			return tr("{width} x {height} · {reason}", "build status").format(
+				{"width": width, "height": height, "reason": refusal}
+			)
+		if nothing:
+			return tr("{width} x {height} · Nothing to place", "build status").format(
+				{"width": width, "height": height}
+			)
+		var base := area_size(width, height)
+		if has_wallet:
+			if net_cost < 0:
+				base = tr("{width} x {height} · +${cost}", "build status").format(
+					{"width": width, "height": height, "cost": -net_cost}
+				)
+			else:
+				base = tr("{width} x {height} · ${cost}", "build status").format(
+					{"width": width, "height": height, "cost": net_cost}
+				)
+		if skipped > 0:
+			base += (
+				" · "
+				+ tr("skipped {count}: {reason}", "build status").format(
+					{"count": skipped, "reason": first_reason}
+				)
+			)
+		return base
 
 	## Never called: every English line the data can produce inside tr(), so POT
 	## generation finds it. test_build_words.gd checks the list against the data.
@@ -509,6 +580,12 @@ class Words:
 			tr("Placed {count} {item} for {cost}", "build status"),
 			tr("Placed {count} {item}, skipped {skipped}: {reason}", "build status"),
 			tr("Placed {count} {item} for {cost}, skipped {skipped}: {reason}", "build status"),
+			tr("Move the entrance, exit, or bay door before expanding through it", "build refusal"),
+			tr("{width} x {height} · Nothing to place", "build status"),
+			tr("{width} x {height} · ${cost}", "build status"),
+			tr("{width} x {height} · +${cost}", "build status"),
+			tr("{width} x {height} · {reason}", "build status"),
+			tr("skipped {count}: {reason}", "build status"),
 			# A door's blocker inside the refusal (BuildCatalog display_name, lower case)
 			tr("airside exit door", "item name, mid-sentence"),
 			tr("atm", "item name, mid-sentence"),

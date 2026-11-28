@@ -64,14 +64,14 @@ func test_every_tray_item_has_a_three_part_description() -> void:
 		for part in info:
 			assert_str(part).is_not_empty()
 		checked += 1
-	assert_int(checked).is_equal(80)
+	assert_int(checked).is_equal(81)
 
 
 func test_every_description_belongs_to_a_tray_item() -> void:
 	var tools := _tray_tools()
 	for tool in ItemInfo.tools():
 		assert_bool(tools.has(tool)).is_true()
-	assert_int(ItemInfo.tools().size()).is_equal(80)
+	assert_int(ItemInfo.tools().size()).is_equal(81)
 
 
 func test_all_79_tools_produce_a_hover_card_with_details_and_three_parts() -> void:
@@ -97,7 +97,7 @@ func test_all_79_tools_produce_a_hover_card_with_details_and_three_parts() -> vo
 			assert_array(texts).contains([BuildMenuCatalog.CARD_NEEDS[tool]])
 		shown.free()
 		checked += 1
-	assert_int(checked).is_equal(80)
+	assert_int(checked).is_equal(81)
 
 
 func test_hover_card_renders_when_only_details_or_partial_info_exist() -> void:

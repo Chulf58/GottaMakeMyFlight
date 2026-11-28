@@ -20,6 +20,7 @@ const CATEGORIES := [
 		"tools":
 		[
 			BuildMode.Tool.FLOOR,
+			BuildMode.Tool.FOUNDATION,
 			BuildMode.Tool.WALL,
 			BuildMode.Tool.GLASS,
 			BuildMode.Tool.DOOR,
@@ -182,6 +183,7 @@ const ROOM_TOOLS := {
 ## Card name, thumbnail and non-catalog size text per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
 	BuildMode.Tool.FLOOR: ["Floor", "floor", "1x1 tile"],
+	BuildMode.Tool.FOUNDATION: ["Foundation", "floor", "Floor + walls"],
 	BuildMode.Tool.WALL: ["Wall", "wall", "1 m edge"],
 	BuildMode.Tool.GLASS: ["Glass", "glass", "1 m edge"],
 	BuildMode.Tool.DOOR: ["Door", "door", "1 m edge"],
@@ -293,7 +295,7 @@ static func money_text(wallet: Wallet, fallback: String) -> String:
 ## What a tool's card costs: the floor tile, one wall piece or the object.
 ## 0 for a tool with no price (Remove, a room, no tool).
 static func tool_price(tool: BuildMode.Tool) -> int:
-	if tool == BuildMode.Tool.FLOOR:
+	if tool == BuildMode.Tool.FLOOR or tool == BuildMode.Tool.FOUNDATION:
 		return PriceTable.price_of_floor()
 	if BuildMode.TOOL_WALL_KINDS.has(tool):
 		return PriceTable.price_of_wall(BuildMode.TOOL_WALL_KINDS[tool])
@@ -574,6 +576,8 @@ class Words:
 			tr("Items", "build menu"),
 			tr("Floor", "build menu"),
 			tr("1x1 tile", "build menu"),
+			tr("Foundation", "build menu"),
+			tr("Floor + walls", "build menu"),
 			tr("Wall", "build menu"),
 			tr("1 m edge", "build menu"),
 			tr("Glass", "build menu"),

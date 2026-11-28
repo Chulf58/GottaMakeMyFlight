@@ -56,6 +56,8 @@ static func preview_price(menu: BuildMenu) -> Vector2i:
 	if mode.tool == BuildMode.Tool.FLOOR and area.has_area():
 		var rect_cost := floor_rect_cost(menu, area)
 		return Vector2i(rect_cost, rect_cost)
+	if mode.tool == BuildMode.Tool.FOUNDATION and area.has_area():
+		return FoundationDrag.preview_price(mode)
 	if BuildMode.TOOL_ROOMS.has(mode.tool) and area.has_area():
 		return RoomTool.preview_price(mode.grid, area, BuildMode.TOOL_ROOMS[mode.tool])
 	if mode.tool == BuildMode.Tool.BELT:

@@ -165,6 +165,9 @@ static func draw_area(mode: BuildMode) -> void:
 	if mode.tool == BuildMode.Tool.BELT:
 		draw_belt(mode, mode._area.start_cell(), mode._area.end_cell())
 		return
+	if mode.tool == BuildMode.Tool.FOUNDATION:
+		draw_foundation(mode)
+		return
 	var area := mode._area.rect()
 	var purse := mode.wallet()
 	var key := "area:%s" % area
@@ -215,6 +218,45 @@ static func draw_area(mode: BuildMode) -> void:
 		tint = mode._invalid_material
 	slab(mode, area, tint)
 	mode._show_status(null)
+
+
+## Ghost preview for `BuildMode.Tool.FOUNDATION`: floor slab, planned outer plain
+## walls, amber/red indicators for refused drags or skipped cells/edges, and
+## `WxH · $cost` or refusal text on the status line.
+static func draw_foundation(mode: BuildMode) -> void:
+	var area := mode._area.rect()
+	var purse := mode.wallet()
+	var bal := purse.balance if purse != null else -1
+	var key := (
+		"foundation:%s:%d:%d:%d:%d:%d"
+		% [
+			area,
+			mode.grid.floor_version(),
+			mode.grid.wall_version(),
+			mode.grid.route_version(),
+			FoundationDrag.room_sig(mode.grid),
+			bal,
+		]
+	)
+	if key == mode._hover_key:
+		return
+	mode._hover_key = key
+	var plan := FoundationDrag.plan_cached(mode.grid, area, purse)
+	clear(mode)
+	var slab_tint := mode._valid_material if plan.ok else mode._invalid_material
+	slab(mode, area, slab_tint)
+	var wall_tint := mode._valid_material if plan.ok else mode._invalid_material
+	for edit in plan.outer_wall_edits:
+		wall(mode, edit.cell, edit.side, wall_tint)
+	if plan.ok:
+		for edge in plan.refused_edges:
+			wall(mode, Vector2i(edge.x, edge.y), edge.z, mode._marker_material, 1.5)
+		for cell in plan.refused_cells:
+			tile(mode, cell, mode._invalid_material)
+	else:
+		for cell in plan.refused_cells:
+			tile(mode, cell, mode._wall_block_material)
+	mode._set_status(plan.status_label(purse != null), not plan.ok)
 
 
 ## Highlights every wall along the active wall-remove drag in red (or invalid

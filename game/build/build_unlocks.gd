@@ -55,6 +55,7 @@ const TIERS := [
 		"tools":
 		[
 			BuildMode.Tool.FLOOR,
+			BuildMode.Tool.FOUNDATION,
 			BuildMode.Tool.WALL,
 			BuildMode.Tool.GLASS,
 			BuildMode.Tool.DOOR,
