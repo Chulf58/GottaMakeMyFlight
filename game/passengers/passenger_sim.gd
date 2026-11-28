@@ -824,6 +824,8 @@ func _move(p: Passenger) -> void:
 		and flights.is_doors_closed(p.flight_id)
 	):
 		speed = maxi(speed, BRISK_APRON_MM)
+	elif p.stage == Passenger.Stage.DEPLANING and _is_compact_charter(p.flight_id):
+		speed = maxi(speed, RUN_MM)
 	if files.holds(p.id) or files.waiters.back_mm(p.id) > 0:
 		speed = files.step_of(self, p, speed)
 	# The line outside moves up together at a walk, so it keeps its spacing.
@@ -860,6 +862,17 @@ func _move(p: Passenger) -> void:
 		if p.path_index > 0 or p.at != standing.cell_of(spot):
 			standing.release(p.id)
 			p.stand_from = Passenger.NO_CELL
+
+
+func _is_compact_charter(flight_id: String) -> bool:
+	if flights == null or flight_id == "":
+		return false
+	var win := flights.boarding_window(flight_id)
+	return (
+		win.x >= 0
+		and win.y > win.x
+		and win.y - win.x < FlightSim.PHASE_TICKS[FlightSim.State.BOARDING]
+	)
 
 
 ## Mood and the lateness forecast, once a simulated second per passenger.

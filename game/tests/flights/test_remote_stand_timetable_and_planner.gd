@@ -83,6 +83,11 @@ func before() -> void:
 		. is_true()
 	)
 	assert_array(_flights.remote_stand_ids()).is_equal(["R1", "R2"])
+	var bag_rect := Rect2i(wing + Vector2i(7, 0), Vector2i(6, 6))
+	assert_bool(_mode.grid.apply(BuildEdit.place_room(bag_rect, BeltShaper.BAG_ROOM)).ok).is_true()
+	var bay_edit := BuildEdit.place_object(BuildCatalog.BAY_DOOR_ID, wing + Vector2i(9, 0), 0)
+	for edit: BuildEdit in DoorPlacement.edits_for(_mode.grid, bay_edit):
+		assert_bool(_mode.grid.apply(edit).ok).is_true()
 	var r_cart := _mode.grid.apply(
 		BuildEdit.place_object(BaggageSim.CART_DEF, wing + Vector2i(10, 3), 0)
 	)
@@ -295,6 +300,15 @@ func test_move_between_regular_and_remote_and_bus_gate_removal() -> void:
 func _accept_via_offer_board(offer_index: int, minute: int) -> Dictionary:
 	var desk := _main.get_node("OfferDesk") as OfferDesk
 	var board := desk.board
+	if board.open_offers().is_empty():
+		var clock := _main.get_node("SimClock") as SimClock
+		var day_now := GameCalendar.day_of(clock.tick, clock.epoch)
+		(
+			assert_array(
+				board.refill_day(day_now, clock.rng.seed, 0, _flights.runway.size, _flights)
+			)
+			. is_not_empty()
+		)
 	var snap := board.to_snapshot()
 	var open := board.open_offers()
 	assert_int(open.size()).is_greater(offer_index)

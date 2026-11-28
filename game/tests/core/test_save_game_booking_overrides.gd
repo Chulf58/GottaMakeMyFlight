@@ -64,10 +64,35 @@ func test_a_bad_booking_override_is_refused_before_anything_installs() -> void:
 ## flights give the class maximum, so nothing is installed before the sim
 ## would have refused them.
 func test_an_override_the_saved_contract_cannot_carry_is_refused_before_anything_installs() -> void:
+	var flights := _main.get_node("FlightSim") as FlightSim
+	var board := (_main.get_node("OfferDesk") as OfferDesk).board
+	var open := board.open_offers()
+	assert_bool(open.is_empty()).is_false()
+	var offer_id := String(open[0]["id"])
+	var board_snap := board.to_snapshot()
+	for entry: Dictionary in board_snap["offers"]:
+		if String(entry["id"]) == offer_id:
+			entry["departure_minute"] = 720
+			entry["plane_size"] = PlaneClasses.SMALL
+			entry["booked_passengers"] = 6
+			entry["fee_per_passenger"] = OfferBoard.SMALL_FEE_MIN
+			entry[OfferBoard.LOYAL_KEY] = false
+			entry[OfferBoard.LOYAL_TIER_KEY] = OfferBoard.LOYALTY_TIER_NONE
+			entry[OfferBoard.HUB_KEY] = false
+			entry[FlightContract.TRAITS_KEY] = OfferTraits.frozen({})
+			break
+	assert_bool(board.from_snapshot(board_snap)).is_true()
+	assert_bool(board.accept(offer_id, flights)).is_true()
+
 	var old := _older()
 	var contracts: Array = old["flights"]["contracts"]
 	assert_bool(contracts.is_empty()).is_false()
-	var contract: Dictionary = contracts[0]
+	var contract: Dictionary = {}
+	for candidate: Dictionary in contracts:
+		if String(candidate["id"]) == offer_id:
+			contract = candidate
+			break
+	assert_bool(contract.is_empty()).is_false()
 	var limits := PlaneClasses.passenger_range(contract["plane_size"])
 	var room: int = int(limits[1]) - int(contract["booked_passengers"])
 	print("contract %s has room for %d" % [contract["id"], room])

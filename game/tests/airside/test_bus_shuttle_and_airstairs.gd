@@ -210,6 +210,15 @@ func _accept_offer(
 ) -> Dictionary:
 	var desk := _main.get_node("OfferDesk") as OfferDesk
 	var board := desk.board
+	if board.open_offers().is_empty():
+		var clock := _main.get_node("SimClock") as SimClock
+		var day_now := GameCalendar.day_of(clock.tick, clock.epoch)
+		(
+			assert_array(
+				board.refill_day(day_now, clock.rng.seed, 0, _flights.runway.size, _flights)
+			)
+			. is_not_empty()
+		)
 	var snap := board.to_snapshot()
 	var open := board.open_offers()
 	assert_int(open.size()).is_greater(offer_index)
