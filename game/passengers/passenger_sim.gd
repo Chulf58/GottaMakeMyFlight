@@ -842,6 +842,10 @@ func _move(p: Passenger) -> void:
 
 ## Mood and the lateness forecast, once a simulated second per passenger.
 func _beat(p: Passenger) -> void:
+	if p.stage == Passenger.Stage.ON_BUS:
+		if p.is_departing():
+			_late_due.append(p)
+		return
 	var change := 0
 	if p.stage in QUEUE_STAGES:
 		change -= 1
@@ -877,12 +881,14 @@ func _beat(p: Passenger) -> void:
 	decor.beat(p)
 	messes.beat(p)
 	# Every need rises first, then NeedsPolicy picks which one, if any, the
-	# passenger acts on, by its priority table.
-	toilets.beat(p)
-	cafes.beat(p)
-	if p.is_departing():
-		boredom.beat(p)
-	shops.beat(p)
+	# passenger acts on, by its priority table. Deplaning arrivals wait outside
+	# on the apron before entering the terminal, so skip need mood penalties there.
+	if p.stage != Passenger.Stage.DEPLANING:
+		toilets.beat(p)
+		cafes.beat(p)
+		if p.is_departing():
+			boredom.beat(p)
+		shops.beat(p)
 	if not on_road and not info_desks.holds(p) and p.bin_detour_bin == 0:
 		NeedsPolicy.arbitrate(self, p)
 		info_desks.beat(p)

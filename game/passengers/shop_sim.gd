@@ -94,13 +94,16 @@ const BROWSE_TICKS := 120
 const ARRIVE_TICKS := 1
 ## A bored passenger who could not start a visit tries again after this long.
 const RETRY_TICKS := 100
-## After a visit, or a spare-time browse that could not start, no visit is
-## considered for this long.
+## A refused spare-time browse tries again after this long so passing a full or
+## landside kiosk does not block later airside or boredom visits.
+const BROWSE_RETRY_TICKS := 120
+## After a visit, no visit is considered for this long.
 const BROWSE_COOLDOWN_TICKS := 600
-## Spare-time browsing: how near a browse slot a walking passenger must pass,
-## by octile distance first and then by path; airside passengers browse more.
-const BROWSE_REACH_MM := 5000
+## Spare-time browsing: how near a browse slot a passenger must pass, by octile
+## distance first and then by path; airside and arriving passengers browse more.
+const BROWSE_REACH_MM := 7000
 const AIRSIDE_BROWSE_REACH_MM := 8000
+const ARRIVAL_BROWSE_REACH_MM := 15000
 ## A spare-time browser drops in only with this much spare beyond the margin.
 const SPARE_TICKS := 150
 ## The share of the spend a fallback visit pays, and the mood it costs, once,
@@ -285,9 +288,9 @@ func commit_visit(p: Passenger, plan: Dictionary) -> void:
 
 
 ## A wanted visit could not start: `p` carries on and tries again after
-## RETRY_TICKS, or BROWSE_COOLDOWN_TICKS after a spare-time browse.
+## RETRY_TICKS, or BROWSE_RETRY_TICKS after a refused spare-time browse.
 func refuse(p: Passenger, browsing := false) -> void:
-	p.shop_cooldown = _sim.tick + (BROWSE_COOLDOWN_TICKS if browsing else RETRY_TICKS)
+	p.shop_cooldown = _sim.tick + (BROWSE_RETRY_TICKS if browsing else RETRY_TICKS)
 
 
 ## Once a simulated second per passenger: a visit under way has its deadline
@@ -451,6 +454,8 @@ func _may_start(p: Passenger) -> bool:
 
 
 func _reach_mm(p: Passenger) -> int:
+	if p.is_arriving():
+		return ARRIVAL_BROWSE_REACH_MM
 	return AIRSIDE_BROWSE_REACH_MM if p.cleared else BROWSE_REACH_MM
 
 

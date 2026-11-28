@@ -1,7 +1,7 @@
 class_name TestStarterRoomKitsLayout
 extends GdUnitTestSuite
 ## Layout, staff-spot, doorway clearance, walkability, Words.msgids(), and
-## indoor Break Room tests across all 13 starter room kits and all 4 rotations.
+## indoor Break Room tests across all 14 starter room kits and all 4 rotations.
 
 var _finances: Finances
 var _mode: BuildMode
@@ -68,10 +68,10 @@ func _place_kit(kit_id: StringName, centre: Vector2i, turns: int) -> int:
 	return res.room_id
 
 
-func test_all_13_kits_have_clear_doorways_and_walkable_interior_spots_in_all_rotations() -> void:
+func test_all_14_kits_have_clear_doorways_and_walkable_interior_spots_in_all_rotations() -> void:
 	var centre := Vector2i(12, 12)
 	var kits := StarterRoomKits.kit_ids()
-	assert_int(kits.size()).is_equal(13)
+	assert_int(kits.size()).is_equal(14)
 	for kit_id: StringName in kits:
 		for turns in 4:
 			var tag := "%s turn=%d" % [kit_id, turns]
@@ -259,7 +259,7 @@ func test_food_and_shop_starter_kits_build_valid_layouts_with_reachable_slots() 
 			assert_bool(_mode.undo().ok).is_true()
 
 
-func test_words_msgids_includes_all_13_starter_kit_names() -> void:
+func test_words_msgids_includes_all_14_starter_kit_names() -> void:
 	var msgids := StarterRoomKits.Words.new().msgids()
 	for kit_id: StringName in StarterRoomKits.kit_ids():
 		var kit_name := StarterRoomKits.display_name(kit_id)

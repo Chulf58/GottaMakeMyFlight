@@ -223,7 +223,7 @@ func test_eyedropper_picks_objects_with_facing_walls_rooms_floor_and_unlocks() -
 func test_every_room_type_has_valid_rotatable_starter_kit_and_pot_entry() -> void:
 	var pot := PotEntries.parse(FileAccess.get_file_as_string("res://locale/messages.pot"))
 	var room_ids := RoomTypes.ids()
-	assert_int(room_ids.size()).is_equal(13)
+	assert_int(room_ids.size()).is_equal(14)
 	var centre := Vector2i(10, 10)
 	for room_type: StringName in room_ids:
 		(

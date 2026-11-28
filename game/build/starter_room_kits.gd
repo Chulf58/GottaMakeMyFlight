@@ -174,6 +174,18 @@ const KITS := {
 			{"def": &"plant_pot_1a", "anchor": Vector2i(3, 0), "facing": 0},
 		],
 	},
+	&"baggage_claim":
+	{
+		"name": "Starter Baggage claim",
+		"room_type": &"baggage_claim",
+		"thumbnail": "bag_room",
+		"size": Vector2i(6, 5),
+		"door": {"cell": Vector2i(2, 4), "side": BuildGrid.Side.SOUTH},
+		"pieces":
+		[
+			{"def": &"claim_carousel", "anchor": Vector2i(1, 1), "facing": 0},
+		],
+	},
 }
 
 
@@ -419,6 +431,7 @@ class Words:
 			tr("Starter Lounge", "build menu"),
 			tr("Starter Shower", "build menu"),
 			tr("Starter Break Room", "build menu"),
+			tr("Starter Baggage claim", "build menu"),
 			tr("Kit", "build menu"),
 			tr("Placed {kit} for {cost}", "build status"),
 			tr("{kit}: click to place", "build status"),
