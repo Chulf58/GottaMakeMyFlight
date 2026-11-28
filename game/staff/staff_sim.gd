@@ -89,6 +89,8 @@ const FIRE_ORDER := [
 	[StaffMember.State.ON_DUTY, StaffMember.Slot.PRIMARY],
 ]
 
+@export var unlocks: BuildUnlocks
+
 var sim: PassengerSim
 ## Set on the copy StaffPosts plays a step on for a helper forecast: it shares
 ## the live MessSim, so its cleaners take no job, finish none and let go of
@@ -248,6 +250,27 @@ func is_off_shift() -> bool:
 		if m.state == StaffMember.State.OFF_SHIFT or m.state == StaffMember.State.LEAVING_SHIFT:
 			return true
 	return false
+
+
+func _resolve_unlocks() -> BuildUnlocks:
+	if unlocks != null:
+		return unlocks
+	if sim != null and sim.build_mode != null and sim.build_mode.unlocks != null:
+		return sim.build_mode.unlocks
+	if is_inside_tree():
+		return get_node_or_null("../BuildUnlocks") as BuildUnlocks
+	return null
+
+
+## True once Break Room is unlocked, or when no BuildUnlocks gate restricts tools.
+func is_energy_enabled() -> bool:
+	var required := sim != null and sim.build_mode != null and sim.build_mode.require_unlocks
+	if sim != null and sim.build_mode != null and not required:
+		return true
+	var gate := _resolve_unlocks()
+	if gate == null:
+		return not required
+	return gate.allows(BuildMode.Tool.BREAK_ROOM)
 
 
 ## Every member on the roster or still walking out, for drawing and saving.

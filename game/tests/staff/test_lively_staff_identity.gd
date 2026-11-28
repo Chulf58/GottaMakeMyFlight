@@ -109,6 +109,9 @@ func after_test() -> void:
 	_hud._built.clear()
 	_staff_inspect.press_close()
 	_hud.set_debug_open(false)
+	var unlocks := _main.get_node_or_null("BuildUnlocks") as BuildUnlocks
+	if unlocks != null:
+		unlocks.from_snapshot({"tier": 1, "made": 0, "shown": [], "seen": [], "firsts": []})
 	for id in _staff.member_ids():
 		var m := _staff.get_member(id)
 		if m != null:
@@ -446,8 +449,21 @@ func test_staff_inspect_docks_bottom_right_switches_updates_focuses_and_esc_clos
 	_menu.press_category(0)
 	await _settle()
 
-	# Live updates: energy, training, and thought update cleanly without flicker.
+	# Live updates: energy stays hidden in Tier 1, then updates cleanly once Tier 2 unlocks.
+	assert_str(_staff_inspect.energy_text()).is_empty()
+	var energy_bar := _staff_inspect.find_child("StaffEnergyBar", true, false) as Control
+	assert_bool(energy_bar.is_visible_in_tree()).is_false()
+	var unlocks := _main.get_node("BuildUnlocks") as BuildUnlocks
+	(
+		assert_bool(
+			unlocks.from_snapshot({"tier": 2, "made": 20, "shown": [], "seen": [], "firsts": []})
+		)
+		. is_true()
+	)
+	_hud.refresh()
+	await _settle()
 	assert_str(_staff_inspect.energy_text()).is_equal("Energy 100%")
+	assert_bool(energy_bar.is_visible_in_tree()).is_true()
 	m.energy = 20
 	_staff.train(sid, null)
 	_hud.refresh()

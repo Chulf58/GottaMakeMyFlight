@@ -63,7 +63,7 @@ const STAGE_2_3_ENTRIES := [
 	["", "Max"],
 	["", "On break {pct}%"],
 	["", "Tired {pct}%"],
-	["", "Rested {pct}%"],
+	["", "Energy {pct}%"],
 	["", "Morning Peak +15%"],
 	["", "Evening Peak +15%"],
 	["", "Peak"],

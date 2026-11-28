@@ -14,6 +14,7 @@ const ENERGY_BAR_HEIGHT := 6.0
 var staff: StaffSim
 var views: StaffCharacters
 var camera: TycoonCamera
+var unlocks: BuildUnlocks
 var selected_id := 0
 
 var _name := Label.new()
@@ -21,6 +22,7 @@ var _close := Button.new()
 var _role := Label.new()
 var _quirks := Label.new()
 var _activity := Label.new()
+var _energy_box := VBoxContainer.new()
 var _energy_label := Label.new()
 var _energy_bar := ProgressBar.new()
 var _energy_fill := StyleBoxFlat.new()
@@ -68,12 +70,11 @@ func _init() -> void:
 	_activity.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	root.add_child(_activity)
 
-	var energy_box := VBoxContainer.new()
-	energy_box.add_theme_constant_override("separation", 2)
-	root.add_child(energy_box)
+	_energy_box.add_theme_constant_override("separation", 2)
+	root.add_child(_energy_box)
 	_energy_label.name = "StaffEnergy"
 	_energy_label.theme_type_variation = &"HudSmall"
-	energy_box.add_child(_energy_label)
+	_energy_box.add_child(_energy_label)
 	_energy_bar.name = "StaffEnergyBar"
 	_energy_bar.show_percentage = false
 	_energy_bar.min_value = StaffMember.ENERGY_MIN
@@ -82,7 +83,7 @@ func _init() -> void:
 	_energy_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_energy_fill.bg_color = StaffPanel.ENERGY_RESTED_COLOR
 	_energy_bar.add_theme_stylebox_override("fill", _energy_fill)
-	energy_box.add_child(_energy_bar)
+	_energy_box.add_child(_energy_bar)
 
 	_thought.name = "StaffThought"
 	_thought.theme_type_variation = &"HudHint"
@@ -187,7 +188,8 @@ func refresh() -> void:
 		translated_quirks.append(StaffNames.translate_quirk(q))
 	var next_quirks := " · ".join(translated_quirks)
 	var next_activity := StaffNames.activity_text(pax_sim, m)
-	var next_energy := tr("Energy {pct}%").format({"pct": m.energy})
+	var show_energy := _energy_visible()
+	var next_energy := tr("Energy {pct}%").format({"pct": m.energy}) if show_energy else ""
 	var thought := StaffNames.live_thought(pax_sim, m)
 	var next_thought := tr('"{thought}"').format({"thought": thought}) if thought != "" else ""
 	var layout_dirty := not visible
@@ -199,25 +201,29 @@ func refresh() -> void:
 		_quirks.visible = next_quirks != ""
 		layout_dirty = true
 	layout_dirty = _set_label(_activity, next_activity) or layout_dirty
+	if _energy_box.visible != show_energy:
+		_energy_box.visible = show_energy
+		layout_dirty = true
 	layout_dirty = _set_label(_energy_label, next_energy) or layout_dirty
 	layout_dirty = _set_label(_thought, next_thought) or layout_dirty
 	if _thought.visible != (next_thought != ""):
 		_thought.visible = next_thought != ""
 		layout_dirty = true
-	if not is_equal_approx(_energy_bar.value, float(m.energy)):
-		_energy_bar.value = float(m.energy)
-	var energy_state := 2 if m.is_on_break() else (1 if m.is_tired() else 0)
-	if energy_state != _last_energy_state:
-		_last_energy_state = energy_state
-		_energy_fill.bg_color = (
-			StaffPanel.ENERGY_BREAK_COLOR
-			if energy_state == 2
-			else (
-				StaffPanel.ENERGY_TIRED_COLOR
-				if energy_state == 1
-				else StaffPanel.ENERGY_RESTED_COLOR
+	if show_energy:
+		if not is_equal_approx(_energy_bar.value, float(m.energy)):
+			_energy_bar.value = float(m.energy)
+		var energy_state := 2 if m.is_on_break() else (1 if m.is_tired() else 0)
+		if energy_state != _last_energy_state:
+			_last_energy_state = energy_state
+			_energy_fill.bg_color = (
+				StaffPanel.ENERGY_BREAK_COLOR
+				if energy_state == 2
+				else (
+					StaffPanel.ENERGY_TIRED_COLOR
+					if energy_state == 1
+					else StaffPanel.ENERGY_RESTED_COLOR
+				)
 			)
-		)
 	var prev_bottom := offset_bottom
 	fit()
 	if layout_dirty or not is_equal_approx(prev_bottom, offset_bottom):
@@ -277,7 +283,18 @@ func activity_text() -> String:
 
 
 func energy_text() -> String:
-	return _energy_label.text
+	return _energy_label.text if _energy_box.visible else ""
+
+
+func _energy_visible() -> bool:
+	if staff != null and staff.sim != null and staff.sim.build_mode != null:
+		if not staff.sim.build_mode.require_unlocks:
+			return true
+	if unlocks != null:
+		return unlocks.allows(BuildMode.Tool.BREAK_ROOM)
+	if staff != null:
+		return staff.is_energy_enabled()
+	return true
 
 
 func thought_text() -> String:

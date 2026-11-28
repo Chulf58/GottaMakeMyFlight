@@ -21,6 +21,7 @@ func after() -> void:
 
 
 func after_test() -> void:
+	DemoMode.clear_override()
 	PseudoLocale.disable()
 	for w in [_w, _other]:
 		if w != null:
@@ -256,7 +257,7 @@ func test_staff_panel_and_room_panel_display_energy_and_prestige_recovery() -> v
 	_port.add_child(panel)
 	var id := _w.staff.hire(CHECKIN)
 	var m := _w.staff.get_member(id)
-	assert_str(panel.member_energy_text(id)).is_equal("Rested 100%")
+	assert_str(panel.member_energy_text(id)).is_equal("Energy 100%")
 	m.energy = 20
 	_w.staff.member_energy_changed.emit(id, 20)
 	assert_str(panel.member_energy_text(id)).is_equal("Tired 20%")
@@ -496,3 +497,108 @@ func test_preopen_staff_do_not_drain_energy_or_seek_breaks_until_airport_opens()
 	for _i in StaffMember.DRAIN_INTERVAL_TICKS:
 		_w.step()
 	assert_int(m.energy).is_equal(StaffMember.ENERGY_MAX - 1)
+
+
+func test_energy_drain_and_ui_stay_gated_until_break_room_unlocks_in_demo_and_full() -> void:
+	DemoMode.set_override_for_test(true)
+	_port = SubViewport.new()
+	_port.size = Vector2i(1280, 720)
+	add_child(_port)
+	_w = _ref_world(20_000, true)
+	var rating: AirportRating = auto_free(AirportRating.new())
+	var unlocks: BuildUnlocks = auto_free(BuildUnlocks.new())
+	unlocks.rating = rating
+	unlocks.passengers = _w.sim
+	unlocks.manual = true
+	_port.add_child(unlocks)
+	_w.staff.unlocks = unlocks
+
+	var panel := StaffPanel.new()
+	panel.staff = _w.staff
+	panel.unlocks = unlocks
+	_port.add_child(panel)
+
+	var inspect := StaffInspect.new()
+	inspect.staff = _w.staff
+	inspect.unlocks = unlocks
+	_port.add_child(inspect)
+
+	var id := _w.staff.hire(CHECKIN)
+	var m := _w.staff.get_member(id)
+	_w.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	while m.state != StaffMember.State.ON_DUTY and _w.clock.tick < 600:
+		_w.step()
+	assert_int(m.state).is_equal(StaffMember.State.ON_DUTY)
+
+	# Tier 1 (BREAK_ROOM locked): no drain, no breaks, Energy hidden in Panel & Inspect.
+	assert_bool(unlocks.allows(BuildMode.Tool.BREAK_ROOM)).is_false()
+	assert_bool(_w.staff.is_energy_enabled()).is_false()
+	for _i in 2 * StaffMember.DRAIN_INTERVAL_TICKS:
+		_w.step()
+	assert_int(m.energy).is_equal(StaffMember.ENERGY_MAX)
+	assert_int(m.energy_ticks).is_equal(0)
+	assert_bool(m.is_tired()).is_false()
+	_add_break_room(_w.grid, BREAK_RECT, false)
+	m.energy = StaffMember.TIRED_THRESHOLD
+	for _i in 60:
+		_w.step()
+	assert_bool(m.is_on_break()).is_false()
+	assert_int(m.energy).is_equal(StaffMember.TIRED_THRESHOLD)
+	m.energy = StaffMember.ENERGY_MAX
+	assert_str(panel.member_energy_text(id)).is_empty()
+	assert_object(panel.find_child("EnergyLabel%d" % id, true, false)).is_null()
+	assert_object(panel.find_child("EnergyBar%d" % id, true, false)).is_null()
+	assert_object(panel.member_button(id)).is_not_null()
+
+	inspect.selected_id = id
+	inspect.refresh()
+	assert_bool(inspect.visible).is_true()
+	assert_str(inspect.energy_text()).is_empty()
+	var inspect_bar := inspect.find_child("StaffEnergyBar", true, false) as Control
+	assert_object(inspect_bar).is_not_null()
+	assert_bool(inspect_bar.is_visible_in_tree()).is_false()
+
+	# Tier 2 unlocks (even in DemoMode): BREAK_ROOM unlocked -> Energy readout & drain active.
+	for _i in 60:
+		rating.record_passenger(0, true, PassengerSim.MOOD_MAX)
+	for _i in 20:
+		_w.sim.outcome.emit(_i, true)
+	unlocks.check()
+	assert_int(unlocks.tier()).is_equal(2)
+	assert_bool(unlocks.allows(BuildMode.Tool.BREAK_ROOM)).is_true()
+	assert_bool(_w.staff.is_energy_enabled()).is_true()
+
+	assert_str(panel.member_energy_text(id)).is_equal("Energy 100%")
+	assert_object(panel.find_child("EnergyLabel%d" % id, true, false)).is_not_null()
+	assert_object(panel.find_child("EnergyBar%d" % id, true, false)).is_not_null()
+	inspect.refresh()
+	assert_str(inspect.energy_text()).is_equal("Energy 100%")
+	assert_bool(inspect_bar.is_visible_in_tree()).is_true()
+
+	for _i in StaffMember.DRAIN_INTERVAL_TICKS:
+		_w.step()
+	assert_int(m.energy).is_equal(StaffMember.ENERGY_MAX - 1)
+	assert_str(panel.member_energy_text(id)).is_equal("Energy 99%")
+	inspect.refresh()
+	assert_str(inspect.energy_text()).is_equal("Energy 99%")
+
+	m.energy = 20
+	_w.staff.member_energy_changed.emit(id, 20)
+	assert_str(panel.member_energy_text(id)).is_equal("Tired 20%")
+
+	# Fail-closed check: require_unlocks=true with unwired unlocks disables energy & hides UI.
+	var strict_mode := BuildMode.new()
+	strict_mode.require_unlocks = true
+	strict_mode.unlocks = null
+	_port.add_child(strict_mode)
+	_w.sim.build_mode = strict_mode
+	_w.staff.unlocks = null
+	assert_bool(_w.staff.is_energy_enabled()).is_false()
+	inspect.unlocks = null
+	inspect.refresh()
+	assert_str(inspect.energy_text()).is_empty()
+	assert_bool(inspect_bar.is_visible_in_tree()).is_false()
+	panel.unlocks = null
+	panel._unlocks = null
+	assert_str(panel.member_energy_text(id)).is_empty()
+	_w.sim.build_mode = null
