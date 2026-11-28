@@ -464,6 +464,23 @@ func active_count() -> int:
 	return count
 
 
+## Passengers still present in the terminal or on outside walks: active
+## passengers plus missed passengers walking out to the road.
+func present_count() -> int:
+	var count := 0
+	for p in _passengers:
+		if (
+			not p.is_done()
+			or (
+				p.stage == Passenger.Stage.MISSED
+				and p.missed_phase != Passenger.MissedPhase.NONE
+				and p.missed_phase != Passenger.MissedPhase.DONE
+			)
+		):
+			count += 1
+	return count
+
+
 ## Scheduled passengers not yet in the terminal: pending spawns and arrival
 ## bookings still on their way.
 func pending_spawns() -> int:

@@ -246,3 +246,47 @@ func test_a_first_step_with_no_progress_cannot_pose_as_a_reversal() -> void:
 	before_load = StaffTestKit.signature(_a.staff)
 	assert_bool(_a.staff.from_snapshot(no_progress)).is_false()
 	assert_str(StaffTestKit.signature(_a.staff)).is_equal(before_load)
+
+
+func test_midnight_save_with_off_shift_ramp_agent_loads_cleanly() -> void:
+	var grid := BuildGrid.new()
+	ReferenceTerminal.build(grid)
+	var morning := GameCalendar.tick_at(1, 7 * 60, 0)
+	var starts := FlightSim.schedule_starts(morning)
+	_a = PassengerTestWorld.make(grid, starts)
+	_a.auto_staff = false
+	assert_bool(_a.flights.open_airport()).is_true()
+	var checkin_id := _a.staff.hire(CHECKIN)
+	var ramp_id := _a.staff.hire(StaffMember.Role.RAMP)
+	var midnight := GameCalendar.tick_at(1, 0, 0)
+	_a.run_to(midnight)
+	var ramp := _a.staff.get_member(ramp_id)
+	assert_int(ramp.state).is_equal(StaffMember.State.OFF_SHIFT)
+	assert_int(ramp.ramp_job).is_equal(StaffMember.RampJob.NONE)
+	assert_int(ramp.energy_ticks).is_equal(0)
+	assert_int(_a.staff.get_member(checkin_id).state).is_equal(StaffMember.State.OFF_SHIFT)
+
+	_b = StaffTestKit.load_world(StaffTestKit.save_text(_a))
+	assert_object(_b).is_not_null()
+	assert_str(StaffTestKit.signature(_b.staff)).is_equal(StaffTestKit.signature(_a.staff))
+	assert_int(_b.staff.off_shift_count(StaffMember.Role.RAMP)).is_equal(1)
+
+	var good: Dictionary = JSON.parse_string(JSON.stringify(_a.staff.to_snapshot()))
+	var bad_leaving := good.duplicate(true)
+	bad_leaving["members"][1]["leaving"] = true
+	var bad_flight := good.duplicate(true)
+	bad_flight["members"][1]["ramp_flight_id"] = "GMF101-d1"
+	var before_bad := StaffTestKit.signature(_a.staff)
+	for bad in [bad_leaving, bad_flight]:
+		assert_bool(_a.staff.from_snapshot(bad)).is_false()
+		assert_str(StaffTestKit.signature(_a.staff)).is_equal(before_bad)
+
+	var recall_target: int = starts[FlightSim.State.APPROACH] - QuietNight.LEAD_TICKS
+	var differing := 0
+	while _a.clock.tick < recall_target:
+		_a.step()
+		_b.step()
+		differing += int(StaffTestKit.signature(_a.staff) != StaffTestKit.signature(_b.staff))
+	assert_int(differing).is_equal(0)
+	assert_int(_b.staff.get_member(ramp_id).state).is_equal(StaffMember.State.IDLE)
+	assert_int(_b.staff.on_duty_count(CHECKIN)).is_equal(1)

@@ -498,8 +498,11 @@ static func _ramp_problem(m: StaffMember) -> String:
 		return "is a ramp agent with a cleaner job"
 	match m.ramp_job:
 		StaffMember.RampJob.NONE:
-			if m.state != StaffMember.State.IDLE or m.leaving:
-				return "is an idle ramp agent with wrong state or leaving"
+			if (
+				(m.state != StaffMember.State.IDLE and m.state != StaffMember.State.OFF_SHIFT)
+				or m.leaving
+			):
+				return "is an idle or off-shift ramp agent with wrong state or leaving"
 			if m.ramp_shuttle_id != 0 or m.ramp_flight_id != "":
 				return "is an idle ramp agent with a job id"
 		StaffMember.RampJob.SHUTTLE:

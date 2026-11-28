@@ -54,20 +54,18 @@ func test_staff_walk_out_to_off_shift_and_panel_shows_off_shift() -> void:
 	assert_bool(_w.staff.is_off_shift()).is_true()
 	for id in _w.staff.member_ids():
 		var m := _w.staff.get_member(id)
-		if m.role == RAMP:
-			assert_int(m.state).is_equal(StaffMember.State.IDLE)
-		elif id == cleaner_id:
+		if m.role == RAMP or id == cleaner_id:
 			assert_int(m.state).is_equal(StaffMember.State.OFF_SHIFT)
 		else:
 			assert_int(m.state).is_equal(StaffMember.State.LEAVING_SHIFT)
 	assert_str(panel.counts_text(CHECKIN)).contains("off shift")
-	assert_str(panel.counts_text(RAMP)).is_equal("1 hired, 0 on duty")
+	assert_str(panel.counts_text(RAMP)).is_equal("1 hired, off shift")
 	var steps := 0
 	while _w.staff.off_shift_count(CHECKIN) > 0 and steps < LIMIT_TICKS:
 		var all_off := true
 		for id in _w.staff.member_ids():
 			var m := _w.staff.get_member(id)
-			if m.role != RAMP and m.state != StaffMember.State.OFF_SHIFT:
+			if m.state != StaffMember.State.OFF_SHIFT:
 				all_off = false
 				break
 		if all_off:
@@ -77,13 +75,13 @@ func test_staff_walk_out_to_off_shift_and_panel_shows_off_shift() -> void:
 	assert_int(_w.staff.off_shift_count(CHECKIN)).is_equal(2)
 	assert_int(_w.staff.off_shift_count(SECURITY)).is_equal(2)
 	assert_int(_w.staff.off_shift_count(CLEANER)).is_equal(1)
+	assert_int(_w.staff.off_shift_count(RAMP)).is_equal(1)
 	assert_int(_w.staff.count(CHECKIN)).is_equal(2)
 	assert_int(_w.staff.on_duty_count(CHECKIN)).is_equal(0)
 	for id in _w.staff.member_ids():
 		var m := _w.staff.get_member(id)
-		if m.role != RAMP:
-			assert_int(m.state).is_equal(StaffMember.State.OFF_SHIFT)
-			assert_bool(m.in_pool()).is_true()
+		assert_int(m.state).is_equal(StaffMember.State.OFF_SHIFT)
+		assert_bool(m.in_pool()).is_true()
 
 
 func test_cleaner_finishes_reachable_mess_before_leaving_shift() -> void:
@@ -327,3 +325,203 @@ func test_staff_panel_cleaner_counts_text_for_all_and_mixed_off_shift() -> void:
 		_w.step()
 		guard += 1
 	assert_str(panel.counts_text(CLEANER)).is_equal("2 hired, off shift")
+
+
+func test_missed_passenger_walk_out_holds_off_shift_until_terminal_clears() -> void:
+	var grid := BuildGrid.new()
+	ReferenceTerminal.build(grid)
+	var evening: Array[int] = [0, 1, 2, 3, 280, 290, 300, 340, 350, 360, 370, 380]
+	_w = PassengerTestWorld.make(grid, evening)
+	_w.auto_staff = false
+	assert_bool(_w.flights.add_flight("MORNING", FlightSim.schedule_starts(FIRST))).is_true()
+	assert_bool(_w.flights.open_airport()).is_true()
+	_w.staff.hire(CHECKIN)
+	_w.staff.hire(RAMP)
+	_w.run_to(250)
+	var pax_id := _w.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	assert_int(pax_id).is_greater(0)
+	_w.run_to(380)
+	var p := _w.passenger(pax_id)
+	assert_object(p).is_not_null()
+	assert_int(p.stage).is_equal(Passenger.Stage.MISSED)
+	assert_bool(_w.flights.has_moving_flight()).is_false()
+	assert_int(_w.sim.present_count()).is_equal(1)
+	assert_bool(_w.staff.is_off_shift()).is_false()
+
+	var guard := 0
+	while _w.passenger(pax_id) != null and guard < LIMIT_TICKS:
+		_w.step()
+		guard += 1
+	assert_object(_w.passenger(pax_id)).is_null()
+	assert_int(_w.sim.present_count()).is_equal(0)
+	_w.step()
+	assert_bool(_w.staff.is_off_shift()).is_true()
+	assert_int(_w.staff.off_shift_count(RAMP)).is_equal(1)
+
+
+func test_all_roles_including_gate_shop_and_ramp_leave_overnight_and_return_for_morning() -> void:
+	var grid := BuildGrid.new()
+	var ids := CafeTestLayout.build(grid, true)
+	assert_bool(grid.apply(ReferenceTerminal.gate_desk_edit()).ok).is_true()
+	var evening: Array[int] = [0, 1, 2, 3, 200, 210, 220, 240, 250, 260, 270, 280]
+	_w = PassengerTestWorld.make(grid, evening)
+	_w.auto_staff = false
+	var morning_starts := FlightSim.schedule_starts(FIRST)
+	assert_bool(_w.flights.add_flight("MORNING", morning_starts)).is_true()
+	assert_bool(_w.flights.open_airport()).is_true()
+
+	var chars := auto_free(StaffCharacters.new()) as StaffCharacters
+	chars.clock = _w.clock
+	chars.staff = _w.staff
+	chars.flights = _w.flights
+	add_child(chars)
+
+	StaffTestKit.staff_all(
+		_w.staff, [CHECKIN, SECURITY, StaffMember.Role.GATE, StaffMember.Role.SHOP]
+	)
+	var cleaner_id := _w.staff.hire(CLEANER)
+	var ramp_id := _w.staff.hire(RAMP)
+	chars.sync(true)
+	assert_object(chars.node_for(ramp_id)).is_not_null()
+
+	# After evening flight departs, all roles including GATE, SHOP, CLEANER and RAMP leave shift.
+	_w.run_to(280)
+	assert_bool(_w.flights.has_moving_flight()).is_false()
+	var guard := 0
+	while guard < LIMIT_TICKS:
+		_w.step()
+		guard += 1
+		var all_off := true
+		for id in _w.staff.member_ids():
+			if _w.staff.get_member(id).state != StaffMember.State.OFF_SHIFT:
+				all_off = false
+				break
+		if all_off:
+			break
+	assert_int(_w.staff.off_shift_count(StaffMember.Role.GATE)).is_equal(
+		_w.staff.count(StaffMember.Role.GATE)
+	)
+	assert_int(_w.staff.off_shift_count(StaffMember.Role.SHOP)).is_equal(
+		_w.staff.count(StaffMember.Role.SHOP)
+	)
+	assert_int(_w.staff.off_shift_count(RAMP)).is_equal(1)
+	assert_int(_w.staff.on_duty_count(StaffMember.Role.GATE)).is_equal(0)
+	assert_int(_w.staff.on_duty_count(StaffMember.Role.SHOP)).is_equal(0)
+	assert_int(_w.staff.get_member(cleaner_id).state).is_equal(StaffMember.State.OFF_SHIFT)
+	assert_object(chars.node_for(ramp_id)).is_null()
+	assert_int(ids["land_counter"]).is_greater(0)
+
+	# Staff return ahead of the morning flight and serve passengers with zero misses.
+	var approach := morning_starts[FlightSim.State.APPROACH]
+	_w.run_to(approach - QuietNight.LEAD_TICKS)
+	assert_bool(_w.staff.is_off_shift()).is_false()
+	assert_int(_w.staff.on_duty_count(CHECKIN)).is_equal(_w.staff.count(CHECKIN))
+	assert_int(_w.staff.on_duty_count(SECURITY)).is_equal(_w.staff.count(SECURITY))
+	assert_int(_w.staff.on_duty_count(StaffMember.Role.GATE)).is_equal(
+		_w.staff.count(StaffMember.Role.GATE)
+	)
+	assert_int(_w.staff.get_member(ramp_id).state).is_equal(StaffMember.State.IDLE)
+	assert_object(chars.node_for(ramp_id)).is_not_null()
+
+	assert_bool(_w.sim.schedule_flight("MORNING", 4)).is_true()
+	_w.run_to(morning_starts[FlightSim.State.DEPARTED])
+	assert_int(_w.sim.made_count()).is_equal(4)
+	assert_int(_w.sim.missed_count()).is_equal(0)
+
+
+func test_demo_schedule_2100_to_0700_leaves_overnight_and_recalls_before_morning() -> void:
+	var grid := BuildGrid.new()
+	CafeTestLayout.build(grid, true)
+	assert_bool(grid.apply(ReferenceTerminal.gate_desk_edit()).ok).is_true()
+	_w = PassengerTestWorld.make(grid, FlightSim.schedule_starts(FIRST))
+	_w.auto_staff = false
+	var snap := _w.flights.to_snapshot()
+	snap["opened_tick"] = 0
+	snap["flights"] = []
+	assert_bool(_w.flights.from_snapshot(snap)).is_true()
+
+	var morning_terms := TestFlightContracts.terms("MORN01", 7 * 60)
+	morning_terms["plane_size"] = "small"
+	morning_terms["booked_passengers"] = 4
+	var evening_terms := TestFlightContracts.terms("EVE01", 21 * 60)
+	evening_terms["plane_size"] = "small"
+	evening_terms["booked_passengers"] = 4
+	assert_bool(_w.flights.accept_contract(morning_terms)).is_true()
+	assert_bool(_w.flights.accept_contract(evening_terms)).is_true()
+
+	StaffTestKit.staff_all(
+		_w.staff, [CHECKIN, SECURITY, StaffMember.Role.GATE, StaffMember.Role.SHOP]
+	)
+	var cleaner_id := _w.staff.hire(CLEANER)
+	var ramp_id := _w.staff.hire(RAMP)
+
+	var eve_depart := GameCalendar.tick_at(0, 22 * 60 + 2, 0)
+	_w.run_to(eve_depart)
+	assert_bool(_w.flights.has_moving_flight()).is_false()
+
+	var left_tick := -1
+	var all_off_tick := -1
+	var midnight := GameCalendar.tick_at(1, 0, 0)
+	while _w.clock.tick < midnight:
+		_w.step()
+		if left_tick < 0 and _w.staff.is_off_shift():
+			left_tick = _w.clock.tick
+		var all_off := true
+		for id in _w.staff.member_ids():
+			if _w.staff.get_member(id).state != StaffMember.State.OFF_SHIFT:
+				all_off = false
+				break
+		if all_off:
+			all_off_tick = _w.clock.tick
+			break
+	print(
+		(
+			"Demo 21:00->07:00 left=%s all_off=%s"
+			% [
+				GameCalendar.clock_text(left_tick, 0),
+				GameCalendar.clock_text(all_off_tick, 0),
+			]
+		)
+	)
+	assert_int(left_tick).is_greater_equal(eve_depart)
+	assert_int(all_off_tick).is_greater(0)
+	assert_int(all_off_tick).is_less(GameCalendar.tick_at(0, 22 * 60 + 30, 0))
+	assert_int(_w.staff.off_shift_count(CHECKIN)).is_equal(_w.staff.count(CHECKIN))
+	assert_int(_w.staff.off_shift_count(SECURITY)).is_equal(_w.staff.count(SECURITY))
+	assert_int(_w.staff.off_shift_count(StaffMember.Role.GATE)).is_equal(
+		_w.staff.count(StaffMember.Role.GATE)
+	)
+	assert_int(_w.staff.off_shift_count(StaffMember.Role.SHOP)).is_equal(
+		_w.staff.count(StaffMember.Role.SHOP)
+	)
+	assert_int(_w.staff.get_member(cleaner_id).state).is_equal(StaffMember.State.OFF_SHIFT)
+	assert_int(_w.staff.get_member(ramp_id).state).is_equal(StaffMember.State.OFF_SHIFT)
+
+	# Crossing Day 1 morning issue_tick (02:43) keeps staff off-shift until 30m before morning.
+	var morn_contract := _w.flights.contract_of("MORN01")
+	var issue := FlightTimetable.issue_tick(morn_contract, 1, 0)
+	_w.run_to(issue + 10)
+	assert_bool(_w.staff.is_off_shift()).is_true()
+
+	var recall_tick := -1
+	var approach := _w.flights.state_start("MORN01-d1", FlightSim.State.APPROACH)
+	while _w.clock.tick < approach:
+		_w.step()
+		if recall_tick < 0 and not _w.staff.is_off_shift():
+			recall_tick = _w.clock.tick
+	print("Demo 21:00->07:00 recall=%s" % GameCalendar.clock_text(recall_tick, 0))
+	assert_int(recall_tick).is_greater(issue)
+	assert_int(recall_tick).is_less(approach)
+	assert_int(_w.staff.on_duty_count(CHECKIN)).is_equal(_w.staff.count(CHECKIN))
+	assert_int(_w.staff.on_duty_count(SECURITY)).is_equal(_w.staff.count(SECURITY))
+	assert_int(_w.staff.on_duty_count(StaffMember.Role.GATE)).is_equal(
+		_w.staff.count(StaffMember.Role.GATE)
+	)
+	assert_int(_w.staff.on_duty_count(StaffMember.Role.SHOP)).is_equal(
+		_w.staff.count(StaffMember.Role.SHOP)
+	)
+	assert_int(_w.staff.get_member(ramp_id).state).is_equal(StaffMember.State.IDLE)
+
+	var morn_depart := _w.flights.state_start("MORN01-d1", FlightSim.State.DEPARTED)
+	_w.run_to(morn_depart)
+	assert_int(_w.sim.missed_count()).is_equal(0)
