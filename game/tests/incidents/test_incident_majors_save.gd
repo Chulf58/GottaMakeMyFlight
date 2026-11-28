@@ -37,6 +37,20 @@ func before() -> void:
 	SaveTestKit.start_airport(_main)
 	for i in PLAY_TICKS:
 		SaveTestKit.step(_main)
+	# Starter contract now books 8/8 small seats (0 headroom); accept a 6-pax
+	# small offer at 13:00 so FAVOUR's EXTRA=2 has headroom to test against.
+	var desk: OfferDesk = _main.get_node("OfferDesk")
+	var snap := desk.board.to_snapshot()
+	snap["offers"][0]["plane_size"] = PlaneClasses.SMALL
+	snap["offers"][0]["booked_passengers"] = 6
+	snap["offers"][0]["departure_minute"] = 780
+	snap["offers"][0]["traits"] = {}
+	snap["offers"][0]["fee_per_passenger"] = OfferBoard.apply_peak_bonus(
+		OfferTraits.fee_of(50, {}), 780
+	)
+	snap["offers"][0]["status"] = OfferBoard.OPEN
+	assert_bool(desk.board.from_snapshot(snap)).is_true()
+	assert_bool(desk.board.accept("O0N1", _flights)).is_true()
 	assert_bool(_save.save_to_file(_base)).is_true()
 
 
@@ -56,11 +70,11 @@ func after() -> void:
 ## Puts the two records in through the director's own load, as a roll and a
 ## fire leave them, and returns the offered favour's flight.
 func _put_in_records() -> void:
-	var contracts := _flights.active_contract_ids()
-	assert_array(contracts).is_not_empty()
-	var contract := _flights.contract_of(contracts[0])
+	var contract_id := "O0N1"
+	var contract := _flights.contract_of(contract_id)
+	assert_bool(contract.is_empty()).is_false()
 	var today := GameCalendar.day_of(_clock.tick, _clock.epoch)
-	_flight = FlightTimetable.occurrence_id(contracts[0], today + 2)
+	_flight = FlightTimetable.occurrence_id(contract_id, today + 2)
 	var departs := GameCalendar.tick_at(today + 2, int(contract["departure_minute"]), _clock.epoch)
 	_visit = GameCalendar.day_start(today + 1, _clock.epoch) + 9000
 	var data := _director.to_snapshot()

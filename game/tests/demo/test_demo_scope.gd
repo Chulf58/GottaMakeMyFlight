@@ -8,8 +8,8 @@ extends GdUnitTestSuite
 ##      runway "In the full game" (hidden at Tier 1, appended at the right end
 ##      of trays at Tier 2), and hides Tier 4 cards and empty tabs in BuildMenu.
 ##   3. Demo mode allows 1 extra land plot and refuses the 2nd extra plot.
-##   4. Demo mode filters IncidentCatalogue rolls to SPILL, FAULT, and RUSH,
-##      excluding INSPECTOR, VIP, and FAVOUR.
+##   4. Demo mode filters IncidentCatalogue rolls to SPILL, FAULT, INSPECTOR,
+##      RUSH, and VIP (even at tier 0), excluding FAVOUR.
 ##   5. Demo mode triggers DemoEndCard when Day 5 rolls into Day 6 (pausing
 ##      synchronously at 3x, showing stats + ruled copy, invoking Wishlist and
 ##      Back to Title handlers, writing the Day-6 morning autosave, and
@@ -344,9 +344,9 @@ func test_demo_allows_one_extra_land_plot_and_refuses_second_extra_plot() -> voi
 	assert_int(finances.wallet.balance).is_equal(balance_before)
 
 
-func test_demo_incident_catalogue_permits_spill_fault_and_rush_only() -> void:
+func test_demo_incident_catalogue_permits_demo_events_and_excludes_favour() -> void:
 	DemoMode.set_override_for_test(true)
-	var world := {"tier": 3, "places": 4, "faults": 2, "contracts": 2}
+	var world := {"tier": 0, "places": 4, "faults": 2, "contracts": 2}
 	var candidates := IncidentCatalogue.candidates(world)
 	var kinds := candidates.map(func(c: Dictionary) -> String: return c["kind"])
 	(
@@ -355,7 +355,9 @@ func test_demo_incident_catalogue_permits_spill_fault_and_rush_only() -> void:
 			[
 				IncidentCatalogue.NONE,
 				IncidentCatalogue.SPILL,
+				IncidentCatalogue.INSPECTOR,
 				IncidentCatalogue.RUSH,
+				IncidentCatalogue.VIP,
 				IncidentCatalogue.FAULT,
 			]
 		)
@@ -371,8 +373,8 @@ func test_demo_incident_catalogue_permits_spill_fault_and_rush_only() -> void:
 	assert_int(int(counts.get(IncidentCatalogue.SPILL, 0))).is_greater(0)
 	assert_int(int(counts.get(IncidentCatalogue.FAULT, 0))).is_greater(0)
 	assert_int(int(counts.get(IncidentCatalogue.RUSH, 0))).is_greater(0)
-	assert_int(int(counts.get(IncidentCatalogue.INSPECTOR, 0))).is_equal(0)
-	assert_int(int(counts.get(IncidentCatalogue.VIP, 0))).is_equal(0)
+	assert_int(int(counts.get(IncidentCatalogue.INSPECTOR, 0))).is_greater(0)
+	assert_int(int(counts.get(IncidentCatalogue.VIP, 0))).is_greater(0)
 	assert_int(int(counts.get(IncidentCatalogue.FAVOUR, 0))).is_equal(0)
 
 	# IncidentDirector ignores non-demo forced_kind and stops rolling on Day 6+.
@@ -382,16 +384,13 @@ func test_demo_incident_catalogue_permits_spill_fault_and_rush_only() -> void:
 	var director: IncidentDirector = auto_free(IncidentDirector.new())
 	director.bind(ref_world.clock, ref_world.flights, ref_world.sim)
 	director.set_enabled(true)
-	var forbidden := [
-		IncidentCatalogue.VIP,
-		IncidentCatalogue.INSPECTOR,
-		IncidentCatalogue.FAVOUR,
-	]
-	for i in forbidden.size():
-		director.forced_kind = forbidden[i]
-		director.on_tick(GameCalendar.day_start(i + 1, 0))
+	director.forced_kind = IncidentCatalogue.FAVOUR
+	director.on_tick(GameCalendar.day_start(1, 0))
 	for incident in director.incidents():
-		assert_bool(forbidden.has(incident["kind"])).is_false()
+		assert_str(incident["kind"]).is_not_equal(IncidentCatalogue.FAVOUR)
+	director.forced_kind = IncidentCatalogue.VIP
+	director.on_tick(GameCalendar.day_start(2, 0))
+	assert_str(director.incidents().back()["kind"]).is_equal(IncidentCatalogue.VIP)
 	director.forced_kind = IncidentCatalogue.SPILL
 	director.on_tick(GameCalendar.day_start(4, 0))
 	assert_int(director.last_rolled_day()).is_equal(4)

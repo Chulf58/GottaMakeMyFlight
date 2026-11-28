@@ -62,6 +62,8 @@ const BUSY_LEAD_TICKS := 2 * 60 * GameCalendar.TICKS_PER_MINUTE
 const FIRE_FLOOR_TICKS := QuietNight.LEAD_TICKS + SimClock.FAST_FORWARD_MAX_STEPS
 const CHECKIN_PLACE := IncidentCatalogue.CHECKIN_PLACE
 const SECURITY_PLACE := IncidentCatalogue.SECURITY_PLACE
+const DEMO_MAJOR_GAP_DAYS := 1
+const DEMO_LATE_NONE_WEIGHT := 1
 
 ## The clock whose day boundaries roll. A scene must set it, with the flights
 ## and passengers; tests call bind().
@@ -376,20 +378,26 @@ func _roll(day: int, tick: int) -> void:
 			)
 	)
 	var opened_day := GameCalendar.day_of(flights.opened_tick, clock.epoch)
+	var demo := DemoMode.is_demo()
 	var world := {
 		"tier": _tier(),
 		"places": spill_places().size(),
 		"faults": IncidentFault.stations(passengers).size(),
 		"contracts": flights.active_contract_ids().size(),
-		"guarantee_incident": day == opened_day + 1,
+		"guarantee_incident": day == opened_day + 1 or (demo and day <= 3),
 	}
+	if demo:
+		world["none_weight"] = DEMO_LATE_NONE_WEIGHT
 	var candidates := IncidentCatalogue.candidates(world)
-	if forced_kind != "" and (not DemoMode.is_demo() or IncidentCatalogue.demo_allows(forced_kind)):
+	if forced_kind != "" and (not demo or IncidentCatalogue.demo_allows(forced_kind)):
 		candidates = [
 			{"kind": forced_kind, "weight": 1, "major": IncidentCatalogue.is_major(forced_kind)}
 		]
 	var draws := IncidentRoll.stream(clock.rng.seed, day, IncidentCatalogue.VERSION, "roll")
-	var result := IncidentRoll.roll(draws, candidates, day, _next_major_day, busy_window(day, tick))
+	var gap_days := DEMO_MAJOR_GAP_DAYS if demo else IncidentRoll.MAJOR_GAP_DAYS
+	var result := IncidentRoll.roll(
+		draws, candidates, day, _next_major_day, busy_window(day, tick), gap_days
+	)
 	_next_major_day = result["next_major_day"]
 	if result["kind"] == IncidentCatalogue.NONE:
 		return

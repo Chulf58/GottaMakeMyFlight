@@ -13,7 +13,8 @@ extends RefCounted
 ## Bumped whenever a kind or a weight changes: it is part of every roll's seed
 ## (IncidentRoll), so an old seed never replays against a new catalogue.
 ## 3: the scanner fault.
-const VERSION := 3
+## 4: demo builds include inspector and VIP, plus demo quiet-weight override.
+const VERSION := 4
 const NONE := "none"
 const SPILL := "spill"
 const INSPECTOR := "inspector"
@@ -39,8 +40,9 @@ const SECURITY_PLACE := "Security"
 const SPILL_PLACES: Array[String] = [CHECKIN_PLACE, SECURITY_PLACE]
 ## Catalogue order, which is the weighted draw's order.
 const ORDER: Array[String] = [NONE, SPILL, INSPECTOR, RUSH, VIP, FAVOUR, FAULT]
-## Kinds open to roll in demo builds: quiet days, the two minors, and holiday rush.
-const DEMO_KINDS: Array[String] = [NONE, SPILL, RUSH, FAULT]
+## Kinds open to roll in demo builds: quiet days, the two minors, inspector,
+## holiday rush, and VIP.
+const DEMO_KINDS: Array[String] = [NONE, SPILL, INSPECTOR, RUSH, VIP, FAULT]
 ## "offer" is true for an opt-in major the player accepts or declines; the
 ## others are announced.
 const KINDS := {
@@ -91,7 +93,9 @@ static func weight(kind: String, world: Dictionary) -> int:
 	var contracts := int(world.get("contracts", 0)) > 0
 	match kind:
 		NONE:
-			return 0 if bool(world.get("guarantee_incident", false)) else NONE_WEIGHT
+			if bool(world.get("guarantee_incident", false)):
+				return 0
+			return maxi(0, int(world.get("none_weight", NONE_WEIGHT)))
 		SPILL:
 			return mini(int(world.get("places", 0)), SPILL_MOST)
 		INSPECTOR:
@@ -120,7 +124,8 @@ static func candidates(world: Dictionary) -> Array[Dictionary]:
 	for kind in ORDER:
 		if demo and not demo_allows(kind):
 			continue
-		if tier(kind) <= int(world.get("tier", 0)):
+		var needed_tier := 0 if (demo and kind == VIP) else tier(kind)
+		if needed_tier <= int(world.get("tier", 0)):
 			out.append({"kind": kind, "weight": weight(kind, world), "major": is_major(kind)})
 	return out
 

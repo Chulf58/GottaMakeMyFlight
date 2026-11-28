@@ -73,18 +73,39 @@ const STATUSES := [OPEN, ACCEPTED, DECLINED, EXPIRED]
 ## A version 10 save is refused; there is no migration.
 const SAVE_VERSION := 11
 const SAVE_KEYS := [
-	"save_version", "offers", "loyalty", "charters", "hub_grace_used", "day1_intro_shown"
+	"save_version",
+	"offers",
+	"loyalty",
+	"charters",
+	"hub_grace_used",
+	"day1_intro_shown",
+	"showcase",
+]
+const SHOWCASE_KEY := "showcase"
+const SHOWCASE_PAID := "paid"
+const SHOWCASE_STATES := [OPEN, ACCEPTED, DECLINED, SHOWCASE_PAID]
+const SHOWCASE_KEYS := [
+	"id",
+	"day",
+	"departure_minute",
+	"airline",
+	"destination",
+	"booked_passengers",
+	"fee_per_passenger",
+	"bonus",
+	"needs_runway",
+	"state",
 ]
 const CHARTER_SEED_VERSION := 1
 const CHARTER_PREFIX := "CH"
 ## Cutoff ticks before departure (= FlightTimetable.departure_offset at BASE for
 ## CHARTER_BOARDING_TICKS = 380, CHARTER_DEBOARDING_TICKS = 60 -> 1880 ticks / 94 min).
 const CHARTER_CUTOFF_LEAD_TICKS := 1880
-const CHARTER_MIN_LEAD_MINUTES := 105
-const CHARTER_MAX_LEAD_MINUTES := 240
+const CHARTER_MIN_LEAD_MINUTES := 100
+const CHARTER_MAX_LEAD_MINUTES := 180
 const CHARTER_GAP_MARGIN_TICKS := 300
-const CHARTER_COOLDOWN_MINUTES := 150
-const MAX_CHARTERS_PER_DAY := 3
+const CHARTER_COOLDOWN_MINUTES := 75
+const MAX_CHARTERS_PER_DAY := 4
 ## Active daytime window for charter offers (06:00..19:30), so overnight fast-
 ## forward ticks never open or consume daily charter caps before morning.
 const CHARTER_FIRST_OFFER_MINUTE := GameCalendar.START_MINUTE
@@ -156,7 +177,7 @@ const REFILL_SEED_VERSION := 1
 const AIRLINES := ["Gotta Air", "Nordic Wing", "Blue Fjord", "Sunhop"]
 const DESTINATIONS := ["Oslo", "Berlin", "Lisbon", "Rome", "Dublin", "Athens"]
 ## Plane size -> [fewest, most] booked passengers.
-const STARTER_SIZES := {"small": [4, 8], "medium": [24, 48]}
+const STARTER_SIZES := {"small": [6, 8], "medium": [24, 48]}
 const FEE_MIN := 15
 const FEE_MAX := 35
 const SMALL_FEE_MIN := 30
@@ -215,6 +236,8 @@ var _loyalty: Dictionary = {}
 var _hub_grace_used: Dictionary = {}
 ## Whether the Day-1 post-opening OfferPanel intro has been shown for this airport.
 var _day1_intro_shown := false
+## Optional Day-4 Big Jet Showcase state (DemoMode).
+var _showcase: Dictionary = {}
 ## True while from_snapshot() emits `changed`, so listeners do not treat a load
 ## as a player action that triggers a refill.
 var _loading := false
@@ -789,7 +812,7 @@ func to_snapshot() -> Dictionary:
 		charter_list.append(charter.duplicate())
 	var grace_list := _hub_grace_used.keys()
 	grace_list.sort()
-	return {
+	var out := {
 		"save_version": SAVE_VERSION,
 		"offers": list,
 		"loyalty": _loyalty.duplicate(true),
@@ -797,6 +820,33 @@ func to_snapshot() -> Dictionary:
 		"hub_grace_used": grace_list,
 		"day1_intro_shown": _day1_intro_shown,
 	}
+	if not _showcase.is_empty():
+		out[SHOWCASE_KEY] = _showcase.duplicate()
+	return out
+
+
+func has_showcase() -> bool:
+	return not _showcase.is_empty()
+
+
+func showcase() -> Dictionary:
+	return _showcase.duplicate()
+
+
+func has_pending_showcase() -> bool:
+	return _showcase.get("state", "") == OPEN
+
+
+func set_showcase(info: Dictionary) -> void:
+	_showcase = info.duplicate()
+	changed.emit()
+
+
+func set_showcase_state(next_state: String) -> void:
+	if _showcase.is_empty() or not SHOWCASE_STATES.has(next_state):
+		return
+	_showcase["state"] = next_state
+	changed.emit()
 
 
 ## True while from_snapshot() is emitting `changed`.
@@ -819,8 +869,9 @@ func from_snapshot(data: Dictionary) -> bool:
 	var loaded: Array[Dictionary] = []
 	var loaded_charters: Array[Dictionary] = []
 	var loaded_grace := {}
+	var loaded_showcase := {}
 	var loyalty := {}
-	var problem := _load_problem(data, loaded, loaded_charters, loaded_grace)
+	var problem := _load_problem(data, loaded, loaded_charters, loaded_grace, loaded_showcase)
 	if problem == "":
 		problem = _loyalty_problem(data["loyalty"], loyalty)
 	if problem == "":
@@ -833,6 +884,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_charters = loaded_charters
 	_loyalty = loyalty
 	_hub_grace_used = loaded_grace
+	_showcase = loaded_showcase
 	_day1_intro_shown = bool(data["day1_intro_shown"])
 	changed.emit()
 	_loading = false
@@ -1328,7 +1380,8 @@ func _load_problem(
 	data: Dictionary,
 	into: Array[Dictionary],
 	into_charters: Array[Dictionary],
-	into_grace: Dictionary
+	into_grace: Dictionary,
+	into_showcase: Dictionary
 ) -> String:
 	var problem := _top_problem(data)
 	if problem != "":
@@ -1363,7 +1416,46 @@ func _load_problem(
 		problem = _charters_load_problem(data.get("charters", []), into, into_charters)
 	if problem == "":
 		problem = _grace_load_problem(data.get("hub_grace_used", []), into_grace)
+	if problem == "" and data.has(SHOWCASE_KEY):
+		problem = _showcase_load_problem(data[SHOWCASE_KEY], into_showcase)
 	return problem
+
+
+static func _showcase_load_problem(entry: Variant, into: Dictionary) -> String:
+	if typeof(entry) != TYPE_DICTIONARY:
+		return "showcase must be a dictionary"
+	var raw: Dictionary = entry
+	for key in raw.keys():
+		if not SHOWCASE_KEYS.has(key):
+			return "unknown showcase key '%s'" % key
+	for key in SHOWCASE_KEYS:
+		if not raw.has(key):
+			return "missing showcase key '%s'" % key
+	if not SHOWCASE_STATES.has(raw["state"]):
+		return "showcase state '%s' is invalid" % str(raw["state"])
+	for text_key in ["id", "airline", "destination"]:
+		if typeof(raw[text_key]) != TYPE_STRING or String(raw[text_key]) == "":
+			return "showcase %s must be a non-empty string" % text_key
+	if typeof(raw["needs_runway"]) != TYPE_BOOL:
+		return "showcase needs_runway must be a bool"
+	var pax_range := PlaneClasses.passenger_range(PlaneClasses.MEDIUM)
+	var bounds := {
+		"day": [0, FlightContract.MAX_DAY],
+		"departure_minute": [0, GameCalendar.MINUTES_PER_DAY - 1],
+		"booked_passengers": [int(pax_range[0]), int(pax_range[1])],
+		"fee_per_passenger": [1, FlightContract.MAX_FEE],
+		"bonus": [0, FlightContract.MAX_FEE],
+	}
+	for int_key: String in bounds:
+		var val: Variant = raw[int_key]
+		var lo: int = bounds[int_key][0]
+		var hi: int = bounds[int_key][1]
+		if not WholeNumber.is_whole(val) or int(val) < lo or int(val) > hi:
+			return "showcase %s must be a whole number in %d..%d" % [int_key, lo, hi]
+	for key in SHOWCASE_KEYS:
+		var value: Variant = raw[key]
+		into[key] = int(value) if typeof(value) == TYPE_FLOAT else value
+	return ""
 
 
 static func _grace_load_problem(entries: Array, into: Dictionary) -> String:

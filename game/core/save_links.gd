@@ -220,9 +220,44 @@ static func _offer_problem(saved: Dictionary, board: OfferBoard, contracts: Arra
 		var problem := _offer_entry_problem(charter, by_id.get(id, {}), keys)
 		if problem != "":
 			return problem
+	var showcase := board.showcase()
+	if not showcase.is_empty():
+		var sid: String = showcase["id"]
+		offer_ids[sid] = true
+		var problem := _showcase_entry_problem(showcase, by_id.get(sid, {}))
+		if problem != "":
+			return problem
 	for id in by_id:
 		if not offer_ids.has(id) and id != FlightSim.DEFAULT_ID:
 			return "flights: contract %s is neither the starter nor an accepted offer" % id
+	return ""
+
+
+static func _showcase_entry_problem(showcase: Dictionary, contract: Dictionary) -> String:
+	var sid: String = showcase["id"]
+	var state := str(showcase["state"])
+	var accepted := state == OfferBoard.ACCEPTED or state == OfferBoard.SHOWCASE_PAID
+	if not accepted:
+		if not contract.is_empty():
+			return (
+				"offers: showcase %s is %s but flights hold its contract" % [sid, showcase["state"]]
+			)
+		return ""
+	if contract.is_empty():
+		return "offers: showcase %s is accepted but flights hold no contract %s" % [sid, sid]
+	var expected := {
+		"id": sid,
+		"airline": showcase["airline"],
+		"destination": showcase["destination"],
+		"departure_minute": showcase["departure_minute"],
+		"plane_size": PlaneClasses.MEDIUM,
+		"booked_passengers": showcase["booked_passengers"],
+		"fee_per_passenger": showcase["fee_per_passenger"],
+		FlightContract.ONE_OFF_DAY_KEY: showcase["day"],
+	}
+	for key in expected:
+		if not _same(contract.get(key), expected[key]):
+			return "offers: contract %s has another %s than its showcase" % [sid, key]
 	return ""
 
 

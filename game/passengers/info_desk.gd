@@ -44,8 +44,8 @@ const RANGE_MM := RANGE_CELLS * Passenger.STRAIGHT_MM
 ## The longest walk to a desk, so a desk across a maze is not a help: twice the
 ## range, 20 m, 10 seconds at WALK_MM.
 const MAX_WALK_MM := 2 * RANGE_MM
-## Ticks at the desk: 3 s, a check-in transaction (PassengerSim.CHECKIN_TICKS).
-const HELP_TICKS := 60
+## Ticks at the desk: 4 s, a check-in transaction (PassengerSim.CHECKIN_TICKS).
+const HELP_TICKS := 80
 ## Mood gained when the help ends: 5 s of an uncalmed stuck loss, a visible
 ## lift on the 70 a passenger starts with that is never most of it.
 const BOOST := 15

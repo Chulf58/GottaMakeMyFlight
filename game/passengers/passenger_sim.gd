@@ -50,7 +50,7 @@ const WALK_MM := 98
 const RUN_MM := 175
 ## Brisk stair climb pace for remote-stand bus riders unloading during DOORS_CLOSED grace.
 const BRISK_APRON_MM := 270
-const CHECKIN_TICKS := 60
+const CHECKIN_TICKS := 80
 ## The sit clips last 1.2 s.
 const SIT_DOWN_TICKS := 24
 const STAND_UP_TICKS := 24

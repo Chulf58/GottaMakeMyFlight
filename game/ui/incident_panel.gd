@@ -51,6 +51,9 @@ static var _translator := RefCounted.new()
 @export var clock: SimClock
 ## Optional: a load ends an open panel and shows what is still pending.
 @export var save_game: SaveGame
+## Optional: Day-4 Big Jet Showcase offer in DemoMode (resolved from sibling
+## OfferDesk when unset).
+var offer_desk: OfferDesk
 
 ## The words of a kind: kind -> {"title", "body", "reward", "failure"}. Tests
 ## replace it.
@@ -64,10 +67,15 @@ var _shown_id := 0
 var _hold := ClockHolds.NONE
 ## The incidents waiting for their turn, oldest first.
 var _queue: Array[int] = []
+var _showcase_queued := false
 
 
 func _ready() -> void:
 	name = "IncidentPanel"
+	if offer_desk == null and get_parent() != null:
+		offer_desk = get_parent().get_node_or_null("OfferDesk") as OfferDesk
+	if offer_desk != null and not offer_desk.showcase_offered.is_connected(_on_showcase_offered):
+		offer_desk.showcase_offered.connect(_on_showcase_offered)
 	if director == null:
 		push_error("IncidentPanel: no director set, so no major incident is shown")
 		return
@@ -263,9 +271,18 @@ func _on_presented(incident: Dictionary) -> void:
 	_enqueue(incident["id"])
 
 
+func _on_showcase_offered(_info: Dictionary) -> void:
+	_showcase_queued = true
+	_request_turn()
+
+
 func _enqueue_pending() -> void:
-	for incident in director.pending_presentation():
-		_enqueue(incident["id"])
+	if director != null:
+		for incident in director.pending_presentation():
+			_enqueue(incident["id"])
+	if offer_desk != null and not offer_desk.pending_showcase().is_empty():
+		_showcase_queued = true
+		_request_turn()
 
 
 func _enqueue(id: int) -> void:
@@ -278,7 +295,7 @@ func _enqueue(id: int) -> void:
 ## Asks the clock for the exclusive turn unless the panel already holds a place
 ## in the line or has a dialog open. Without a clock the dialog shows at once.
 func _request_turn() -> void:
-	if _dialog != null or _queue.is_empty():
+	if _dialog != null or (_queue.is_empty() and not _showcase_queued):
 		return
 	if clock == null:
 		_on_turn()
@@ -296,12 +313,16 @@ func _on_turn() -> void:
 		var incident := _pending(_queue.pop_front())
 		if not incident.is_empty() and _show(incident):
 			return
+	if _showcase_queued:
+		_showcase_queued = false
+		if _show_showcase():
+			return
 	_settle()
 
 
 ## Gives the turn back when nothing is open and nothing waits.
 func _settle() -> void:
-	if _dialog == null and _queue.is_empty():
+	if _dialog == null and _queue.is_empty() and not _showcase_queued:
 		_release_clock()
 
 
@@ -409,10 +430,118 @@ func _free_dialog() -> void:
 		layer.queue_free()
 
 
+## Builds the title, beats, reward, and failure strings for a Big Jet Showcase offer.
+static func showcase_copy(info: Dictionary, now_tick: int, epoch: int) -> Dictionary:
+	if info.is_empty():
+		return {}
+	var target_day := int(info["day"])
+	var now_day := GameCalendar.day_of(now_tick, epoch)
+	var departs := GameCalendar.tick_at(target_day, int(info["departure_minute"]), epoch)
+	var clock_str := GameCalendar.clock_text(departs, epoch)
+	var when_str := (
+		_translator.tr("today at {time}").format({"time": clock_str})
+		if target_day == now_day
+		else _translator.tr("tomorrow at {time}").format({"time": clock_str})
+	)
+	var pax := int(info["booked_passengers"])
+	var bonus_str := _format_thousands(int(info["bonus"]))
+	var needs_runway := bool(info.get("needs_runway", false))
+	var base_body := (
+		_translator
+		. tr("{airline} wants a one-off Medium Jet charter {when} ({pax} passengers).")
+		. format({"airline": String(info["airline"]), "when": when_str, "pax": pax})
+	)
+	var body := (
+		base_body + " " + _translator.tr("We will cover your Medium Runway upgrade.")
+		if needs_runway
+		else base_body
+	)
+	var reward := (
+		(
+			_translator
+			. tr("Reward: Free Medium Runway upgrade plus {bonus} money bonus on departure.")
+			. format({"bonus": bonus_str})
+		)
+		if needs_runway
+		else (
+			_translator
+			. tr("Reward: {bonus} money bonus on departure plus passenger fares.")
+			. format({"bonus": bonus_str})
+		)
+	)
+	var failure := (
+		_translator
+		. tr(
+			"If it fails: Expect {pax} passengers at once, so prep check-in, security, and gate seats."
+		)
+		. format({"pax": pax})
+	)
+	return {
+		"title": _translator.tr("Big Jet Showcase"),
+		"body": body,
+		"reward": reward,
+		"failure": failure,
+	}
+
+
+static func _format_thousands(amount: int) -> String:
+	var s := str(amount)
+	if s.length() <= 3:
+		return s
+	var out := ""
+	var count := 0
+	for i in range(s.length() - 1, -1, -1):
+		if count > 0 and count % 3 == 0:
+			out = "," + out
+		out = s[i] + out
+		count += 1
+	return out
+
+
+func _show_showcase() -> bool:
+	if offer_desk == null:
+		return false
+	var info := offer_desk.pending_showcase()
+	if info.is_empty():
+		return false
+	var now: int = clock.tick if clock != null else 0
+	var copy := showcase_copy(info, now, SimClock.epoch_of(clock))
+	if not _copy_ok(copy, true):
+		return false
+	_shown_id = 0
+	_layer = CanvasLayer.new()
+	_layer.name = "IncidentLayer"
+	_layer.layer = LAYER
+	var parts := parts_for(copy, true)
+	_dialog = IntroDialogue.new(
+		copy["title"],
+		"\n".join(parts["beats"]),
+		BOX_HEIGHT,
+		true,
+		IntroDialogue.Speaker.TERMINAL_MANAGER,
+		{"beats": parts["beats"], "chips": parts["chips"], "footer": parts["footer"]}
+	)
+	_layer.add_child(_dialog)
+	add_child(_layer)
+	_dialog.chosen.connect(_on_showcase_chosen)
+	var close := _close.bind(_layer)
+	_dialog.dismissed.connect(close)
+	_dialog.tree_exiting.connect(close)
+	_layer.tree_exiting.connect(close)
+	dialog_changed.emit(true)
+	return true
+
+
+func _on_showcase_chosen(accepted: bool) -> void:
+	if offer_desk != null:
+		offer_desk.answer_showcase(accepted)
+
+
 ## Ends the panel's hold, waiting or shown, and forgets the queue. Nothing is
 ## restored: with no hold left, the player's own pause and speed apply.
 func _release_clock() -> void:
 	_queue.clear()
+	_showcase_queued = false
 	if is_instance_valid(clock):
 		clock.holds.release(_hold)
 	_hold = ClockHolds.NONE

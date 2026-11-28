@@ -91,7 +91,12 @@ static func major_allowed(day: int, next_major_day: int) -> bool:
 ## empty one (x > y) leaves only "none". Returns {"kind", "fire_tick",
 ## "next_major_day"}; fire_tick is -1 for "none".
 static func roll(
-	draws: IncidentRoll, candidates: Array, day: int, next_major_day: int, window: Vector2i
+	draws: IncidentRoll,
+	candidates: Array,
+	day: int,
+	next_major_day: int,
+	window: Vector2i,
+	major_gap_days: int = MAJOR_GAP_DAYS
 ) -> Dictionary:
 	var open: Array[Dictionary] = []
 	var total := 0
@@ -119,5 +124,5 @@ static func roll(
 	result["kind"] = chosen["kind"]
 	result["fire_tick"] = window.x + draws.below(window.y - window.x + 1)
 	if chosen["major"]:
-		result["next_major_day"] = day + MAJOR_GAP_DAYS + draws.below(2)
+		result["next_major_day"] = day + maxi(1, major_gap_days) + draws.below(2)
 	return result

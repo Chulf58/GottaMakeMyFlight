@@ -28,9 +28,10 @@ const DAYS := 30
 ## and for Stage 2 S2-C (decision 92eaa854: OfferBoard v10 adds loyalty_tier,
 ## is_hub, and hub_grace_used; STATE_AFTER and base offer draws stay unchanged),
 ## and for OfferBoard v11 (day1_intro_shown bool in snapshot; STATE_AFTER and
-## base offer draws stay unchanged).
+## base offer draws stay unchanged), and for Demo engagement Slice 1 (b2091992:
+## STARTER_SIZES["small"] moved from [4, 8] to [6, 8]; STATE_AFTER stays unchanged).
 const STATE_AFTER := -878261620875140187
-const BEFORE_HASHES := [4024597466, 527401509, 532290164]
+const BEFORE_HASHES := [813273575, 3450713060, 3205810986]
 
 
 func _rng() -> RandomNumberGenerator:

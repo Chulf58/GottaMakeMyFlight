@@ -113,32 +113,43 @@ func test_speed_multipliers_tired_stacking_and_checkin_ticks() -> void:
 	StaffTestKit.staff_all(_w.staff, [CHECKIN, SECURITY])
 	var desk := _w.sim.layout.desks[0]
 	var agent := _w.staff.get_member(_w.staff.staff_at(desk))
+	var base := PassengerSim.CHECKIN_TICKS
+	var l2_ticks := maxi(1, roundi(float(base) / 1.15))
+	var l3_ticks := maxi(1, roundi(float(base) / 1.30))
+	assert_int(l2_ticks).is_less(base)
+	assert_int(l3_ticks).is_less(l2_ticks)
 	assert_float(agent.level_speed_factor()).is_equal_approx(1.00, 0.001)
 	assert_float(agent.work_speed_factor()).is_equal_approx(1.00, 0.001)
-	assert_int(PassengerStations._checkin_ticks(_w.sim, desk)).is_equal(60)
+	assert_int(PassengerStations._checkin_ticks(_w.sim, desk)).is_equal(base)
 
 	assert_bool(_w.staff.train(agent.id)).is_true()
 	assert_float(agent.level_speed_factor()).is_equal_approx(1.15, 0.001)
 	assert_float(agent.work_speed_factor()).is_equal_approx(1.15, 0.001)
-	assert_int(PassengerStations._checkin_ticks(_w.sim, desk)).is_equal(52)
+	assert_int(PassengerStations._checkin_ticks(_w.sim, desk)).is_equal(l2_ticks)
 
 	assert_bool(_w.staff.train(agent.id)).is_true()
 	assert_float(agent.level_speed_factor()).is_equal_approx(1.30, 0.001)
 	assert_float(agent.work_speed_factor()).is_equal_approx(1.30, 0.001)
-	assert_int(PassengerStations._checkin_ticks(_w.sim, desk)).is_equal(46)
+	assert_int(PassengerStations._checkin_ticks(_w.sim, desk)).is_equal(l3_ticks)
 
-	# Tired L1 = 0.80 (75 ticks), tired L2 = 0.92 (65 ticks), tired L3 = 1.04 (58 ticks).
+	# Tired L1 = 0.80, tired L2 = 0.92, tired L3 = 1.04.
 	agent.energy = StaffMember.TIRED_THRESHOLD
 	assert_float(agent.work_speed_factor()).is_equal_approx(1.04, 0.001)
-	assert_int(PassengerStations._checkin_ticks(_w.sim, desk)).is_equal(58)
+	assert_int(PassengerStations._checkin_ticks(_w.sim, desk)).is_equal(
+		maxi(1, roundi(float(base) / 1.04))
+	)
 	agent.level = 2
 	assert_float(agent.work_speed_factor()).is_equal_approx(0.92, 0.001)
-	assert_int(PassengerStations._checkin_ticks(_w.sim, desk)).is_equal(65)
+	assert_int(PassengerStations._checkin_ticks(_w.sim, desk)).is_equal(
+		maxi(1, roundi(float(base) / 0.92))
+	)
 	agent.level = 1
 	assert_float(agent.work_speed_factor()).is_equal_approx(0.80, 0.001)
-	assert_int(PassengerStations._checkin_ticks(_w.sim, desk)).is_equal(75)
+	assert_int(PassengerStations._checkin_ticks(_w.sim, desk)).is_equal(
+		maxi(1, roundi(float(base) / 0.80))
+	)
 
-	# Restored L3 agent serves actual passenger in 46 ticks, and eta/wait_ticks match.
+	# Restored L3 agent serves actual passenger in l3_ticks, and eta/wait_ticks match.
 	agent.energy = StaffMember.ENERGY_MAX
 	for cid in _w.staff.member_ids():
 		var cm := _w.staff.get_member(cid)
@@ -148,8 +159,8 @@ func test_speed_multipliers_tired_stacking_and_checkin_ticks() -> void:
 	while p.stage != Passenger.Stage.CHECKIN and _w.clock.tick < 1200:
 		_w.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.CHECKIN)
-	assert_int(p.service_end - _w.clock.tick).is_equal(46)
-	assert_int(PassengerStations.wait_ticks(_w.sim, p)).is_equal(46)
+	assert_int(p.service_end - _w.clock.tick).is_equal(l3_ticks)
+	assert_int(PassengerStations.wait_ticks(_w.sim, p)).is_equal(l3_ticks)
 
 
 func _run_security_throughput(use_lane: bool, level: int, tired: bool) -> Array:
@@ -396,7 +407,7 @@ func test_shop_cafe_order_and_info_desk_help_speed_up_and_save_at_l3() -> void:
 	_other.free_all()
 	_other = null
 
-	# InfoDesk HELP_TICKS: L1=60, L2=52, L3=46.
+	# InfoDesk HELP_TICKS scales by level_speed_factor() (1.00 / 1.15 / 1.30).
 	_w = InfoDeskTestLayout.world(true, [SHOP])
 	StaffTestKit.staff_all(_w.staff, [SHOP])
 	var desk := _w.staff.stations_of(SHOP)[0]
@@ -409,13 +420,15 @@ func test_shop_cafe_order_and_info_desk_help_speed_up_and_save_at_l3() -> void:
 		guard += 1
 	assert_bool(_w.sim.info_desks.holds(lost)).is_true()
 	var help_ticks := 0
-	while _w.sim.info_desks.holds(lost) and help_ticks < 100:
+	while _w.sim.info_desks.holds(lost) and help_ticks < InfoDesk.HELP_TICKS + 40:
 		_w.step()
 		help_ticks += 1
-	# +1 step before entering, then 52 ticks of help -> strictly faster than 60.
-	assert_int(help_ticks).is_less(60)
+	# +1 step before entering, then L2 ticks of help -> strictly faster than L1 HELP_TICKS.
+	assert_int(help_ticks).is_less(InfoDesk.HELP_TICKS)
 	assert_bool(_w.staff.train(info_server.id)).is_true()
-	assert_int(_w.sim.info_desks._help_ticks(desk)).is_equal(46)
+	assert_int(_w.sim.info_desks._help_ticks(desk)).is_equal(
+		maxi(1, roundi(float(InfoDesk.HELP_TICKS) / 1.30))
+	)
 
 
 func test_non_trainable_roles_refuse_train_and_hide_ui_button() -> void:
