@@ -48,9 +48,10 @@ const MAX_PLACES := 16
 ## The most arrivals let in at once when the room is not counted (no check-in
 ## desk open).
 const UNLIMITED := 1 << 30
-## Admitted walkers keep this far apart on the way to the door (step_of()),
-## the boarding files' gap.
-const GAP_MM := 700
+## Admitted walkers keep at least this far apart on the way to the door
+## (step_of()); walkers behind a pulled roller keep ROLLER_GAP_MM.
+const GAP_MM := 1000
+const ROLLER_GAP_MM := 1400
 ## How far off a line a point may lie and still be on it, in metres.
 const ON_LINE_M := 0.25
 ## The empty saved line.
@@ -301,20 +302,22 @@ func step(sim: PassengerSim) -> void:
 
 
 ## How far admitted walker `p` may walk this tick at `speed`: no closer to
-## the door, along its walk, than GAP_MM behind the admitted walker ahead of
-## it as the tick began (the nearest with less walk left, ties to the lower
-## id). Their walks all end on the door cell, so two never reach it together.
-func step_of(p: Passenger, speed: int) -> int:
+## the door, along its walk, than the follower gap (ROLLER_GAP_MM behind a
+## pulled roller, GAP_MM otherwise) behind any admitted walker ahead of it as the
+## tick began (less walk left, ties to the lower id).
+func step_of(p: Passenger, speed: int, sim: PassengerSim = null) -> int:
 	var mine := p.apron_total_mm() - p.apron_mm
 	var start: int = _left.get(p.id, mine)
-	var ahead := -1
+	var step := speed
 	for id: int in _left:
 		var left: int = _left[id]
 		if id != p.id and (left < start or (left == start and id < p.id)):
-			ahead = maxi(ahead, left)
-	if ahead < 0:
-		return speed
-	return clampi(mine - ahead - GAP_MM, 0, speed)
+			var leader := sim.get_passenger(id) if sim != null else null
+			var gap := (
+				ROLLER_GAP_MM if leader != null and QueueRipple.pulls_roller(leader) else GAP_MM
+			)
+			step = mini(step, maxi(0, mine - left - gap))
+	return step
 
 
 ## Ticks the line adds to `p`'s forecast: the walk from its place to the door
