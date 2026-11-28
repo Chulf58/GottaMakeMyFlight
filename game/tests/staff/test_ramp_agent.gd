@@ -381,9 +381,14 @@ func _ensure_shuttle_snap() -> void:
 		SaveTestKit.step(_save_main)
 	var build: BuildMode = _save_main.get_node("BuildMode")
 	var offset := ReferenceTerminal.offset_on(build.grid)
-	RoomTool.mark(
-		build.grid, Rect2i(Vector2i(13, 14) + offset, Vector2i(4, 3)), &"bag_room", build.wallet()
+	var mark_res := RoomTool.mark(
+		build.grid, Rect2i(Vector2i(13, 14) + offset, Vector2i(9, 2)), &"bag_room", build.wallet()
 	)
+	assert_bool(mark_res.ok).override_failure_message(mark_res.reason_text()).is_true()
+	for edit in DoorPlacement.edits_for(
+		build.grid, BuildEdit.place_object(BuildCatalog.BAY_DOOR_ID, Vector2i(21, 14) + offset, 1)
+	):
+		assert_bool(build.grid.apply(edit).ok).is_true()
 	build.grid.apply(BuildEdit.remove_wall(Vector2i(16, 14) + offset, BuildGrid.Side.NORTH))
 	build.grid.apply(
 		BuildEdit.place_wall(
@@ -394,7 +399,17 @@ func _ensure_shuttle_snap() -> void:
 	build.lay_belt(Vector2i(15, 10) + offset, Vector2i(16, 10) + offset)
 	build.lay_belt(Vector2i(16, 10) + offset, Vector2i(16, 14) + offset)
 	build.set_tool(BuildMode.Tool.NONE)
-	build.grid.apply(BuildEdit.place_object(&"baggage_cart", Vector2i(14, 15) + offset, 0))
+	(
+		assert_bool(
+			(
+				build
+				. grid
+				. apply(BuildEdit.place_object(&"baggage_cart", Vector2i(18, 14) + offset, 0))
+				. ok
+			)
+		)
+		. is_true()
+	)
 	SaveTestKit.step(_save_main)
 	var staff: StaffSim = _save_main.get_node("Staff")
 	var bag_sim: BaggageSim = _save_main.get_node("BaggageSim")

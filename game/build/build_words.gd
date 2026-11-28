@@ -425,6 +425,9 @@ class Words:
 				"A flight is still due at this remote stand. Remove it after the flight leaves",
 				"build refusal"
 			),
+			tr("Bay doors must face open apron ground outside the terminal", "build refusal"),
+			tr("Keep the 2 apron cells outside a bay door clear", "build refusal"),
+			tr("Place Bag Room kit against an apron-facing exterior wall", "build refusal"),
 			# GhostReason.SHORT_TEXT
 			tr("Outside the building", "ghost reason"),
 			tr("Overlaps an object", "ghost reason"),
@@ -470,6 +473,9 @@ class Words:
 			tr("Place on open apron", "ghost reason"),
 			tr("Stand too close", "ghost reason"),
 			tr("Not enough apron room", "ghost reason"),
+			tr("Needs apron wall", "ghost reason"),
+			tr("Clear apron outside", "ghost reason"),
+			tr("Needs apron edge", "ghost reason"),
 			# BuildMode status constants
 			tr("Drag to lay a belt", "build status"),
 			tr("Not part of a lane", "build status"),
@@ -478,6 +484,7 @@ class Words:
 			# Door tool names, inside a sentence
 			tr("entrance", "door tool, mid-sentence"),
 			tr("exit", "door tool, mid-sentence"),
+			tr("bay door", "door tool, mid-sentence"),
 			# BuildResult.detail_args sentences and lists
 			tr("gate {gate} is too close", "refusal detail"),
 			tr("gate {gate}, a small plane", "refusal detail"),
@@ -552,6 +559,7 @@ class Words:
 			tr("remote stand", "item name, mid-sentence"),
 			tr("restaurant booth", "item name, mid-sentence"),
 			tr("restaurant table", "item name, mid-sentence"),
+			tr("roll-up bay door", "item name, mid-sentence"),
 			tr("screen", "item name, mid-sentence"),
 			tr("search table", "item name, mid-sentence"),
 			tr("security arch", "item name, mid-sentence"),

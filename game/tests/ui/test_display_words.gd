@@ -187,7 +187,7 @@ func test_the_card_for_a_piece_shows_translated_name_and_room() -> void:
 ## The panel reads the mode's own grid, so the bag room is built there.
 func _panel_with_bag_room(with_end: bool, connected := false) -> Array:
 	var edits: Array[BuildEdit] = []
-	for y in range(2, 10):
+	for y in range(3, 10):
 		for x in range(2, 10):
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	_mode.grid.apply_batch(edits)
@@ -195,6 +195,12 @@ func _panel_with_bag_room(with_end: bool, connected := false) -> Array:
 	var made := _mode.grid.apply(BuildEdit.place_room(room, &"bag_room"))
 	assert_bool(made.ok).override_failure_message(made.reason_text()).is_true()
 	if with_end:
+		(
+			assert_bool(
+				_mode.grid.apply(BuildEdit.place_object(&"baggage_bay_door", Vector2i(4, 3), 0)).ok
+			)
+			. is_true()
+		)
 		PassengerTestWorld.place(_mode.grid, &"baggage_belt_end", room.position, 0)
 	if connected:
 		PassengerTestWorld.place(_mode.grid, &"checkin_desk", Vector2i(2, 7), 0)

@@ -24,7 +24,11 @@ func before_test() -> void:
 	# the reference terminal so checked bags are active (decision 17e414be).
 	var grid := BuildGrid.new()
 	ReferenceTerminal.build(grid)
-	assert_bool(grid.apply(BuildEdit.place_room(Rect2i(16, 13, 3, 3), &"bag_room")).ok).is_true()
+	assert_bool(grid.apply(BuildEdit.place_room(Rect2i(16, 13, 6, 3), &"bag_room")).ok).is_true()
+	for edit in DoorPlacement.edits_for(
+		grid, BuildEdit.place_object(&"baggage_bay_door", Vector2i(21, 13), 1)
+	):
+		assert_bool(grid.apply(edit).ok).is_true()
 	for seg in [[Vector2i(15, 10), Vector2i(16, 10)], [Vector2i(16, 10), Vector2i(16, 13)]]:
 		var plan := BeltShaper.plan_line(grid, seg[0], seg[1], 0)
 		assert_bool(plan.result.ok).is_true()

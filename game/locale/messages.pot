@@ -484,11 +484,23 @@ msgid "Where checked bags end up. They are loaded onto the plane from here."
 msgstr ""
 
 #: ui/item_info.gd
-msgid "Drag a rectangle, then run a belt into it. The belt's end piece goes inside."
+msgid "Drag a rectangle, run a belt end inside, and put a Roll-Up Bay Door on an apron wall."
 msgstr ""
 
 #: ui/item_info.gd
-msgid "At least 2x2, with a belt end. A bag that arrives after the cutoff misses the plane."
+msgid "At least 2x2, with a belt end, bay door, and entrance. Cutoff bags miss the plane."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "An industrial roll-up bay door between a bag room and the apron."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it on a 2-cell apron-facing exterior wall and keep the 2 apron cells outside clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Staff and baggage carts pass through; passengers never use bay doors."
 msgstr ""
 
 #: ui/item_info.gd
@@ -1226,6 +1238,11 @@ msgstr ""
 #: ui/build_menu_catalog.gd
 msgctxt "build menu"
 msgid "Bag cart"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Bay door"
 msgstr ""
 
 #: ui/build_menu_catalog.gd
@@ -3298,6 +3315,11 @@ msgstr ""
 
 #: ui/display_words.gd
 msgctxt "item name"
+msgid "Roll-Up Bay Door"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
 msgid "Screen"
 msgstr ""
 
@@ -5185,6 +5207,11 @@ msgstr ""
 
 #: build/build_words.gd
 msgctxt "door tool, mid-sentence"
+msgid "bay door"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "door tool, mid-sentence"
 msgid "exit"
 msgstr ""
 
@@ -5622,6 +5649,11 @@ msgstr ""
 #: build/build_words.gd
 msgctxt "item name, mid-sentence"
 msgid "restaurant table"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "roll-up bay door"
 msgstr ""
 
 #: build/build_words.gd
@@ -8000,6 +8032,21 @@ msgid "A flight is still due at this remote stand. Remove it after the flight le
 msgstr ""
 
 #: build/build_words.gd
+msgctxt "build refusal"
+msgid "Bay doors must face open apron ground outside the terminal"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Keep the 2 apron cells outside a bay door clear"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Place Bag Room kit against an apron-facing exterior wall"
+msgstr ""
+
+#: build/build_words.gd
 msgctxt "ghost reason"
 msgid "No bus bay room"
 msgstr ""
@@ -8012,6 +8059,21 @@ msgstr ""
 #: build/build_words.gd
 msgctxt "ghost reason"
 msgid "Stand too close"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Needs apron wall"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Clear apron outside"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Needs apron edge"
 msgstr ""
 
 #: build/build_words.gd
@@ -9124,8 +9186,18 @@ msgid "Needs a claim carousel"
 msgstr ""
 
 #: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a Roll-Up Bay Door on an apron-facing wall"
+msgstr ""
+
+#: ui/display_words.gd
 msgctxt "status reason"
 msgid "needs a claim carousel"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a roll-up bay door on an apron-facing wall"
 msgstr ""
 
 #: ui/item_info.gd

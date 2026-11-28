@@ -46,6 +46,7 @@ const CATEGORIES := [
 			BuildMode.Tool.CONFISCATION_BIN,
 			BuildMode.Tool.BELT,
 			BuildMode.Tool.BAG_ROOM,
+			BuildMode.Tool.BAY_DOOR,
 			BuildMode.Tool.BAGGAGE_CLAIM,
 			BuildMode.Tool.BREAK_ROOM,
 		],
@@ -166,7 +167,7 @@ const ROOM_TOOLS := {
 		BuildMode.Tool.DINING_TABLE,
 		BuildMode.Tool.BOOTH,
 	],
-	&"bag_room": [BuildMode.Tool.BELT, BuildMode.Tool.CART],
+	&"bag_room": [BuildMode.Tool.BAY_DOOR, BuildMode.Tool.BELT, BuildMode.Tool.CART],
 	&"baggage_claim": [BuildMode.Tool.CLAIM_CAROUSEL, BuildMode.Tool.BELT],
 	&"toilet": [BuildMode.Tool.TOILET_STALL, BuildMode.Tool.TOILET_SINK],
 	&"kiosk": [BuildMode.Tool.KIOSK_COUNTER, BuildMode.Tool.KIOSK_DISPLAY],
@@ -226,6 +227,7 @@ const ITEMS := {
 	BuildMode.Tool.SECURITY_LANE: ["Security lane", "security_lane", "2x3"],
 	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
+	BuildMode.Tool.BAY_DOOR: ["Bay door", "baggage_bay_door", ""],
 	BuildMode.Tool.CART: ["Bag cart", "cart", ""],
 	BuildMode.Tool.BAGGAGE_CLAIM: ["Baggage claim", "bag_room", "6x4 min"],
 	BuildMode.Tool.CLAIM_CAROUSEL: ["Claim carousel", "belt", ""],
@@ -438,7 +440,10 @@ static func room_context_entries(
 		var def_id := _tool_def_for_room(tool, room_type)
 		var mandatory := false
 		var satisfied := false
-		if type != null and def_id != &"":
+		if tool == BuildMode.Tool.BAY_DOOR and room_type == &"bag_room":
+			mandatory = true
+			satisfied = status != null and status.has_bay_door
+		elif type != null and def_id != &"":
 			for need: Array in type.required:
 				var accepted := type.pieces_for(need[0])
 				if accepted.has(def_id):
@@ -583,6 +588,7 @@ class Words:
 			tr("Belt", "build menu"),
 			tr("Drag a line", "build menu"),
 			tr("Bag room", "build menu"),
+			tr("Bay door", "build menu"),
 			tr("Bag cart", "build menu"),
 			tr("Baggage claim", "build menu"),
 			tr("6x4 min", "build menu"),

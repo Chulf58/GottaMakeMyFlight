@@ -45,7 +45,7 @@ static func outside_within(
 	# A door object's back edge closes like a wall: mark it on copies.
 	var h_closed := h_walls.duplicate()
 	var v_closed := v_walls.duplicate()
-	for way in DoorPlacement.ways_out(grid):
+	for way in DoorPlacement.enclosure_ways(grid):
 		var cell: Vector2i = way[0]
 		match BuildGrid.SIDE_STEP.find(way[1]):
 			BuildGrid.Side.NORTH:

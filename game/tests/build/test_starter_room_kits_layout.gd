@@ -70,12 +70,24 @@ func _place_kit(kit_id: StringName, centre: Vector2i, turns: int) -> int:
 
 func test_all_14_kits_have_clear_doorways_and_walkable_interior_spots_in_all_rotations() -> void:
 	var centre := Vector2i(12, 12)
+	var bag_centres := {0: Vector2i(12, 3), 1: Vector2i(20, 12), 3: Vector2i(3, 15)}
 	var kits := StarterRoomKits.kit_ids()
 	assert_int(kits.size()).is_equal(14)
 	for kit_id: StringName in kits:
 		for turns in 4:
 			var tag := "%s turn=%d" % [kit_id, turns]
-			var room_id := _place_kit(kit_id, centre, turns)
+			if kit_id == &"bag_room" and turns == 2:
+				_mode.starter_kit.arm(kit_id)
+				_mode.starter_kit.turns = turns
+				var south_refusal := _mode.starter_kit.place_at(Vector2i(12, 20))
+				assert_bool(south_refusal.ok).is_false()
+				assert_int(south_refusal.reason).is_equal(BuildResult.Reason.KIT_NEEDS_APRON_WALL)
+				var indoor_refusal := _mode.starter_kit.place_at(centre)
+				assert_bool(indoor_refusal.ok).is_false()
+				assert_int(indoor_refusal.reason).is_equal(BuildResult.Reason.KIT_NEEDS_APRON_WALL)
+				continue
+			var kit_centre: Vector2i = bag_centres[turns] if kit_id == &"bag_room" else centre
+			var room_id := _place_kit(kit_id, kit_centre, turns)
 			var grid := _mode.grid
 			var room := grid.get_room(room_id)
 			var area: Rect2i = room["rect"]
@@ -86,7 +98,7 @@ func test_all_14_kits_have_clear_doorways_and_walkable_interior_spots_in_all_rot
 				. is_true()
 			)
 
-			var door := StarterRoomKits.door_edge(kit_id, centre, turns)
+			var door := StarterRoomKits.door_edge(kit_id, kit_centre, turns)
 			var door_cell: Vector2i = door["cell"]
 			var door_side: int = door["side"]
 			var outside: Vector2i = door["outside"]

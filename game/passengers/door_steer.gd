@@ -166,7 +166,7 @@ static func doors_near(grid: BuildGrid, here: Vector3) -> Array:
 				continue
 			seen[id] = true
 			var record := grid.get_object(id)
-			if not BuildCatalog.is_any_door(record["def"]):
+			if not BuildCatalog.is_passenger_door(record["def"]):
 				continue
 			var step := DoorPlacement.back_step(record["facing"])
 			var out := Vector2(step)

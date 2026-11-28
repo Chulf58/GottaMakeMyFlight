@@ -103,13 +103,26 @@ static func edge_problem(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 			if BuildCatalog.is_airside_exit(edit.def_id):
 				var inside := interior_door_problem(grid, edit.cell, edit.facing)
 				return null if inside.ok else inside
+			if BuildCatalog.is_bay_door(edit.def_id):
+				var bay := bay_door_problem(grid, edit.cell, edit.facing)
+				return null if bay.ok else bay
+			var def := BuildCatalog.get_def(edit.def_id)
+			if def != null:
+				for cell in def.footprint(edit.cell, edit.facing):
+					if beyond_a_bay_door(grid, cell):
+						return BuildResult.refused(BuildResult.Reason.BAY_DOOR_APPROACH_BLOCKED)
 			return null
 		BuildEdit.Kind.PLACE_WALL:
-			if on_a_way_out(grid, edit.cell, edit.side):
+			if (
+				on_a_way_out(grid, edit.cell, edit.side)
+				or _on_bay_approach_wall(grid, edit.cell, edit.side)
+			):
 				return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
 		BuildEdit.Kind.PAINT_FLOOR:
 			if beyond_a_door(grid, edit.cell):
 				return BuildResult.refused(BuildResult.Reason.DOOR_NOT_ON_EDGE)
+			if beyond_a_bay_door(grid, edit.cell):
+				return BuildResult.refused(BuildResult.Reason.BAY_DOOR_APPROACH_BLOCKED)
 	return null
 
 
@@ -148,6 +161,150 @@ static func outside_door_problem(grid: BuildGrid, anchor: Vector2i, facing: int)
 	return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
 
 
+## Placement check for a 2x1 Roll-Up Bay Door: both footprint cells must sit on an
+## exterior terminal wall facing open, unobstructed apron (never landside road or an
+## interior courtyard) with NONE or PLAIN walls along both back edges.
+static func bay_door_problem(grid: BuildGrid, anchor: Vector2i, facing: int) -> BuildResult:
+	if grid == null:
+		return BuildResult.refused(BuildResult.Reason.NO_FLOOR)
+	if facing < 0 or facing > 3:
+		return BuildResult.refused(BuildResult.Reason.BAD_FACING)
+	var out := back_step(facing)
+	if out == SiteDefinition.ROAD_STEP:
+		return BuildResult.refused(BuildResult.Reason.BAY_DOOR_NEEDS_APRON)
+	var cells := bay_door_cells(anchor, facing)
+	var approach: Array[Vector2i] = []
+	for cell in cells:
+		var outside: Vector2i = cell + out
+		if not grid.in_bounds(outside):
+			return BuildResult.refused(BuildResult.Reason.BAY_DOOR_NEEDS_APRON)
+		if grid.floor_at(outside) != BuildGrid.FLOOR_NONE:
+			return BuildResult.refused(BuildResult.Reason.DOOR_NOT_ON_EDGE)
+		if not is_apron_cell_open(grid, outside) or beyond_a_bay_door(grid, outside):
+			return BuildResult.refused(BuildResult.Reason.BAY_DOOR_APPROACH_BLOCKED)
+		approach.append(outside)
+	if _has_bay_approach_wall(grid, anchor, facing):
+		return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
+	if not _reaches_open_apron(grid, approach):
+		return BuildResult.refused(BuildResult.Reason.BAY_DOOR_NEEDS_APRON)
+	var side := BuildGrid.SIDE_STEP.find(out)
+	for cell in cells:
+		match grid.wall_kind(cell, side):
+			BuildGrid.WallKind.NONE:
+				continue
+			BuildGrid.WallKind.PLAIN:
+				var wall_check := grid.validate(BuildEdit.remove_wall(cell, side))
+				if not wall_check.ok:
+					return wall_check
+			_:
+				return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
+	return BuildResult.accepted()
+
+
+## Whether both exterior apron approach cells of a bay door at `anchor`/`facing`
+## exist in bounds, have no floor or blocking object/obstacle, do not face landside,
+## and connect to open apron.
+static func is_bay_door_apron_clear(grid: BuildGrid, anchor: Vector2i, facing: int) -> bool:
+	if grid == null or facing < 0 or facing > 3:
+		return false
+	var out := back_step(facing)
+	if out == SiteDefinition.ROAD_STEP:
+		return false
+	if _has_bay_approach_wall(grid, anchor, facing):
+		return false
+	var approach: Array[Vector2i] = []
+	for cell in bay_door_cells(anchor, facing):
+		var outside: Vector2i = cell + out
+		if not is_apron_cell_open(grid, outside):
+			return false
+		approach.append(outside)
+	return _reaches_open_apron(grid, approach)
+
+
+## Whether an exterior cell is open apron ground with no floor, object, or site obstacle.
+static func is_apron_cell_open(grid: BuildGrid, cell: Vector2i) -> bool:
+	if not grid.in_bounds(cell):
+		return false
+	if grid.floor_at(cell) != BuildGrid.FLOOR_NONE:
+		return false
+	if grid.object_at(cell) != 0:
+		return false
+	if grid is SiteGrid and (grid as SiteGrid).site.is_obstacle(cell):
+		return false
+	return true
+
+
+## Bounded flood-fill over exterior FLOOR_NONE cells starting from `starts` to
+## ensure every bay approach cell reaches open north/airside apron rather than a
+## sealed courtyard or isolated pocket.
+static func _reaches_open_apron(grid: BuildGrid, starts: Array[Vector2i]) -> bool:
+	if starts.is_empty():
+		return false
+	var bounds := grid.flood_area()
+	if bounds.size == Vector2i.ZERO:
+		bounds = Rect2i(Vector2i.ZERO, grid.size)
+	for s in starts:
+		if not bounds.has_point(s):
+			return false
+	for s in starts:
+		if not _cell_reaches_open_apron(grid, bounds, s):
+			return false
+	return true
+
+
+static func _cell_reaches_open_apron(grid: BuildGrid, bounds: Rect2i, start: Vector2i) -> bool:
+	if start.y == bounds.position.y:
+		return true
+	var w := bounds.size.x
+	var h := bounds.size.y
+	var ox := bounds.position.x
+	var oy := bounds.position.y
+	var seen := PackedByteArray()
+	seen.resize(w * h)
+	seen[(start.y - oy) * w + (start.x - ox)] = 1
+	var queue: Array[Vector2i] = [start]
+	var head := 0
+	while head < queue.size():
+		var cur := queue[head]
+		head += 1
+		if cur.y == oy:
+			return true
+		for side in 4:
+			var nxt: Vector2i = cur + BuildGrid.SIDE_STEP[side]
+			if not bounds.has_point(nxt):
+				continue
+			if _edge_has_wall(grid, cur, nxt):
+				continue
+			var nidx := (nxt.y - oy) * w + (nxt.x - ox)
+			if seen[nidx] != 0:
+				continue
+			if not is_apron_cell_open(grid, nxt):
+				continue
+			seen[nidx] = 1
+			queue.append(nxt)
+	return false
+
+
+## Footprint cells (2 along the wall edge) of a Roll-Up Bay Door at `anchor`/`facing`.
+static func bay_door_cells(anchor: Vector2i, facing: int) -> Array[Vector2i]:
+	var def := BuildCatalog.get_def(BuildCatalog.BAY_DOOR_ID)
+	if def == null:
+		return [anchor]
+	return def.footprint(anchor, facing)
+
+
+## Back wall [cell, side] pairs owned by a door (`1` pair) or bay door (`2` pairs).
+static func door_edges(def_id: StringName, anchor: Vector2i, facing: int) -> Array:
+	var out := back_step(facing)
+	var side := BuildGrid.SIDE_STEP.find(out)
+	if not BuildCatalog.is_bay_door(def_id):
+		return [[anchor, side]]
+	var edges := []
+	for cell in bay_door_cells(anchor, facing):
+		edges.append([cell, side])
+	return edges
+
+
 ## The facing a `def_id` door at the cell under `point` takes when the player
 ## has not turned it. It prefers a facing check() accepts, then one whose back
 ## has no floor beyond it; among equals, the one whose back edge is nearest
@@ -160,15 +317,26 @@ static func auto_facing(grid: BuildGrid, def_id: StringName, point: Vector3, fal
 	var best_tier := 2
 	var best_distance := INF
 	var interior := BuildCatalog.is_airside_exit(def_id)
+	var bay := BuildCatalog.is_bay_door(def_id)
+	var def := BuildCatalog.get_def(def_id) if bay else null
 	for turn in 4:
 		var out := back_step(turn)
+		var anchor := cell
+		if bay and def != null:
+			var c_off := BuildObjectDef.rotate_point(
+				Vector2((def.size.x - 1) * 0.5, (def.size.y - 1) * 0.5), turn
+			)
+			anchor = cell_under(grid, point - Vector3(c_off.x, 0.0, c_off.y))
 		var tier := 2
-		if check(grid, BuildEdit.place_object(def_id, cell, turn)).ok:
+		if check(grid, BuildEdit.place_object(def_id, anchor, turn)).ok:
 			tier = 0
+		elif bay:
+			if out != SiteDefinition.ROAD_STEP and is_bay_door_apron_clear(grid, anchor, turn):
+				tier = 1
 		elif (
-			grid.in_bounds(cell + out) and grid.floor_at(cell + out) != BuildGrid.FLOOR_NONE
+			grid.in_bounds(anchor + out) and grid.floor_at(anchor + out) != BuildGrid.FLOOR_NONE
 			if interior
-			else grid.floor_at(cell + out) == BuildGrid.FLOOR_NONE
+			else grid.floor_at(anchor + out) == BuildGrid.FLOOR_NONE
 		):
 			tier = 1
 		var distance := 0.5 - (offset.x * out.x + offset.z * out.y)
@@ -179,36 +347,53 @@ static func auto_facing(grid: BuildGrid, def_id: StringName, point: Vector3, fal
 	return best
 
 
-## The edits that carry out an edit check() accepted, in order. An entrance or
-## exit with a plain wall on its back edge first removes that wall, which
-## cannot make the door's own placement invalid. Removing an entrance or exit
-## then puts a plain wall back on its back edge (decision removing-an-exit-or-
-## entrance-door-puts-the-plain-wall-back), so the terminal stays enclosed; the
-## wall is bought at its price, like any other. Any other edit is itself.
+## The edits that carry out an edit check() accepted, in order. An entrance, exit,
+## or bay door with plain wall(s) on its back edge(s) first removes those walls, which
+## cannot make the door's own placement invalid. Removing one puts the plain walls back
+## (decision removing-an-exit-or-entrance-door-puts-the-plain-wall-back), so the
+## terminal stays enclosed; the wall is bought at its price, like any other. Any
+## other edit is itself.
 static func edits_for(grid: BuildGrid, edit: BuildEdit) -> Array[BuildEdit]:
 	var plan: Array[BuildEdit] = [edit]
 	if edit.kind == BuildEdit.Kind.REMOVE_OBJECT:
 		var record := grid.get_object(edit.object_id)
 		if not record.is_empty() and BuildCatalog.is_any_door(record["def"]):
-			var back := BuildGrid.SIDE_STEP.find(back_step(record["facing"]))
-			if grid.wall_kind(record["anchor"], back) == BuildGrid.WallKind.NONE:
-				plan.append(BuildEdit.place_wall(record["anchor"], back))
+			for edge: Array in door_edges(record["def"], record["anchor"], record["facing"]):
+				if grid.wall_kind(edge[0], edge[1]) == BuildGrid.WallKind.NONE:
+					plan.append(BuildEdit.place_wall(edge[0], edge[1]))
 		return plan
 	if edit.kind != BuildEdit.Kind.PLACE_OBJECT or not BuildCatalog.is_any_door(edit.def_id):
 		return plan
-	var side := BuildGrid.SIDE_STEP.find(back_step(edit.facing))
-	if grid.wall_kind(edit.cell, side) == BuildGrid.WallKind.PLAIN:
-		plan.push_front(BuildEdit.remove_wall(edit.cell, side))
+	var remove_walls: Array[BuildEdit] = []
+	for edge: Array in door_edges(edit.def_id, edit.cell, edit.facing):
+		if grid.wall_kind(edge[0], edge[1]) == BuildGrid.WallKind.PLAIN:
+			remove_walls.append(BuildEdit.remove_wall(edge[0], edge[1]))
+	for i in range(remove_walls.size() - 1, -1, -1):
+		plan.push_front(remove_walls[i])
 	return plan
 
 
-## Each standing entrance or exit as [anchor, outward step].
+## Each standing passenger entrance or exit as [anchor, outward step].
+## Excludes Roll-Up Bay Doors so passengers never route out through a bag bay.
 static func ways_out(grid: BuildGrid) -> Array:
 	var out := []
 	for object_id in grid.object_ids():
 		var record := grid.get_object(object_id)
 		if BuildCatalog.is_door(record["def"]):
 			out.append([record["anchor"], back_step(record["facing"])])
+	return out
+
+
+## Each standing exterior door cell that replaces walls to close the terminal
+## enclosure ([cell, outward step]): passenger doors plus both cells of bay doors.
+static func enclosure_ways(grid: BuildGrid) -> Array:
+	var out := ways_out(grid)
+	for object_id in grid.object_ids():
+		var record := grid.get_object(object_id)
+		if BuildCatalog.is_bay_door(record["def"]):
+			var step := back_step(record["facing"])
+			for cell in bay_door_cells(record["anchor"], record["facing"]):
+				out.append([cell, step])
 	return out
 
 
@@ -219,19 +404,71 @@ static func on_a_way_out(grid: BuildGrid, cell: Vector2i, side: int) -> bool:
 		var record := grid.get_object(object_id)
 		if not BuildCatalog.is_any_door(record["def"]):
 			continue
-		var way_cell: Vector2i = record["anchor"]
-		var way_step := back_step(record["facing"])
-		if (
-			(cell == way_cell and step == way_step)
-			or (cell == way_cell + way_step and step == -way_step)
-		):
+		for edge: Array in door_edges(record["def"], record["anchor"], record["facing"]):
+			var way_cell: Vector2i = edge[0]
+			var way_step := BuildGrid.SIDE_STEP[int(edge[1])]
+			if (
+				(cell == way_cell and step == way_step)
+				or (cell == way_cell + way_step and step == -way_step)
+			):
+				return true
+	return false
+
+
+static func _bay_approach_edges(anchor: Vector2i, facing: int) -> Array:
+	var out := back_step(facing)
+	var cells := bay_door_cells(anchor, facing)
+	var ap0: Vector2i = cells[0] + out
+	var ap1: Vector2i = cells[1] + out
+	return [[ap0, ap1], [ap0, ap0 + out], [ap1, ap1 + out]]
+
+
+static func _edge_has_wall(grid: BuildGrid, a: Vector2i, b: Vector2i) -> bool:
+	var side := BuildGrid.SIDE_STEP.find(b - a)
+	if side < 0:
+		return false
+	if grid.in_bounds(a) and grid.wall_kind(a, side) != BuildGrid.WallKind.NONE:
+		return true
+	var opp := (side + 2) % 4
+	return grid.in_bounds(b) and grid.wall_kind(b, opp) != BuildGrid.WallKind.NONE
+
+
+static func _has_bay_approach_wall(grid: BuildGrid, anchor: Vector2i, facing: int) -> bool:
+	for edge: Array in _bay_approach_edges(anchor, facing):
+		if _edge_has_wall(grid, edge[0], edge[1]):
 			return true
 	return false
 
 
-## Whether `cell` is the cell beyond a standing door's back edge.
+static func _on_bay_approach_wall(grid: BuildGrid, cell: Vector2i, side: int) -> bool:
+	var a := cell
+	var b := cell + BuildGrid.SIDE_STEP[side]
+	for object_id in grid.object_ids():
+		var record := grid.get_object(object_id)
+		if not BuildCatalog.is_bay_door(record["def"]):
+			continue
+		for edge: Array in _bay_approach_edges(record["anchor"], record["facing"]):
+			if (a == edge[0] and b == edge[1]) or (a == edge[1] and b == edge[0]):
+				return true
+	return false
+
+
+## Whether `cell` is the cell beyond a standing passenger door's back edge.
 static func beyond_a_door(grid: BuildGrid, cell: Vector2i) -> bool:
 	for way in ways_out(grid):
 		if cell == way[0] + way[1]:
 			return true
+	return false
+
+
+## Whether `cell` is one of the 2 exterior apron approach cells outside a standing bay door.
+static func beyond_a_bay_door(grid: BuildGrid, cell: Vector2i) -> bool:
+	for object_id in grid.object_ids():
+		var record := grid.get_object(object_id)
+		if not BuildCatalog.is_bay_door(record["def"]):
+			continue
+		var out := back_step(record["facing"])
+		for bay_cell in bay_door_cells(record["anchor"], record["facing"]):
+			if cell == bay_cell + out:
+				return true
 	return false

@@ -199,6 +199,7 @@ class Words:
 			tr("Remote stand", "item name"),
 			tr("Restaurant booth", "item name"),
 			tr("Restaurant table", "item name"),
+			tr("Roll-Up Bay Door", "item name"),
 			tr("Screen", "item name"),
 			tr("Search table", "item name"),
 			tr("Security arch", "item name"),
@@ -257,6 +258,7 @@ class Words:
 			# Room requirement notes, the room panel and card
 			tr("Needs a belt end", "room need"),
 			tr("Needs a claim carousel", "room need"),
+			tr("Needs a Roll-Up Bay Door on an apron-facing wall", "room need"),
 			tr("Needs a bench", "room need"),
 			tr("Needs a clothes rail", "room need"),
 			tr("Needs a counter", "room need"),
@@ -279,6 +281,7 @@ class Words:
 			# The same notes in lower case, after "Not ready,"
 			tr("needs a belt end", "status reason"),
 			tr("needs a claim carousel", "status reason"),
+			tr("needs a roll-up bay door on an apron-facing wall", "status reason"),
 			tr("needs a bench", "status reason"),
 			tr("needs a clothes rail", "status reason"),
 			tr("needs a counter", "status reason"),

@@ -76,6 +76,9 @@ const SHORT_TEXT := {
 	BuildResult.Reason.REMOTE_STAND_OVERLAP: "Stand too close",
 	BuildResult.Reason.REMOTE_STAND_NO_ROOM: "Not enough apron room",
 	BuildResult.Reason.REMOTE_STAND_IN_USE: "A flight is due here",
+	BuildResult.Reason.BAY_DOOR_NEEDS_APRON: "Needs apron wall",
+	BuildResult.Reason.BAY_DOOR_APPROACH_BLOCKED: "Clear apron outside",
+	BuildResult.Reason.KIT_NEEDS_APRON_WALL: "Needs apron edge",
 }
 
 var build_mode: BuildMode

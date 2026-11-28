@@ -171,8 +171,12 @@ func test_baggage_sim_carries_checked_bag_through_hatched_wall() -> void:
 	# Desk at (3, 7) facing 0 occupies (3..4, 7); belt outlet points North into (4, 6).
 	var desk_res := _mode.grid.apply(BuildEdit.place_object(&"checkin_desk", Vector2i(3, 7), 0))
 	assert_bool(desk_res.ok).is_true()
-	var room_res := _mode.grid.apply(BuildEdit.place_room(Rect2i(8, 5, 3, 3), BeltShaper.BAG_ROOM))
+	var room_res := _mode.grid.apply(BuildEdit.place_room(Rect2i(8, 5, 4, 3), BeltShaper.BAG_ROOM))
 	assert_bool(room_res.ok).is_true()
+	for edit in DoorPlacement.edits_for(
+		_mode.grid, BuildEdit.place_object(&"baggage_bay_door", Vector2i(11, 5), 1)
+	):
+		assert_bool(_mode.grid.apply(edit).ok).is_true()
 	assert_bool(_mode.lay_belt(Vector2i(4, 6), Vector2i(8, 6)).ok).is_true()
 	assert_bool(_mode.grid.has_belt_hatch(Vector2i(6, 6), BuildGrid.Side.EAST)).is_true()
 

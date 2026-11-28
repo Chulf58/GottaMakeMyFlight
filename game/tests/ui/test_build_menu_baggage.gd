@@ -47,12 +47,12 @@ func test_baggage_tools_sit_in_operations_and_remove_stays_last() -> void:
 	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(BuildMenu.CATEGORIES.size() - 1)
 	assert_str(BuildMenu.CATEGORIES[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
 	var tab_tools: Array = BuildMenu.CATEGORIES[ops]["tools"]
-	for tool in [BuildMode.Tool.BELT, BuildMode.Tool.BAG_ROOM]:
+	for tool in [BuildMode.Tool.BELT, BuildMode.Tool.BAG_ROOM, BuildMode.Tool.BAY_DOOR]:
 		assert_bool(tab_tools.has(tool)).is_true()
 		assert_int(BuildMenu.category_of(tool)).is_equal(ops)
 	assert_bool(tab_tools.has(BuildMode.Tool.CART)).is_false()
 	assert_array(BuildMenuCatalog.ROOM_TOOLS[&"bag_room"]).is_equal(
-		[BuildMode.Tool.BELT, BuildMode.Tool.CART]
+		[BuildMode.Tool.BAY_DOOR, BuildMode.Tool.BELT, BuildMode.Tool.CART]
 	)
 
 

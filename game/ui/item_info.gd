@@ -352,10 +352,22 @@ func texts(tool: BuildMode.Tool) -> Array:
 		BuildMode.Tool.BAG_ROOM:
 			lines = [
 				tr("Where checked bags end up. They are loaded onto the plane from here."),
-				tr("Drag a rectangle, then run a belt into it. The belt's end piece goes inside."),
 				tr(
-					"At least 2x2, with a belt end. A bag that arrives after the cutoff misses the plane."
+					# gdlint:ignore = max-line-length
+					"Drag a rectangle, run a belt end inside, and put a Roll-Up Bay Door on an apron wall."
 				),
+				tr(
+					"At least 2x2, with a belt end, bay door, and entrance. Cutoff bags miss the plane."
+				),
+			]
+		BuildMode.Tool.BAY_DOOR:
+			lines = [
+				tr("An industrial roll-up bay door between a bag room and the apron."),
+				tr(
+					# gdlint:ignore = max-line-length
+					"Place it on a 2-cell apron-facing exterior wall and keep the 2 apron cells outside clear."
+				),
+				tr("Staff and baggage carts pass through; passengers never use bay doors."),
 			]
 		BuildMode.Tool.CART:
 			lines = [

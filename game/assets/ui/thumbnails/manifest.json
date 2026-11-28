@@ -108,6 +108,15 @@
         "baggage_cart.glb": "0299ce3f891fa3295fdff4627e5de0f7ca2b54285e4eab795e0607633f09101c"
       }
     },
+    "baggage_bay_door": {
+      "png": "baggage_bay_door.png",
+      "class": "bay_door_2x1",
+      "style": 6,
+      "sources": {
+        "baggage_bay_door.glb": "89a1201e12b92e441625141aa1017a648b99c0c3f5b031350afc2fc4188f0d62",
+        "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
+      }
+    },
     "bag_room": {
       "png": "bag_room.png",
       "class": "2x2",

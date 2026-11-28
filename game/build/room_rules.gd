@@ -16,6 +16,7 @@ extends RefCounted
 
 const READY := "Ready"
 const NO_OPENING := "Needs entrance"
+const NO_BAY_DOOR := "Needs a Roll-Up Bay Door on an apron-facing wall"
 const TOO_SMALL := "Too small: a %s needs at least %dx%d"
 
 
@@ -31,6 +32,7 @@ class RoomStatus:
 	## Whether the first note is the too-small one, which carries a size the
 	## screens put in the player's words (DisplayWords.notes()).
 	var too_small := false
+	var has_bay_door := false
 	var seats := 0
 	var base_spend := 0
 	## What the room costs to run per game day once it is ready: its type's
@@ -63,6 +65,10 @@ static func status(grid: BuildGrid, room_id: int) -> RoomStatus:
 		result.notes.append(
 			TOO_SMALL % [type.display_name.to_lower(), type.min_size.x, type.min_size.y]
 		)
+	if type.id == &"bag_room":
+		result.has_bay_door = has_bay_door(grid, area)
+		if not result.has_bay_door:
+			result.notes.append(NO_BAY_DOOR)
 	for need in type.required:
 		if _count(result.pieces, type.pieces_for(need[0])) == 0:
 			result.notes.append(need[1])
@@ -167,6 +173,27 @@ static func has_opening(grid: BuildGrid, area: Rect2i) -> bool:
 					continue
 				if grid.can_step(cell, outside):
 					return true
+	return false
+
+
+## Whether `area` has a placed Roll-Up Bay Door sitting along its boundary
+## facing open, unobstructed exterior apron outside the room.
+static func has_bay_door(grid: BuildGrid, area: Rect2i) -> bool:
+	if grid == null:
+		return false
+	for object_id in grid.object_ids():
+		var record := grid.get_object(object_id)
+		if not BuildCatalog.is_bay_door(record["def"]):
+			continue
+		var anchor: Vector2i = record["anchor"]
+		var facing: int = record["facing"]
+		var inside := true
+		for cell in DoorPlacement.bay_door_cells(anchor, facing):
+			if not area.has_point(cell):
+				inside = false
+				break
+		if inside and DoorPlacement.is_bay_door_apron_clear(grid, anchor, facing):
+			return true
 	return false
 
 

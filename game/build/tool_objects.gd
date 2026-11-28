@@ -11,6 +11,7 @@ const OBJECTS := {
 	BuildMode.Tool.ENTRANCE: &"entrance_door",
 	BuildMode.Tool.EXIT: &"exit_door",
 	BuildMode.Tool.AIRSIDE_EXIT: BuildCatalog.AIRSIDE_EXIT_ID,
+	BuildMode.Tool.BAY_DOOR: BuildCatalog.BAY_DOOR_ID,
 	BuildMode.Tool.GATE_DESK: GateDesks.DESK,
 	BuildMode.Tool.BUS_GATE_DESK: GateDesks.BUS_DESK,
 	BuildMode.Tool.REMOTE_STAND: RemoteStands.STAND_ID,

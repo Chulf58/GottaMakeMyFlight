@@ -104,6 +104,14 @@ func _build_ready_bag_room(build_mode: BuildMode) -> void:
 		)
 		. is_true()
 	)
+	for edit: BuildEdit in (
+		DoorPlacement
+		. edits_for(
+			build_mode.grid,
+			BuildEdit.place_object(BuildCatalog.BAY_DOOR_ID, Vector2i(13, 2), 0),
+		)
+	):
+		assert_bool(build_mode.grid.apply(edit).ok).is_true()
 	assert_bool(build_mode.lay_belt(Vector2i(11, 3), Vector2i(14, 3)).ok).is_true()
 
 

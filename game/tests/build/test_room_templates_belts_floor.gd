@@ -11,9 +11,9 @@ extends GdUnitTestSuite
 ## 19 are bare ground. The bag room covers columns 10 to 12 and rows 3 to 5; a
 ## belt runs along row 4 from column 8, outside the room, to its end at column 11.
 
-const BAG_ROOM := Rect2i(10, 3, 3, 3)
+const BAG_ROOM := Rect2i(10, 2, 3, 3)
 ## Paste centres: on the floor east of the bag room, and on bare ground.
-const ON_FLOOR := Vector2i(17, 4)
+const ON_FLOOR := Vector2i(17, 3)
 const ON_GROUND := Vector2i(17, 14)
 
 var _mode: BuildMode
@@ -38,8 +38,8 @@ func before_test() -> void:
 	_mode.grid.apply_batch(edits)
 	var plan: Array[BuildEdit] = [BuildEdit.place_room(BAG_ROOM, &"bag_room")]
 	_room = BuildTransaction.commit_plan(_mode.grid, plan, _mode.wallet()).room_id
-	assert_bool(_mode.lay_belt(Vector2i(8, 4), Vector2i(11, 4)).ok).is_true()
-	assert_str(String(_def_at(Vector2i(11, 4)))).is_equal("baggage_belt_end")
+	assert_bool(_mode.lay_belt(Vector2i(8, 3), Vector2i(11, 3)).ok).is_true()
+	assert_str(String(_def_at(Vector2i(11, 3)))).is_equal("baggage_belt_end")
 	_mode.clear_undo()
 
 
@@ -97,20 +97,21 @@ func test_a_pasted_bag_room_reshapes_its_belt_and_takes_bags_once_linked() -> vo
 	_saved_and_armed()
 	var before := _balance()
 	assert_bool(_paste.paste_at(ON_FLOOR).ok).is_true()
-	var pasted := _mode.grid.room_at(Vector2i(16, 3))
-	assert_that(_mode.grid.get_room(pasted)["rect"]).is_equal(Rect2i(16, 3, 3, 3))
+	var pasted := _mode.grid.room_at(Vector2i(16, 2))
+	assert_that(_mode.grid.get_room(pasted)["rect"]).is_equal(Rect2i(16, 2, 3, 3))
 	# Both cells were laid as plain belts; the inner one is now the end bags rest on.
-	assert_str(String(_def_at(Vector2i(17, 4)))).is_equal("baggage_belt_end")
-	assert_bool(RoomRules.status(_mode.grid, pasted).ok).is_true()
+	assert_str(String(_def_at(Vector2i(17, 3)))).is_equal("baggage_belt_end")
 	assert_int(_balance()).is_equal(before - 2 * _belt_price())
+	_mode.grid.apply(BuildEdit.place_object(&"baggage_bay_door", Vector2i(16, 2), 0))
+	assert_bool(RoomRules.status(_mode.grid, pasted).ok).is_true()
 	# The player draws the link from outside; the bags' route reaches the end.
-	assert_bool(_mode.lay_belt(Vector2i(14, 4), Vector2i(15, 4)).ok).is_true()
-	assert_str(String(_def_at(Vector2i(16, 4)))).is_equal("baggage_belt")
-	assert_str(String(_def_at(Vector2i(17, 4)))).is_equal("baggage_belt_end")
+	assert_bool(_mode.lay_belt(Vector2i(14, 3), Vector2i(15, 3)).ok).is_true()
+	assert_str(String(_def_at(Vector2i(16, 3)))).is_equal("baggage_belt")
+	assert_str(String(_def_at(Vector2i(17, 3)))).is_equal("baggage_belt_end")
 	var routes := BagRoutes.build(_mode.grid)
-	assert_bool(routes.is_root(Vector2i(17, 4))).is_true()
-	assert_bool(routes.has_route(Vector2i(14, 4))).is_true()
-	assert_int(routes.dist[Vector2i(14, 4)]).is_equal(3)
+	assert_bool(routes.is_root(Vector2i(17, 3))).is_true()
+	assert_bool(routes.has_route(Vector2i(14, 3))).is_true()
+	assert_int(routes.dist[Vector2i(14, 3)]).is_equal(3)
 
 
 func test_a_paste_on_bare_ground_lays_the_floor_and_charges_for_it() -> void:
